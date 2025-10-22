@@ -1,5 +1,5 @@
-
 import mongoose from 'mongoose';
+
 const userSchema = new mongoose.Schema({
   employeeId: { type: String, required: true, unique: true },
   firstName: String,
@@ -13,8 +13,5 @@ const userSchema = new mongoose.Schema({
   passwordHash: String,
   status: { type: String, enum: ['active', 'inactive'], default: 'active' }
 }, { timestamps: true });
-
-
-
 
 export default mongoose.model('User', userSchema);
