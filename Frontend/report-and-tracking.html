@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Report & Tracking</title>
+    <link rel="stylesheet" href="css/dashboard.css">
+    <link rel="stylesheet" href="css/admin.css">
+    <link rel="stylesheet" href="css/projects.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: #f5f5f5;
+        }
+
+        .header {
+            background: #fff;
+            padding: 1rem 2rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header h1 {
+            color: #333;
+            font-size: 1.5rem;
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .tab-container {
+            background: #fff;
+            margin: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .tabs {
+            display: flex;
+            background: #f8f9fa;
+            border-bottom: 1px solid #e9ecef;
+        }
+
+        .tab {
+            padding: 1rem 2rem;
+            cursor: pointer;
+            background: none;
+            border: none;
+            font-size: 1rem;
+            font-weight: 500;
+            color: #6c757d;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .tab:hover {
+            background: #e9ecef;
+            color: #495057;
+        }
+
+        .tab.active {
+            background: #fff;
+            color: #007bff;
+            border-bottom: 3px solid #007bff;
+        }
+
+        .tab-content {
+            padding: 2rem;
+            min-height: 600px;
+        }
+
+        .tab-panel {
+            display: none;
+        }
+
+        .tab-panel.active {
+            display: block;
+        }
+
+        /* Hours Tracking Styles */
+        .hours-tracking-container {
+            display: grid;
+            grid-template-columns: 1fr 300px;
+            gap: 2rem;
+        }
+
+        .tracking-form-section {
+            background: #f8f9fa;
+            padding: 1.5rem;
+            border-radius: 8px;
+            margin-bottom: 2rem;
+        }
+
+        .form-card {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+        }
+
+        .form-header h3 {
+            margin-bottom: 1rem;
+            color: #333;
+            font-size: 1.2rem;
+        }
+
+        .form-content {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .form-group label {
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+            color: #333;
+        }
+
+        .form-group input {
+            padding: 0.75rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 1rem;
+        }
+
+        .search-btn {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 0.75rem 2rem;
+            border-radius: 4px;
+            font-size: 1rem;
+            cursor: pointer;
+            margin-top: -1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .stat-card {
+            background: white;
+            padding: 1rem;
+            border-radius: 8px;
+            border-left: 4px solid #007bff;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .stat-icon {
+            font-size: 1.5rem;
+            color: #007bff;
+        }
+
+        .stat-details {
+            flex: 1;
+        }
+
+        .stat-label {
+            font-size: 0.9rem;
+            color: #666;
+            margin-bottom: 0.25rem;
+        }
+
+        .stat-value {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .chart-section {
+            margin-top: 2rem;
+        }
+
+        .chart-card {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .chart-header h3 {
+            margin-bottom: 1rem;
+            color: #333;
+            font-size: 1.2rem;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 300px;
+            margin-bottom: 1rem;
+        }
+
+        .chart-legend {
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .legend-color {
+            width: 16px;
+            height: 16px;
+            border-radius: 2px;
+        }
+
+        /* Employee Report Styles */
+        .employee-report-container {
+            max-width: 1000px;
+        }
+
+        .report-header h2 {
+            color: #333;
+            margin-bottom: 0.5rem;
+        }
+
+        .report-header p {
+            color: #666;
+        }
+
+        .employee-search-section {
+            background: #f8f9fa;
+            padding: 1.5rem;
+            border-radius: 8px;
+            margin-bottom: 2rem;
+        }
+
+        .search-form {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 8px;
+        }
+
+        .search-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr 200px;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .employee-details-section {
+            margin-bottom: 2rem;
+        }
+
+        .details-card {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 8px;
+        }
+
+        .card-header h3 {
+            margin-bottom: 1rem;
+            color: #333;
+        }
+
+        .details-content {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .detail-item {
+            display: flex;
+            gap: 1rem;
+        }
+
+        .detail-label {
+            font-weight: bold;
+            min-width: 120px;
+            color: #666;
+        }
+
+        .detail-value {
+            color: #333;
+        }
+
+        .projects-section {
+            margin-top: 2rem;
+        }
+
+        .projects-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .projects-header h3 {
+            color: #333;
+            margin: 0;
+        }
+
+        .filter-section {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .filter-section label {
+            font-weight: 500;
+            color: #666;
+        }
+
+        .filter-section select {
+            padding: 0.5rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        .projects-list {
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            margin-bottom: 2rem;
+        }
+
+        .project-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid #e9ecef;
+        }
+
+        .project-item:last-child {
+            border-bottom: none;
+        }
+
+        .project-info {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+
+        .project-name {
+            font-weight: 500;
+            color: #333;
+        }
+
+        .project-status {
+            padding: 0.25rem 0.75rem;
+            border-radius: 12px;
+            font-size: 0.875rem;
+            font-weight: 500;
+        }
+
+        .status-active {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status-completed {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .export-section {
+            text-align: center;
+        }
+
+        .export-btn {
+            background: #28a745;
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 4px;
+            font-size: 1rem;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-top: 1rem; /* Added to shift button down */
+        }
+
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #007bff;
+            color: white;
+            padding: 1rem 1.5rem;
+            border-radius: 4px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            z-index: 1000;
+            transform: translateX(100%);
+            transition: transform 0.3s ease;
+        }
+
+        .notification.show {
+            transform: translateX(0);
+        }
+
+        .notification.success {
+            background: #28a745;
+        }
+
+        .notification.error {
+            background: #dc3545;
+        }
+
+        .notification.info {
+            background: #17a2b8;
+        }
+    </style>
+</head>
+<body>
+     <div class="dashboard-container">
+        <!-- Sidebar Navigation -->
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <div class="logo">
+                    <i class="fas fa-clock"></i>
+                    <h2>Timesheet</h2>
+                </div>
+            </div>
+            <div class="sidebar-menu">
+                <ul>
+                    <li>
+                        <a href="projects.html">
+                            <i class="fas fa-project-diagram"></i>
+                            <span>Projects</span>
+                        </a>
+                    </li>
+                    <li class="active">
+                        <a href="report-and-tracking.html">
+                            <i class="fas fa-users"></i>
+                            <span>Tracking and Report</span>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+            <div class="sidebar-footer">
+                <a href="index.html" class="logout-btn">
+                    <i class="fas fa-sign-out-alt"></i>
+                    <span>Logout</span>
+                </a>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+    <div class="main-content">
+        <!-- Top Navigation -->
+         <div class="top-nav">
+            <div class="nav-left">
+                <button id="toggle-sidebar">
+                    <i class="fas fa-bars"></i>
+                </button>
+                <h2>Tracking and Report</h2>
+            </div>
+            <div class="nav-right">
+                <div class="user-info">
+                    <span id="admin-name">Admin</span>
+                        <i class="fas fa-user-circle"></i>
+                </div>
+            </div>
+         </div>
+    <div class="tab-container">
+        <div class="tabs">
+            <button class="tab active" data-tab="hours-tracking">HOURS TRACKING</button>
+            <button class="tab" data-tab="employee-report">EMPLOYEE REPORT</button>
+        </div>
+
+        <div class="tab-content">
+            <!-- Hours Tracking Tab -->
+            <div id="hours-tracking" class="tab-panel active">
+                <div class="search-section">
+                    <input type="text" id="plNoInput" placeholder="PL No" />
+                    <input type="text" id="projectNameInput" placeholder="Project Name" />
+                    <button class="search-btn" id="searchBtn">Search</button>
+                </div>
+                <div class="project-details" id="projectDetails" style="display:none;">
+                    <h3>Project Details</h3>
+                    <p><strong>Project Name:</strong> <span id="projectName"></span></p>
+                    <p><strong>PL No:</strong> <span id="plNo"></span></p>
+                    <p><strong>Status:</strong> <span id="status"></span></p>
+                    <p><strong>Assigned Employees:</strong></p>
+                    <ul id="assignedEmployeesList"></ul>
+                </div>
+                <button class="export-btn" id="exportBtn" style="display:none;">Export to Excel</button>
+            </div>
+
+            <!-- Employee Report Tab -->
+            <div id="employee-report" class="tab-panel">
+                <button class="export-btn" id="employeeExportBtn" style="display:inline-flex; margin: 1rem 0;">Export to Excel</button>
+                <button class="export-btn" id="projectExportBtn"  style="display:inline-flex; margin: 1rem 0;">Export to Excel</button>
+            </div>
+        </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/projects.js"></script>
+    <script src="js/user-management.js"></script>
+    <script src="js/integration/api-client.js"></script>
+    <script src="js/integration/utils.js"></script>
+    <script src="js/report-and-tracking.js"></script>
+</body>
+</html>

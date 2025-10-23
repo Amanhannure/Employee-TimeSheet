@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Employee Timesheet - Dashboard</title>
+    <link rel="stylesheet" href="css/dashboard.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="dashboard-container">
+        <!-- Sidebar Navigation -->
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <div class="logo">
+                    <i class="fas fa-clock"></i>
+                    <h2>Timesheet</h2>
+                </div>
+            </div>
+            <div class="sidebar-menu">
+                <ul>
+                    <li class="active">
+                        <a href="dashboard.html">
+                            <i class="fas fa-home"></i>
+                            <span>Dashboard</span>
+                        </a>
+                    </li>
+                    <!-- Removed History sidebar item as per user request -->
+                    <!--
+                    <li>
+                        <a href="history.html" onclick="return false;">
+                            <i class="fas fa-history"></i>
+                            <span>History</span>
+                        </a>
+                    </li>
+                    -->
+                    <li>
+                        <a href="#" id="admin-btn" onclick="return false;">
+                            <i class="fas fa-shield-alt"></i>
+                            <span>Admin</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="#" id="projects-btn" onclick="return false;">
+                            <i class="fas fa-folder"></i>
+                            <span>Projects</span>
+                        </a>
+                    </li>
+
+                </ul>
+            </div>
+            <div class="sidebar-footer">
+                <button id="logout-btn" class="logout-btn">
+                    <i class="fas fa-sign-out-alt"></i>
+                    Logout
+                </button>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Top Navigation -->
+            <div class="top-nav">
+                <div class="nav-left">
+                    <button id="toggle-sidebar">
+                        <i class="fas fa-bars"></i>
+                    </button>
+                    <h2>Employee Dashboard</h2>
+                </div>
+                <div class="nav-right">
+                    <div class="user-info">
+                        <span id="employee-name">Loading...</span>
+                        <i class="fas fa-user-circle"></i>
+                    </div>
+                </div>
+            </div>
+
+    
+            <!-- Health Safety Environment Banner --> 
+            <div class="header-content">
+                <h3>HEALTH SAFETY ENVIRONMENT</h3>
+            </div>
+
+            <!-- Timesheet Summary -->
+            <div class="timesheet-summary">
+                <div class="summary-item approved">
+                    <h4>Approved Timesheets</h4>
+                    <p id="approved-count">0</p>
+                </div>
+                <div class="summary-item pending">
+                    <h4>Pending Timesheets</h4>
+                    <p id="pending-count">0</p>
+                </div>
+                <div class="summary-item rejected">
+                    <h4>Rejected Timesheets</h4>
+                    <p id="rejected-count">0</p>
+                </div>
+                <div class="summary-item summary" id="summary-card">
+                   <h4>Summary</h4>
+                   <p>View</p>
+                </div>
+            </div>
+            <!-- Modal for Summary -->
+            <div id="summary-modal" class="modal">
+                <div class="modal-content">
+                   <span class="close-modal">&times;</span>
+                   <h2>Monthly Timesheet Summary</h2>
+                   <div id="summary-content">
+            <!-- Summary details will be inserted dynamically -->
+                   </div>
+                </div>
+            </div>    
+
+            <!-- Timesheet Form -->
+            <div class="timesheet-form">
+                <div class="form-header">
+                    <h3>Weekly Timesheet</h3>
+                </div>
+                <div class="form-content">
+                    <div class="employee-info">
+                        <div class="info-group">
+                            <label for="employee-code">Employee Code</label>
+                            <input value="" type="text" id="employee-code" readonly>
+                        </div>
+                        <div class="info-group">
+                            <label for="employee-name-input">Name</label>
+                            <input type="text" id="employee-name-input" readonly>
+                        </div>
+                        <div class="info-group">
+                            <label for="department">Department</label>
+                            <select id="department" >
+                                 <option value="Select" selected disabled>Select</option>
+                                 <option value="Project">Project</option>
+                                 <option value="Process">Process</option>
+                                 <option value="PHA">PHA</option>
+                                 <option value="Loss Prevention">Loss Prevention</option>
+                                 <option value="Electrical and Instrumentation">Electrical and Instrumentation</option>
+                                 <option value="Business Development">Business Development</option>
+                                 <option value="Admin">Admin</option>
+                                 <option value="HR">HR</option>
+                                 <option value="IT">IT</option>
+                                 <option value="Accounts">Accounts</option>
+                            </select>
+                        </div>
+                        <div class="info-group">
+                            <label for="week-start-date">Week Start Date</label>
+                            <input type="date" id="week-start-date">
+                        </div>
+                        <div class="info-group">
+                            <label for="week-end-date">Week End Date</label>
+                            <input type="date" id="week-end-date">
+                        </div>
+                    </div>
+
+                    <div class="timesheet-table-container">
+                        <table class="timesheet-table">
+                            <thead>
+                                <tr>
+                                    <th>SR.NO</th>
+                                    <th>PROJECT CODE</th>
+                                    <th>LOCATION</th>
+                                    <th>MON<br><span id="date-mon" class="day-date"></span></th>
+                                    <th>TUE<br><span id="date-tue" class="day-date"></span></th>
+                                    <th>WED<br><span id="date-wed" class="day-date"></span></th>
+                                    <th>THU<br><span id="date-thu" class="day-date"></span></th>
+                                    <th>FRI<br><span id="date-fri" class="day-date"></span></th>
+                                    <th class="weekend">SAT<br><span id="date-sat" class="day-date"></span></th>
+                                    <th class="weekend">SUN<br><span id="date-sun" class="day-date"></span></th>
+                                    <th>ACTION</th>
+                                </tr>
+                            </thead>
+                            <tbody id="timesheet-body">
+                                <!-- Rows will be added dynamically -->
+                            </tbody>
+                            <tfoot>
+                                <tr>
+                                    <td colspan="3" class="text-right">Total</td>
+                                    <td id="total-mon"><span class="normal-hours">0</span>/<span class="overtime-hours">0</span></td>
+                                    <td id="total-tue"><span class="normal-hours">0</span>/<span class="overtime-hours">0</span></td>
+                                    <td id="total-wed"><span class="normal-hours">0</span>/<span class="overtime-hours">0</span></td>
+                                    <td id="total-thu"><span class="normal-hours">0</span>/<span class="overtime-hours">0</span></td>
+                                    <td id="total-fri"><span class="normal-hours">0</span>/<span class="overtime-hours">0</span></td>
+                                    <td id="total-sat"><span class="normal-hours">0</span>/<span class="overtime-hours">0</span></td>
+                                    <td id="total-sun"><span class="normal-hours">0</span>/<span class="overtime-hours">0</span></td>
+                                    <td id="total-week"></td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+
+                    <div class="form-actions">
+                        <button id="add-row-btn" class="btn btn-primary">
+                            <i class="fas fa-plus"></i> Add Row
+                        </button>
+                        <button id="save-timesheet-btn" class="btn btn-info">
+                            <i class="fas fa-save"></i> Save Timesheet
+                        </button>
+                        <button id="submit-timesheet-btn" class="btn btn-success">
+                            <i class="fas fa-check"></i> Submit Timesheet
+                        
+            
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hours Entry Modal -->
+    <div id="hours-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal">&times;</span>
+            <h2>Enter Work Hours</h2>
+            <form id="hours-form">
+                <div class="form-group">
+                    <label for="hours-type">Select Hours Type:</label>
+                    <select id="hours-type" required>
+                        <option value="normal">Normal Hours</option>
+                        <option value="overtime">Overtime Hours</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="work-hours">Enter Hours:</label>
+                    <input type="number" id="work-hours" min="0" step="0.5" required>
+                </div>
+                <div class="form-group">
+                    <label for="activity-code">Activity Code:</label>
+                    <select id="activity-code" required>
+                        <option value="">Select Activity</option>
+                        <option value="MISC">Miscellaneous Activity</option>
+                        <option value="DEV">Development</option>
+                        <option value="TEST">Testing</option>
+                        <option value="MEET">Meeting</option>
+                        <option value="TRAIN">Training</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="work-remark">Remark:</label>
+                    <input type="text" id="work-remark" placeholder="Enter remark (optional)">
+                </div>
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">Save</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    
+    <!-- Access Denied Modal -->
+    <div id="access-denied-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal">&times;</span>
+            <h2>Access Denied</h2>
+            <p>You don't have access to this section.</p>
+            <div class="modal-actions">
+                <button id="close-access-modal" class="btn btn-primary">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Show access denied modal when admin button is clicked
+            document.getElementById('admin-btn').addEventListener('click', function(e) {
+                e.preventDefault(); // Prevent default link behavior
+                document.getElementById('access-denied-modal').style.display = 'block';
+            });
+
+            // Close access denied modal when clicking the close button
+            document.getElementById('close-access-modal').addEventListener('click', function() {
+                document.getElementById('access-denied-modal').style.display = 'none';
+            });
+
+            // Close modal when clicking outside
+            window.addEventListener('click', function(e) {
+                const modal = document.getElementById('access-denied-modal');
+                if (e.target === modal) {
+                    modal.style.display = 'none';
+                }
+            });
+        });
+    </script>
+    <script src="js/integration/api-client.js"></script>
+    <script src="js/integration/utils.js"></script>
+    <script src="js/dashboard.js"></script>
+</body>
+</html>
