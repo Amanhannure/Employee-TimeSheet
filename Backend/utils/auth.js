@@ -18,7 +18,7 @@ export const comparePassword = async (password, hashedPassword) => {
 };
 
 export const generateToken = (user) => {
-  if (!SECRET_KEY) {
+  if (!SECRET_KEY || SECRET_KEY.length < 32) {
     throw new Error('JWT_SECRET is not defined in environment variables');
   }
   
@@ -27,10 +27,12 @@ export const generateToken = (user) => {
       id: user._id,
       role: user.role,
       username: user.username,
-      employeeId: user.employeeId
+      employeeId: user.employeeId,
+      iss: 'timesheet-system',
+      iat: Math.floor(Date.now() / 1000)
     },
     SECRET_KEY,
-    { expiresIn: '1d' }
+    { expiresIn: '8h', algorithm: 'HS256' }
   );
 };
 

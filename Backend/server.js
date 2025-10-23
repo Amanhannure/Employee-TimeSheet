@@ -16,6 +16,7 @@ import { authenticate, authorizeAdmin } from './middleware/authMiddleware.js';
 import { securityHeaders } from './security/headers.js';
 import { sanitizeMiddleware } from './security/sanitize.js';
 import { authLimiter, apiLimiter } from './security/rateLimit.js';
+import { auditLogger } from './security/auditLogger.js';
 
 const app = express();
 
@@ -25,6 +26,17 @@ app.use(sanitizeMiddleware);
 app.use(cors({ origin: process.env.ALLOWED_ORIGINS || 'http://localhost:3000' }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(auditLogger);
+app.use(session({
+  secret: process.env.SESSION_SECRET,
+  resave: false,
+  saveUninitialized: false,
+  cookie: { 
+    secure: process.env.NODE_ENV === 'production',
+    httpOnly: true,
+    sameSite: 'strict'
+  }
+}));
 
 // Test if environment variables are loading
 console.log('🔧 Environment check:');

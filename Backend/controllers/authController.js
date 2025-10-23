@@ -10,6 +10,8 @@ export const registerAdmin = async (req, res) => {
     if (!username || !password || !employeeId) {
       return res.status(400).json({ message: 'Username, password, and employeeId are required' });
     }
+    const passwordError = validatePassword(password);
+    if (passwordError) return res.status(400).json({ message: passwordError });
 
     // Check if user already exists
     const existingUser = await User.findOne({ $or: [{ username }, { employeeId }] });
