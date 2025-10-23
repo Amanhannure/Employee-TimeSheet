@@ -64,6 +64,9 @@ router.post('/', authenticate, authorizeAdmin, async (req, res) => {
         message: 'Employee ID, username, password, and role are required' 
       });
     }
+    if (typeof employeeId !== 'string' || typeof username !== 'string') {
+      return res.status(400).json({ message: 'Invalid input format' });
+    }
 
     // Check if user already exists
     const existingUser = await User.findOne({ 
@@ -76,6 +79,9 @@ router.post('/', authenticate, authorizeAdmin, async (req, res) => {
           ? 'Username already exists' 
           : 'Employee ID already exists' 
       });
+    }
+    if (password.length < 8) {
+      return res.status(400).json({ message: 'Password too short' });
     }
 
     // Hash password

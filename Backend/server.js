@@ -13,11 +13,16 @@ import activityCodesRoutes from './routes/activityCodesRoutes.js';
 import reportsRoutes from './routes/reportsRoutes.js';
 import connectDB from './mongoDB.js';
 import { authenticate, authorizeAdmin } from './middleware/authMiddleware.js';
+import { securityHeaders } from './security/headers.js';
+import { sanitizeMiddleware } from './security/sanitize.js';
+import { authLimiter, apiLimiter } from './security/rateLimit.js';
 
 const app = express();
 
 // Middleware
-app.use(cors());
+app.use(securityHeaders);
+app.use(sanitizeMiddleware);
+app.use(cors({ origin: process.env.ALLOWED_ORIGINS || 'http://localhost:3000' }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -32,6 +37,9 @@ console.log('MONGO_URI loaded:', !!process.env.MONGO_URI);
 connectDB();
 
 // Routes
+app.use('/api/auth/login', authLimiter);
+app.use('/api/auth/login-admin', authLimiter);
+app.use('/api/', apiLimiter);
 app.use('/api/auth', authRoutes);
 app.use('/api/projects', projectsRoutes);
 app.use('/api/timesheets', timesheetsRoutes);
