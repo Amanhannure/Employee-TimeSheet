@@ -1,8 +1,8 @@
-// api-client.js
 class ApiClient {
     constructor() {
         this.baseURL = 'http://localhost:5000/api';
         this.token = localStorage.getItem('authToken');
+        this.timeout = 10000; // 10 seconds
     }
 
     setToken(token) {
@@ -24,14 +24,20 @@ class ApiClient {
 
     async request(endpoint, options = {}) {
         const url = `${this.baseURL}${endpoint}`;
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), this.timeout);
+
         const config = {
             headers: this.getHeaders(),
+            signal: controller.signal,
             ...options
         };
 
         try {
             const response = await fetch(url, config);
             
+            clearTimeout(timeoutId);
+
             if (response.status === 401) {
                 this.handleUnauthorized();
                 throw new Error('Authentication required');
@@ -45,6 +51,12 @@ class ApiClient {
 
             return data;
         } catch (error) {
+            clearTimeout(timeoutId);
+            
+            if (error.name === 'AbortError') {
+                throw new Error('Request timeout - please try again');
+            }
+            
             console.error('API Request failed:', error);
             throw error;
         }
@@ -56,8 +68,25 @@ class ApiClient {
         window.location.href = 'index.html';
     }
 
-    // Auth methods
+    validateInput(data) {
+        if (typeof data !== 'object' || data === null) return false;
+        
+        for (const [key, value] of Object.entries(data)) {
+            if (typeof value === 'string' && value.length > 1000) {
+                throw new Error(`Input too long: ${key}`);
+            }
+            if (typeof value === 'string' && /[<>]/.test(value)) {
+                throw new Error(`Invalid characters in: ${key}`);
+            }
+        }
+        return true;
+    }
+
     async login(credentials) {
+        if (!this.validateInput(credentials)) {
+            throw new Error('Invalid input format');
+        }
+
         const data = await this.request('/auth/login', {
             method: 'POST',
             body: JSON.stringify(credentials)
@@ -72,6 +101,10 @@ class ApiClient {
     }
 
     async loginAdmin(credentials) {
+        if (!this.validateInput(credentials)) {
+            throw new Error('Invalid input format');
+        }
+
         const data = await this.request('/auth/login-admin', {
             method: 'POST',
             body: JSON.stringify(credentials)
@@ -89,13 +122,18 @@ class ApiClient {
         return await this.request('/auth/profile');
     }
 
-    // User management
     async getUsers(filters = {}) {
+        if (!this.validateInput(filters)) {
+            throw new Error('Invalid filter format');
+        }
         const queryParams = new URLSearchParams(filters).toString();
         return await this.request(`/users?${queryParams}`);
     }
 
     async createUser(userData) {
+        if (!this.validateInput(userData)) {
+            throw new Error('Invalid user data format');
+        }
         return await this.request('/users', {
             method: 'POST',
             body: JSON.stringify(userData)
@@ -103,6 +141,9 @@ class ApiClient {
     }
 
     async updateUser(id, userData) {
+        if (!this.validateInput(userData)) {
+            throw new Error('Invalid user data format');
+        }
         return await this.request(`/users/${id}`, {
             method: 'PUT',
             body: JSON.stringify(userData)
@@ -115,7 +156,6 @@ class ApiClient {
         });
     }
 
-    // Projects
     async getProjects() {
         return await this.request('/projects');
     }
@@ -125,6 +165,9 @@ class ApiClient {
     }
 
     async createProject(projectData) {
+        if (!this.validateInput(projectData)) {
+            throw new Error('Invalid project data format');
+        }
         return await this.request('/projects', {
             method: 'POST',
             body: JSON.stringify(projectData)
@@ -132,6 +175,9 @@ class ApiClient {
     }
 
     async updateProject(id, projectData) {
+        if (!this.validateInput(projectData)) {
+            throw new Error('Invalid project data format');
+        }
         return await this.request(`/projects/${id}`, {
             method: 'PUT',
             body: JSON.stringify(projectData)
@@ -144,8 +190,10 @@ class ApiClient {
         });
     }
 
-    // Timesheets
     async submitTimesheet(timesheetData) {
+        if (!this.validateInput(timesheetData)) {
+            throw new Error('Invalid timesheet data format');
+        }
         return await this.request('/timesheets/submit', {
             method: 'POST',
             body: JSON.stringify(timesheetData)
@@ -157,6 +205,9 @@ class ApiClient {
     }
 
     async getAllTimesheets(filters = {}) {
+        if (!this.validateInput(filters)) {
+            throw new Error('Invalid filter format');
+        }
         const queryParams = new URLSearchParams(filters).toString();
         return await this.request(`/timesheets?${queryParams}`);
     }
@@ -168,19 +219,27 @@ class ApiClient {
     }
 
     async rejectTimesheet(id, remarks) {
+        if (remarks && !this.validateInput({ remarks })) {
+            throw new Error('Invalid remarks format');
+        }
         return await this.request(`/timesheets/${id}/reject`, {
             method: 'PATCH',
             body: JSON.stringify({ remarks })
         });
     }
 
-    // Activity Codes
     async getActivityCodes(department = '') {
-        const query = department ? `?department=${department}` : '';
+        if (department && typeof department !== 'string') {
+            throw new Error('Invalid department format');
+        }
+        const query = department ? `?department=${encodeURIComponent(department)}` : '';
         return await this.request(`/activity-codes${query}`);
     }
 
     async createActivityCode(activityData) {
+        if (!this.validateInput(activityData)) {
+            throw new Error('Invalid activity data format');
+        }
         return await this.request('/activity-codes', {
             method: 'POST',
             body: JSON.stringify(activityData)
@@ -188,6 +247,9 @@ class ApiClient {
     }
 
     async updateActivityCode(id, activityData) {
+        if (!this.validateInput(activityData)) {
+            throw new Error('Invalid activity data format');
+        }
         return await this.request(`/activity-codes/${id}`, {
             method: 'PUT',
             body: JSON.stringify(activityData)
@@ -200,17 +262,31 @@ class ApiClient {
         });
     }
 
-    // Reports
     async getHoursTracking(filters = {}) {
+        if (!this.validateInput(filters)) {
+            throw new Error('Invalid filter format');
+        }
         const queryParams = new URLSearchParams(filters).toString();
         return await this.request(`/reports/hours-tracking?${queryParams}`);
     }
 
     async getEmployeeReport(filters = {}) {
+        if (!this.validateInput(filters)) {
+            throw new Error('Invalid filter format');
+        }
         const queryParams = new URLSearchParams(filters).toString();
         return await this.request(`/reports/employee-report?${queryParams}`);
     }
+
+    setTimeout(duration) {
+        this.timeout = duration;
+    }
+
+    clearAuth() {
+        this.token = null;
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('userData');
+    }
 }
 
-// Global API client instance
 const apiClient = new ApiClient();

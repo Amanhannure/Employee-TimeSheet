@@ -1,4 +1,20 @@
 // utils.js
+
+export const validateInput = (input) => {
+  if (typeof input !== 'string') return false;
+  if (input.length > 255) return false;
+  if (/[<>]/.test(input)) return false;
+  return true;
+};
+
+export const sanitizeHTML = (str) => {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+};
+
+
+
 function showNotification(message, type = 'info') {
     const notification = document.createElement('div');
     notification.className = `notification ${type}`;
