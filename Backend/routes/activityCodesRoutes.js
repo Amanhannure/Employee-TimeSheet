@@ -12,7 +12,7 @@ router.get('/', authenticate, async (req, res) => {
     let filter = {};
     if (department) filter.department = department;
 
-    const activityCodes = await ActivityCode.find(filter).sort({ code: 1 });
+    const activityCodes = await ActivityCode.find(filter).sort({ department: 1, code: 1 });
 
     res.json(activityCodes);
   } catch (error) {
@@ -54,11 +54,11 @@ router.get('/:id', authenticate, async (req, res) => {
 // Create activity code (Admin only)
 router.post('/', authenticate, authorizeAdmin, async (req, res) => {
   try {
-    const { code, description, department } = req.body;
+    const { code, name, description, department } = req.body;
 
     // Validation
-    if (!code || !department) {
-      return res.status(400).json({ message: 'Code and department are required' });
+    if (!code || !name || !department) {
+      return res.status(400).json({ message: 'Code, name, and department are required' });
     }
 
     // Check if activity code already exists
@@ -69,6 +69,7 @@ router.post('/', authenticate, authorizeAdmin, async (req, res) => {
 
     const newActivityCode = new ActivityCode({
       code,
+      name,
       description,
       department
     });
@@ -88,10 +89,10 @@ router.post('/', authenticate, authorizeAdmin, async (req, res) => {
 // Update activity code (Admin only)
 router.put('/:id', authenticate, authorizeAdmin, async (req, res) => {
   try {
-    const { code, description, department } = req.body;
+    const { code, name, description, department } = req.body;
 
     // Check if code already exists (excluding current one)
-    if (code) {
+    if (code && department) {
       const existingCode = await ActivityCode.findOne({ 
         code, 
         department,
@@ -105,7 +106,7 @@ router.put('/:id', authenticate, authorizeAdmin, async (req, res) => {
 
     const updatedActivityCode = await ActivityCode.findByIdAndUpdate(
       req.params.id,
-      { code, description, department },
+      { code, name, description, department },
       { new: true, runValidators: true }
     );
 
@@ -150,9 +151,9 @@ router.post('/bulk', authenticate, authorizeAdmin, async (req, res) => {
 
     // Validate each activity code
     for (const code of activityCodes) {
-      if (!code.code || !code.department) {
+      if (!code.code || !code.name || !code.department) {
         return res.status(400).json({ 
-          message: 'Each activity code must have code and department' 
+          message: 'Each activity code must have code, name, and department' 
         });
       }
     }

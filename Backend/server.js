@@ -10,6 +10,7 @@ import projectsRoutes from './routes/projectsRoutes.js';
 import timesheetsRoutes from './routes/timesheetsRoutes.js';
 import usersRoutes from './routes/usersRoutes.js';
 import activityCodesRoutes from './routes/activityCodesRoutes.js';
+import reportsRoutes from './routes/reportsRoutes.js';
 import connectDB from './mongoDB.js';
 import { authenticate, authorizeAdmin } from './middleware/authMiddleware.js';
 
