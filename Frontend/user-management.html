@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>User Management - Employee Timesheet</title>
+    <link rel="stylesheet" href="css/dashboard.css">
+    <link rel="stylesheet" href="css/admin.css">
+    <link rel="stylesheet" href="css/user-management.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="dashboard-container">
+        <!-- Sidebar Navigation -->
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <div class="logo">
+                    <i class="fas fa-clock"></i>
+                    <h2>Timesheet</h2>
+                </div>
+            </div>
+            <div class="sidebar-menu">
+                <ul>
+                    <li>
+                        <a href="admin-dashboard.html">
+                            <i class="fas fa-home"></i>
+                            <span>Dashboard</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="activity-code.html">
+                            <i class="fas fa-code"></i>
+                            <span>Activity Code</span>
+                        </a>
+                    </li>
+                    <li class="active">
+                        <a href="user-management.html">
+                            <i class="fas fa-users-cog"></i>
+                            <span>User Management</span>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+            <div class="sidebar-footer">
+                <a href="index.html" class="logout-btn">
+                    <i class="fas fa-sign-out-alt"></i>
+                    <span>Logout</span>
+                </a>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Top Navigation -->
+            <div class="top-nav">
+                <div class="nav-left">
+                     <button id="toggle-sidebar">
+                        <i class="fas fa-bars"></i>
+                    </button>
+                    <h2>User Management</h2>
+                </div>
+                <div class="nav-right">
+                    <div class="user-info">
+                        <span id="admin-name">Admin</span>
+                        <i class="fas fa-user-circle"></i>
+                    </div>
+                </div>
+            </div>
+
+            <!-- User Management Content -->
+            <div class="user-management-content">
+                <!-- Header Section -->
+                <div class="user-management-header">
+                    <div class="hse-banner">    
+                        <h4>Manage all system users efficiently</h4>
+                    </div>
+                    <button class="btn-add-user" onclick="openAddUserModal()">
+                        <i class="fas fa-plus"></i> Add New User
+                    </button>
+                </div>
+
+                <!-- User Overview Cards -->
+                <div class="user-overview">
+                    <div class="overview-card">
+                        <div class="card-icon">
+                            <i class="fas fa-users"></i>
+                        </div>
+                        <div class="card-content">
+                            <h3 id="totalUsers">0</h3>
+                            <p>Total Users</p>
+                        </div>
+                    </div>
+                    <div class="overview-card">
+                        <div class="card-icon">
+                            <i class="fas fa-user-tie"></i>
+                        </div>
+                        <div class="card-content">
+                            <h3 id="activeUsers">0</h3>
+                            <p>Active Users</p>
+                        </div>
+                    </div>
+                    <div class="overview-card">
+                        <div class="card-icon">
+                            <i class="fas fa-user-clock"></i>
+                        </div>
+                        <div class="card-content">
+                            <h3 id="InactiveUsers">0</h3>
+                            <p>Inactive Users</p>
+                        </div>
+                    </div>
+                </div>
+
+                
+
+                <!-- Users List Section -->
+                <div class="users-section">
+                    <div class="section-header">
+                        <h2>All Users</h2>
+                        <div class="search-filter">
+                            <input type="text" id="searchUsers" placeholder="Search users...">
+                            <select id="filterRole">
+                                <option value="all">All Roles</option>
+                                <option value="admin">Admin</option>
+                                <option value="manager">Manager</option>
+                                <option value="employee">Employee</option>
+                                <option value="projects">Projects</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="users-grid" id="usersGrid">
+                        <!-- Users will be dynamically added here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add User Modal -->
+    <div id="addUserModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Add New User</h2>
+                <span class="close" onclick="closeAddUserModal()">&times;</span>
+            </div>
+            <form id="addUserForm">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="firstName">First Name *</label>
+                        <input type="text" id="firstName" name="firstName" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="lastName">Last Name *</label>
+                        <input type="text" id="lastName" name="lastName" required>
+                    </div>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="email">Email *</label>
+                        <input type="email" id="email" name="email" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="phone">Phone</label>
+                        <input type="tel" id="phone" name="phone">
+                    </div>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="username">Username *</label>
+                        <input type="text" id="username" name="username" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="password">Password *</label>
+                        <input type="password" id="password" name="password" required>
+                    </div>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="role">Role *</label>
+                        <select id="role" name="role" required>
+                            <option value="">Select Role</option>
+                            <option value="admin">Admin</option>
+                            <option value="manager">Manager</option>
+                            <option value="employee">Employee</option>
+                            <option value="projects">Projects</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="department">Department</label>
+                        <select id="department" name="department">
+                            <option value="">Select Department</option>
+                            <option value="Process">Process Department</option>
+                            <option value="Loss and Prevention">Loss and Prevention Department</option>
+                            <option value="Project">Project Department</option>
+                            <option value="QRA">QRA Department</option>
+                            <option value="IT">IT Department</option>
+                            <option value="HR">HR Department</option>
+                            <option value="BD">BD Department</option>
+                            <option value="Electrical">Electrical Department</option>
+                            <option value="Admin/Accounts">Admin/Accounts Department</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="joinDate">Join Date</label>
+                        <input type="date" id="joinDate" name="joinDate">
+                    </div>
+                    <div class="form-group">
+                        <label for="teamLeader">Team Leader Name</label>
+                        <input type="text" id="teamLeader" name="teamLeader">
+                    </div>
+                </div>
+                
+                <div class="form-actions">
+                    <button type="submit" class="btn-primary">Add User</button>
+                    <button type="button" class="btn-secondary" onclick="closeAddUserModal()">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Edit User Modal -->
+    <div id="editUserModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Edit User</h2>
+                <span class="close" onclick="closeEditUserModal()">&times;</span>
+            </div>
+            <form id="editUserForm">
+                <input type="hidden" id="editUserId" name="userId">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="editFirstName">First Name *</label>
+                        <input type="text" id="editFirstName" name="firstName" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="editLastName">Last Name *</label>
+                        <input type="text" id="editLastName" name="lastName" required>
+                    </div>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="editEmployeeId">Employee ID *</label>
+                        <input type="text" id="editEmployeeId" name="employeeId" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="editUsername">Username *</label>
+                        <input type="text" id="editUsername" name="username" required>
+                    </div>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="editEmail">Email *</label>
+                        <input type="email" id="editEmail" name="email" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="editPhone">Phone</label>
+                        <input type="tel" id="editPhone" name="phone">
+                    </div>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="editRole">Role *</label>
+                        <select id="editRole" name="role" required>
+                            <option value="admin">Admin</option>
+                            <option value="manager">Manager</option>
+                            <option value="employee">Employee</option>
+                            <option value="projects">Projects</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="editDepartment">Department</label>
+                        <select id="editDepartment" name="department">
+                            <option value="Process">Process Department</option>
+                            <option value="Loss and Prevention">Loss and Prevention Department</option>
+                            <option value="Project">Project Department</option>
+                            <option value="QRA">QRA Department</option>
+                            <option value="IT">IT Department</option>
+                            <option value="HR">HR Department</option>
+                            <option value="BD">BD Department</option>
+                            <option value="Electrical">Electrical Department</option>
+                            <option value="Admin/Accounts">Admin/Accounts Department</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="editJoinDate">Join Date</label>
+                        <input type="date" id="editJoinDate" name="joinDate">
+                    </div>
+                    <div class="form-group">
+                        <label for="editTeamLeader">Team Leader Name</label>
+                        <input type="text" id="editTeamLeader" name="teamLeader">
+                    </div>
+                </div>
+                
+                <div class="form-actions">
+                    <button type="submit" class="btn-primary">Update User</button>
+                    <button type="button" class="btn-secondary" onclick="closeEditUserModal()">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Delete User Modal -->
+    <div id="deleteUserModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Delete User</h2>
+                <span class="close" onclick="closeDeleteUserModal()">&times;</span>
+            </div>
+            <div class="delete-confirmation">
+                <p>Are you sure you want to delete this user?</p>
+                <p id="deleteUserName"></p>
+                <div class="form-actions">
+                    <button type="button" class="btn-danger" onclick="confirmDeleteUser()">Delete</button>
+                    <button type="button" class="btn-secondary" onclick="closeDeleteUserModal()">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="js/integration/api-client.js"></script>
+    <script src="js/integration/utils.js"></script>
+    <script src="js/user-management.js"></script>
+</body>
+</html>

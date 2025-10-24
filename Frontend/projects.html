@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Project Management - Employee Timesheet</title>
+    <link rel="stylesheet" href="css/dashboard.css">
+    <link rel="stylesheet" href="css/admin.css">
+    <link rel="stylesheet" href="css/projects.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="dashboard-container">
+        <!-- Sidebar Navigation -->
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <div class="logo">
+                    <i class="fas fa-clock"></i>
+                    <h2>Timesheet</h2>
+                </div>
+            </div>
+            <div class="sidebar-menu">
+                <ul>
+                    <li class="active">
+                        <a href="projects.html">
+                            <i class="fas fa-project-diagram"></i>
+                            <span>Projects</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="report-and-tracking.html">
+                            <i class="fas fa-users"></i>
+                            <span>Tracking and Report</span>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+            <div class="sidebar-footer">
+                <a href="index.html" class="logout-btn">
+                    <i class="fas fa-sign-out-alt"></i>
+                    <span>Logout</span>
+                </a>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Top Navigation -->
+            <div class="top-nav">
+                <div class="nav-left">
+                    <button id="toggle-sidebar">
+                        <i class="fas fa-bars"></i>
+                    </button>
+                    <h2>Project Management</h2>
+                </div>
+                <div class="nav-right">
+                    <div class="user-info">
+                        <span id="admin-name">Admin</span>
+                        <i class="fas fa-user-circle"></i>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Projects Content -->
+            <div class="projects-content">
+                <!-- Header Section -->    
+                <div class="projects-header">
+                    <div class="header-content">
+                        <p>Manage your projects efficiently and track progress.</p>
+                    </div>
+                    <button class="btn-add-project" onclick="toggleAddProjectModal()">
+                        <i class="fas fa-plus"></i> Add New Project
+                    </button>
+                </div>
+
+                <!-- Projects Overview Cards -->
+                <div class="projects-overview">
+                    <div class="overview-card">
+                        <div class="card-icon">
+                            <i class="fas fa-tasks"></i>
+                        </div>
+                        <div class="card-content" style="display: flex; flex-direction: column; gap: 10px;">
+                            <div style="display: flex; justify-content: space-between; font-weight: bold;">
+                                <span>Total Projects:</span>
+                                <span id="totalProjects">0</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between;">
+                                <span>Active:</span>
+                                <span id="activeProjects">0</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between;">
+                                <span>Completed:</span>
+                                <span id="completedProjects">0</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between;">
+                                <span>On Hold:</span>
+                                <span id="onHoldProjects">0</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Projects List Section -->
+                <div class="projects-section">
+                    <div class="section-header">
+                        <h2>All Projects</h2>
+                        <div class="search-filter">
+                            <input type="text" id="searchProjects" placeholder="Search projects...">
+                            <input type="text" id="searchPLNo" placeholder="Search PL No...">
+                            <select id="filterStatus">
+                                <option value="all">All Status</option>
+                                <option value="active">Active</option>
+                                <option value="completed">Completed</option>
+                                <option value="on-hold">On Hold</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="projects-grid" id="projectsGrid">
+                        <!-- Projects will be dynamically added here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Project Modal -->
+    <div id="addProjectModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Add New Project</h2>
+                <span class="close" onclick="toggleAddProjectModal()">&times;</span>
+            </div>
+            <form id="addProjectForm">
+                <div class="form-group">
+                    <label for="projectName">Project Name *</label>
+                    <input type="text" id="projectName" name="projectName" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="plNo">PL No. *</label>
+                    <input type="text" id="plNo" name="plNo" required>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="totalHours">Total Hours *</label>
+                        <input type="number" id="totalHours" name="totalHours" min="1" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="projectStatus">Status</label>
+                        <select id="projectStatus" name="projectStatus">
+                            <option value="active">Active</option>
+                            <option value="completed">Completed</option>
+                            <option value="on-hold">On Hold</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Variation Hours Display (only shown when editing) -->
+                <div id="variationDisplay" class="variation-display" style="display: none;"></div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="juniorHours">Junior Hours Allotted</label>
+                        <input type="number" id="juniorHours" name="juniorHours" min="0" value="0">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="juniorCompleted">Junior Hours Consumed</label>
+                        <input type="number" id="juniorCompleted" name="juniorCompleted" min="0" value="0">
+                    </div>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="seniorHours">Senior Hours Allotted</label>
+                        <input type="number" id="seniorHours" name="seniorHours" min="0" value="0">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="seniorCompleted">Senior Hours Consumed</label>
+                        <input type="number" id="seniorCompleted" name="seniorCompleted" min="0" value="0">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="departments">Select Departments *</label>
+                    <select id="departments" name="departments" multiple required>
+                        <option value="Project">Project</option>
+                        <option value="Process">Process</option>
+                        <option value="PHA">PHA</option>
+                        <option value="Loss Prevention">Loss Prevention</option>
+                        <option value="Electrical and Instrumentation">Electrical and Instrumentation</option>
+                        <option value="Business Development">Business Development</option>
+                        <option value="Admin">Admin</option>
+                        <option value="HR">HR</option>
+                        <option value="Accounts">Accounts</option>
+                    </select>
+                    <small style="color: var(--text-secondary);">Hold Ctrl (Cmd on Mac) to select multiple departments</small>
+                </div>
+
+                <div class="form-group" id="departmentHoursContainer" style="display:none;">
+                    <label>Department-wise Hours Allotment</label>
+                    <div id="departmentHoursInputs">
+                        <!-- Dynamic inputs for department hours allotment will be added here -->
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="assignedEmployees">Assign Employees *</label>
+                    <select id="assignedEmployees" name="assignedEmployees" multiple required>
+                        <!-- Employees will be populated by JS -->
+                    </select>
+                    <small style="color: var(--text-secondary);">Hold Ctrl (Cmd on Mac) to select multiple employees</small>
+                </div>
+                
+                <div class="form-actions">
+                    <button type="submit" class="btn-primary">Add Project</button>
+                    <button type="button" class="btn-secondary" onclick="toggleAddProjectModal()">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <script src="js/integration/api-client.js"></script>
+    <script src="js/integration/utils.js"></script>
+    <script src="js/projects.js"></script>
+</body>
+</html>
+
+<read_file>
+<path>../OneDrive/Desktop/Techniche Engg/js/projects.js</path>
+</read_file>
