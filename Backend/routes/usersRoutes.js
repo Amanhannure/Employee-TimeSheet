@@ -64,8 +64,7 @@ router.post('/', authenticate, authorizeAdmin, async (req, res) => {
         message: 'Employee ID, username, password, and role are required' 
       });
     }
-    const passwordError = validatePassword(password);
-    if (passwordError) return res.status(400).json({ message: passwordError });
+    
 
     if (typeof employeeId !== 'string' || typeof username !== 'string') {
       return res.status(400).json({ message: 'Invalid input format' });

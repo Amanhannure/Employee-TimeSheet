@@ -11,6 +11,7 @@ import timesheetsRoutes from './routes/timesheetsRoutes.js';
 import usersRoutes from './routes/usersRoutes.js';
 import activityCodesRoutes from './routes/activityCodesRoutes.js';
 import reportsRoutes from './routes/reportsRoutes.js';
+import leaveRoutes from './routes/leaveRoutes.js'
 import connectDB from './mongoDB.js';
 import { authenticate, authorizeAdmin } from './middleware/authMiddleware.js';
 import { securityHeaders } from './security/headers.js';
@@ -20,6 +21,8 @@ import { auditLogger } from './security/auditLogger.js';
 
 const app = express();
 
+
+app.use('/uploads', express.static('uploads')); 
 // Middleware
 app.use(securityHeaders);
 app.use(sanitizeMiddleware);
@@ -37,6 +40,7 @@ app.use(session({
     sameSite: 'strict'
   }
 }));
+app.use('/api/leave', leaveRoutes);
 
 // Test if environment variables are loading
 console.log('🔧 Environment check:');
@@ -57,6 +61,7 @@ app.use('/api/projects', projectsRoutes);
 app.use('/api/timesheets', timesheetsRoutes);
 app.use('/api/users', usersRoutes);
 app.use('/api/activity-codes', activityCodesRoutes);
+
 
 // Health check route
 app.get('/api/health', (req, res) => {
