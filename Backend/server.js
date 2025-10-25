@@ -17,6 +17,7 @@ import { securityHeaders } from './security/headers.js';
 import { sanitizeMiddleware } from './security/sanitize.js';
 import { authLimiter, apiLimiter } from './security/rateLimit.js';
 import { auditLogger } from './security/auditLogger.js';
+import dashboardRoutes from './routes/dashboardRoutes.js';
 
 const app = express();
 
@@ -70,6 +71,7 @@ app.use('/api/users', usersRoutes);
 app.use('/api/activity-codes', activityCodesRoutes);
 app.use('/api/reports', reportsRoutes);
 app.use('/api/leave', leaveRoutes);
+app.use('/api/dashboard', dashboardRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

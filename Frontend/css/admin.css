@@ -297,3 +297,57 @@ User-Management {
     font-style: italic;
     font-weight: 600;
 }
+/* Loading spinner */
+.loading-spinner {
+    text-align: center;
+    color: #7f8c8d;
+    padding: 20px;
+}
+
+.loading-spinner i {
+    margin-right: 10px;
+}
+
+/* Search section styles */
+.search-input {
+    flex-grow: 1;
+    padding: 10px;
+    font-size: 16px;
+    border-radius: 5px;
+    border: 1px solid #ecf0f1;
+}
+
+.search-button {
+    padding: 10px 20px;
+    background-color: #f39c12;
+    border: none;
+    border-radius: 5px;
+    color: #fff;
+    font-weight: bold;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.search-button:hover {
+    background-color: #e67e22;
+}
+
+.search-results {
+    margin-top: 15px;
+    font-weight: 600;
+    color: #2c3e50;
+}
+
+/* Modal improvements */
+.modal-body {
+    padding: 20px;
+}
+
+.search-section {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 15px;
+}

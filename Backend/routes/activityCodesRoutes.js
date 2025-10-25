@@ -61,10 +61,13 @@ router.post('/', authenticate, authorizeAdmin, async (req, res) => {
       return res.status(400).json({ message: 'Code, name, and department are required' });
     }
 
-    // Check if activity code already exists
+    // Check if activity code already exists in the SAME department
+    // Same code numbers are allowed in DIFFERENT departments
     const existingCode = await ActivityCode.findOne({ code, department });
     if (existingCode) {
-      return res.status(400).json({ message: 'Activity code already exists for this department' });
+      return res.status(400).json({ 
+        message: 'Activity code already exists for this department.' 
+      });
     }
 
     const newActivityCode = new ActivityCode({
@@ -91,7 +94,8 @@ router.put('/:id', authenticate, authorizeAdmin, async (req, res) => {
   try {
     const { code, name, description, department } = req.body;
 
-    // Check if code already exists (excluding current one)
+    // Check if code already exists in the SAME department (excluding current one)
+    // Same code numbers are allowed in DIFFERENT departments
     if (code && department) {
       const existingCode = await ActivityCode.findOne({ 
         code, 
@@ -100,7 +104,9 @@ router.put('/:id', authenticate, authorizeAdmin, async (req, res) => {
       });
       
       if (existingCode) {
-        return res.status(400).json({ message: 'Activity code already exists for this department' });
+        return res.status(400).json({ 
+          message: 'Activity code already exists for this department.' 
+        });
       }
     }
 
@@ -158,19 +164,19 @@ router.post('/bulk', authenticate, authorizeAdmin, async (req, res) => {
       }
     }
 
-    // Check for duplicates in the request
+    // Check for duplicates in the request (same code + same department)
     const codeMap = new Map();
     for (const code of activityCodes) {
       const key = `${code.code}-${code.department}`;
       if (codeMap.has(key)) {
         return res.status(400).json({ 
-          message: `Duplicate activity code: ${code.code} for department ${code.department}` 
+          message: `Duplicate activity code: ${code.code} for department ${code.department}.` 
         });
       }
       codeMap.set(key, true);
     }
 
-    // Check for existing codes in database
+    // Check for existing codes in database (same code + same department)
     const existingCodes = await ActivityCode.find({
       $or: activityCodes.map(code => ({
         code: code.code,
@@ -181,7 +187,7 @@ router.post('/bulk', authenticate, authorizeAdmin, async (req, res) => {
     if (existingCodes.length > 0) {
       const existingList = existingCodes.map(ec => `${ec.code} (${ec.department})`).join(', ');
       return res.status(400).json({ 
-        message: `Some activity codes already exist: ${existingList}` 
+        message: `Some activity codes already exist in their respective departments: ${existingList}. ` 
       });
     }
 
@@ -204,6 +210,27 @@ router.get('/departments/list', authenticate, async (req, res) => {
     res.json(departments);
   } catch (error) {
     console.error('Get departments error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Get all activity codes grouped by department
+router.get('/grouped/departments', authenticate, async (req, res) => {
+  try {
+    const activityCodes = await ActivityCode.find().sort({ department: 1, code: 1 });
+    
+    // Group by department to demonstrate same codes can exist in different departments
+    const groupedByDepartment = activityCodes.reduce((acc, code) => {
+      if (!acc[code.department]) {
+        acc[code.department] = [];
+      }
+      acc[code.department].push(code);
+      return acc;
+    }, {});
+
+    res.json(groupedByDepartment);
+  } catch (error) {
+    console.error('Get grouped activity codes error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });

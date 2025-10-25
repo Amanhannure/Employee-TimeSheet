@@ -110,8 +110,6 @@
                     </div>
                 </div>
 
-                
-
                 <!-- Users List Section -->
                 <div class="users-section">
                     <div class="section-header">
@@ -155,6 +153,18 @@
                     </div>
                 </div>
                 
+                <!-- ADDED: Employee ID Field -->
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="employeeId">Employee ID *</label>
+                        <input type="text" id="employeeId" name="employeeId" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="username">Username *</label>
+                        <input type="text" id="username" name="username" required>
+                    </div>
+                </div>
+                
                 <div class="form-row">
                     <div class="form-group">
                         <label for="email">Email *</label>
@@ -168,16 +178,11 @@
                 
                 <div class="form-row">
                     <div class="form-group">
-                        <label for="username">Username *</label>
-                        <input type="text" id="username" name="username" required>
-                    </div>
-                    <div class="form-group">
                         <label for="password">Password *</label>
-                        <input type="password" id="password" name="password" required>
+                        <input type="password" id="password" name="password" required 
+                               minlength="4" title="Password must be at least 4 characters">
+                        <small class="password-hint">Minimum 4 characters required</small>
                     </div>
-                </div>
-                
-                <div class="form-row">
                     <div class="form-group">
                         <label for="role">Role *</label>
                         <select id="role" name="role" required>
@@ -188,6 +193,9 @@
                             <option value="projects">Projects</option>
                         </select>
                     </div>
+                </div>
+                
+                <div class="form-row">
                     <div class="form-group">
                         <label for="department">Department</label>
                         <select id="department" name="department">
@@ -203,16 +211,23 @@
                             <option value="Admin/Accounts">Admin/Accounts Department</option>
                         </select>
                     </div>
-                </div>
-                
-                <div class="form-row">
                     <div class="form-group">
                         <label for="joinDate">Join Date</label>
                         <input type="date" id="joinDate" name="joinDate">
                     </div>
+                </div>
+                
+                <div class="form-row">
                     <div class="form-group">
                         <label for="teamLeader">Team Leader Name</label>
                         <input type="text" id="teamLeader" name="teamLeader">
+                    </div>
+                    <div class="form-group">
+                        <label for="status">Status</label>
+                        <select id="status" name="status">
+                            <option value="active" selected>Active</option>
+                            <option value="inactive">Inactive</option>
+                        </select>
                     </div>
                 </div>
                 
@@ -303,6 +318,17 @@
                     </div>
                 </div>
                 
+                <!-- ADDED: Status Field in Edit Modal -->
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="editStatus">Status</label>
+                        <select id="editStatus" name="status">
+                            <option value="active">Active</option>
+                            <option value="inactive">Inactive</option>
+                        </select>
+                    </div>
+                </div>
+                
                 <div class="form-actions">
                     <button type="submit" class="btn-primary">Update User</button>
                     <button type="button" class="btn-secondary" onclick="closeEditUserModal()">Cancel</button>
@@ -328,6 +354,7 @@
             </div>
         </div>
     </div>
+
     <script src="js/integration/api-client.js"></script>
     <script src="js/integration/utils.js"></script>
     <script src="js/user-management.js"></script>

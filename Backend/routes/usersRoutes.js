@@ -124,9 +124,13 @@ router.post('/', authenticate, authorizeAdmin, async (req, res) => {
   }
 });
 
-// Update user (Admin only)
+// Update user (Admin only) - FIXED VERSION
 router.put('/:id', authenticate, authorizeAdmin, async (req, res) => {
   try {
+    console.log('=== UPDATE USER REQUEST ===');
+    console.log('User ID:', req.params.id);
+    console.log('Request body:', req.body);
+
     const {
       firstName,
       lastName,
@@ -135,35 +139,100 @@ router.put('/:id', authenticate, authorizeAdmin, async (req, res) => {
       role,
       department,
       joinDate,
-      status
+      status,
+      employeeId,
+      username
     } = req.body;
 
+    // Check if user exists
+    const existingUser = await User.findById(req.params.id);
+    console.log('Existing user:', existingUser);
+    
+    if (!existingUser) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Prepare update data
+    const updateData = {
+      firstName: firstName || existingUser.firstName,
+      lastName: lastName || existingUser.lastName,
+      email: email || existingUser.email,
+      phone: phone || existingUser.phone,
+      role: role || existingUser.role,
+      department: department || existingUser.department,
+      status: status || existingUser.status
+    };
+
+    // Handle joinDate separately
+    if (joinDate) {
+      updateData.joinDate = new Date(joinDate);
+    }
+
+    // Check if employeeId is being changed
+    if (employeeId && employeeId !== existingUser.employeeId) {
+      const employeeIdExists = await User.findOne({ 
+        employeeId, 
+        _id: { $ne: req.params.id } 
+      });
+      if (employeeIdExists) {
+        return res.status(400).json({ message: 'Employee ID already exists' });
+      }
+      updateData.employeeId = employeeId;
+    }
+
+    // Check if username is being changed
+    if (username && username !== existingUser.username) {
+      const usernameExists = await User.findOne({ 
+        username, 
+        _id: { $ne: req.params.id } 
+      });
+      if (usernameExists) {
+        return res.status(400).json({ message: 'Username already exists' });
+      }
+      updateData.username = username;
+    }
+
+    console.log('Final update data:', updateData);
+
+    // Perform the update
     const updatedUser = await User.findByIdAndUpdate(
       req.params.id,
-      {
-        firstName,
-        lastName,
-        email,
-        phone,
-        role,
-        department,
-        joinDate: joinDate ? new Date(joinDate) : undefined,
-        status
-      },
-      { new: true, runValidators: true }
+      updateData,
+      { 
+        new: true, 
+        runValidators: true 
+      }
     ).select('-passwordHash');
 
+    console.log('Updated user result:', updatedUser);
+
     if (!updatedUser) {
-      return res.status(404).json({ message: 'User not found' });
+      return res.status(404).json({ message: 'User not found after update' });
     }
 
     res.json({
       message: 'User updated successfully',
       user: updatedUser
     });
+
   } catch (error) {
     console.error('Update user error:', error);
-    res.status(500).json({ message: 'Server error' });
+    
+    // Handle validation errors
+    if (error.name === 'ValidationError') {
+      const messages = Object.values(error.errors).map(err => err.message);
+      return res.status(400).json({ message: messages.join(', ') });
+    }
+    
+    // Handle duplicate key errors
+    if (error.code === 11000) {
+      const field = Object.keys(error.keyPattern)[0];
+      return res.status(400).json({ 
+        message: `${field} already exists` 
+      });
+    }
+    
+    res.status(500).json({ message: 'Server error: ' + error.message });
   }
 });
 

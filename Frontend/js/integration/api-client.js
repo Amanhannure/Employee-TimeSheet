@@ -82,6 +82,14 @@ class ApiClient {
         return true;
     }
 
+    // ADDED: Missing getUser method
+    async getUser(id) {
+        if (!id || typeof id !== 'string') {
+            throw new Error('Invalid user ID format');
+        }
+        return await this.request(`/users/${id}`);
+    }
+
     async login(credentials) {
         if (!this.validateInput(credentials)) {
             throw new Error('Invalid input format');

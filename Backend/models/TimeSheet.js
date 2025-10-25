@@ -33,7 +33,7 @@ const timesheetSchema = new mongoose.Schema({
   rejectionReason: String
 }, { 
   timestamps: true,
-  strictPopulate: false // This allows populating fields not explicitly in schema
+  strictPopulate: false
 });
 
 // Middleware to calculate totals before saving
@@ -49,4 +49,7 @@ timesheetSchema.index({ status: 1 });
 timesheetSchema.index({ employeeCode: 1 });
 timesheetSchema.index({ 'entries.projectCode': 1 });
 
-export default mongoose.model('Timesheet', timesheetSchema);
+// FIX: Check if model exists before creating
+const Timesheet = mongoose.models.Timesheet || mongoose.model('Timesheet', timesheetSchema);
+
+export default Timesheet;

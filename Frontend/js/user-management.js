@@ -117,21 +117,26 @@ async function addUser() {
 
 async function openEditUserModal(userId) {
     try {
+        console.log('Loading user for edit:', userId);
         const user = await apiClient.getUser(userId);
-        if (!user) return;
+        if (!user) {
+            showNotification('User not found', 'error');
+            return;
+        }
 
         document.getElementById('editUserId').value = user._id;
-        document.getElementById('editFirstName').value = user.firstName;
-        document.getElementById('editLastName').value = user.lastName;
-        document.getElementById('editEmployeeId').value = user.employeeId;
-        document.getElementById('editUsername').value = user.username;
-        document.getElementById('editEmail').value = user.email;
+        document.getElementById('editFirstName').value = user.firstName || '';
+        document.getElementById('editLastName').value = user.lastName || '';
+        document.getElementById('editEmployeeId').value = user.employeeId || '';
+        document.getElementById('editUsername').value = user.username || '';
+        document.getElementById('editEmail').value = user.email || '';
         document.getElementById('editPhone').value = user.phone || '';
         document.getElementById('editDepartment').value = user.department || '';
-        document.getElementById('editRole').value = user.role;
+        document.getElementById('editRole').value = user.role || 'employee';
         document.getElementById('editJoinDate').value = user.joinDate ? user.joinDate.split('T')[0] : '';
         
         document.getElementById('editUserModal').style.display = 'block';
+        console.log('Edit modal opened for user:', user);
     } catch (error) {
         console.error('Error loading user for edit:', error);
         showNotification('Failed to load user data', 'error');
@@ -142,7 +147,13 @@ async function updateUser() {
     try {
         const form = document.getElementById('editUserForm');
         const formData = new FormData(form);
-        const userId = formData.get('userId');
+        
+        // FIX: Get user ID directly from the hidden input
+        const userId = document.getElementById('editUserId').value;
+        
+        if (!userId) {
+            throw new Error('User ID is required');
+        }
         
         const userData = {
             firstName: formData.get('firstName'),
@@ -156,7 +167,12 @@ async function updateUser() {
             joinDate: formData.get('joinDate')
         };
         
-        await apiClient.updateUser(userId, userData);
+        console.log('Updating user with ID:', userId);
+        console.log('Update data:', userData);
+        
+        const result = await apiClient.updateUser(userId, userData);
+        console.log('Update result:', result);
+        
         await loadUsers();
         updateOverviewCards();
         closeEditUserModal();
@@ -235,15 +251,18 @@ function closeDeleteUserModal() {
     document.getElementById('deleteUserModal').style.display = 'none';
 }
 
-function showNotification(message) {
+function showNotification(message, type = 'success') {
     const notification = document.createElement('div');
     notification.className = 'notification';
     notification.textContent = message;
+    
+    const backgroundColor = type === 'error' ? '#ef4444' : '#10b981';
+    
     notification.style.cssText = `
         position: fixed;
         top: 20px;
         right: 20px;
-        background: #10b981;
+        background: ${backgroundColor};
         color: white;
         padding: 1rem 1.5rem;
         border-radius: 0.5rem;
