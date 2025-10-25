@@ -5,7 +5,7 @@ const userSchema = new mongoose.Schema({
     type: String, 
     required: true, 
     unique: true, 
-    match: /^EMP\d+$/  
+    match: /^(EMP|[A-Z])\d+$/  // Accepts both "EMP123" and "T1166" formats
   },
   firstName: String,
   lastName: String,
@@ -41,6 +41,6 @@ const userSchema = new mongoose.Schema({
   }
 }, { 
   timestamps: true 
-}); // Fixed: timestamps should be in an options object
+});
 
 export default mongoose.model('User', userSchema);

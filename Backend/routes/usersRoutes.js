@@ -82,7 +82,7 @@ router.post('/', authenticate, authorizeAdmin, async (req, res) => {
           : 'Employee ID already exists' 
       });
     }
-    if (password.length < 8) {
+    if (password.length < 4) {
       return res.status(400).json({ message: 'Password too short' });
     }
 

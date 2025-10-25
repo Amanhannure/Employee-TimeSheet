@@ -31,11 +31,22 @@ const timesheetSchema = new mongoose.Schema({
   approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   approvedAt: Date,
   rejectionReason: String
-}, { timestamps: true });
+}, { 
+  timestamps: true,
+  strictPopulate: false // This allows populating fields not explicitly in schema
+});
+
+// Middleware to calculate totals before saving
+timesheetSchema.pre('save', function(next) {
+  this.totalNormalHours = this.entries.reduce((sum, entry) => sum + (entry.normalHours || 0), 0);
+  this.totalOvertimeHours = this.entries.reduce((sum, entry) => sum + (entry.overtimeHours || 0), 0);
+  next();
+});
 
 // Index for efficient queries
 timesheetSchema.index({ employee: 1, weekStartDate: 1 });
 timesheetSchema.index({ status: 1 });
 timesheetSchema.index({ employeeCode: 1 });
+timesheetSchema.index({ 'entries.projectCode': 1 });
 
 export default mongoose.model('Timesheet', timesheetSchema);
