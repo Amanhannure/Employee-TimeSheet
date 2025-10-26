@@ -213,7 +213,7 @@ function updateTimesheetCounts(timesheets) {
     
 function initializeDashboard() {
     console.log('🎯 Initializing dashboard components...');
-    
+    addHistoryButton();
     // Get employee code from authenticated user
     const userData = getUserData();
     const employeeCode = userData.employeeId;
@@ -877,6 +877,114 @@ function addTimesheetRow() {
     timesheetBody.appendChild(row);
     updateRowNumbers();
 }
+// ✅ ADD THESE MISSING FUNCTIONS TO YOUR dashboard.js
+
+// Display timesheet details modal
+function displayTimesheetDetails(timesheet) {
+    // Create modal if it doesn't exist
+    let modal = document.getElementById('timesheet-details-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'timesheet-details-modal';
+        modal.className = 'modal';
+        modal.innerHTML = `
+            <div class="modal-content large-modal">
+                <span class="close-modal">&times;</span>
+                <h2>Timesheet Details</h2>
+                <div id="timesheet-details-content"></div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+        
+        // Add close functionality
+        modal.querySelector('.close-modal').addEventListener('click', () => {
+            modal.style.display = 'none';
+        });
+        
+        // Close when clicking outside
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                modal.style.display = 'none';
+            }
+        });
+    }
+    
+    const content = document.getElementById('timesheet-details-content');
+    
+    let html = `
+        <div class="timesheet-details">
+            <div class="details-header">
+                <h3>Timesheet #${timesheet._id.slice(-6)}</h3>
+                <p><strong>Employee:</strong> ${timesheet.employeeName || 'N/A'}</p>
+                <p><strong>Week:</strong> ${new Date(timesheet.weekStartDate).toLocaleDateString()} - ${new Date(timesheet.weekEndDate).toLocaleDateString()}</p>
+                <p><strong>Status:</strong> <span class="timesheet-status status-${timesheet.status}">${timesheet.status}</span></p>
+                <p><strong>Total Hours:</strong> ${timesheet.totalHours || 0} (Normal: ${timesheet.totalNormalHours || 0}, Overtime: ${timesheet.totalOvertimeHours || 0})</p>
+            </div>
+            <div class="details-table">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Project</th>
+                            <th>Location</th>
+                            <th>Normal Hours</th>
+                            <th>Overtime Hours</th>
+                            <th>Activity Code</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+    `;
+    
+    if (timesheet.entries && timesheet.entries.length > 0) {
+        timesheet.entries.forEach(entry => {
+            html += `
+                <tr>
+                    <td>${new Date(entry.date).toLocaleDateString()}</td>
+                    <td>${entry.projectCode}</td>
+                    <td>${entry.location || '-'}</td>
+                    <td>${entry.normalHours}</td>
+                    <td>${entry.overtimeHours}</td>
+                    <td>${entry.activityCode}</td>
+                </tr>
+            `;
+        });
+    } else {
+        html += `<tr><td colspan="6" style="text-align: center;">No entries found</td></tr>`;
+    }
+    
+    html += `
+                    </tbody>
+                </table>
+            </div>
+            <div class="details-actions">
+                <button class="btn btn-primary" onclick="exportTimesheetToCSV('${timesheet._id}')">
+                    <i class="fas fa-download"></i> Export as CSV
+                </button>
+            </div>
+        </div>
+    `;
+    
+    content.innerHTML = html;
+    modal.style.display = 'block';
+}
+
+// ✅ Add history button functionality
+function addHistoryButton() {
+    const timesheetSummary = document.querySelector('.timesheet-summary');
+    if (timesheetSummary && !document.getElementById('history-btn')) {
+        const historyCard = document.createElement('div');
+        historyCard.className = 'summary-item history';
+        historyCard.id = 'history-btn';
+        historyCard.innerHTML = `
+            <h4>Timesheet History</h4>
+            <p>View</p>
+        `;
+        timesheetSummary.appendChild(historyCard);
+        
+        historyCard.addEventListener('click', loadTimesheetHistory);
+    }
+}
+
 
 // Function to populate activity codes based on employee's department (fallback)
 function populateActivityCodes() {

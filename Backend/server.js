@@ -12,12 +12,12 @@ import activityCodesRoutes from './routes/activityCodesRoutes.js';
 import reportsRoutes from './routes/reportsRoutes.js';
 import leaveRoutes from './routes/leaveRoutes.js';
 import connectDB from './mongoDB.js';
-import { authenticate, authorizeAdmin } from './middleware/authMiddleware.js';
 import { securityHeaders } from './security/headers.js';
 import { sanitizeMiddleware } from './security/sanitize.js';
 import { authLimiter, apiLimiter } from './security/rateLimit.js';
 import { auditLogger } from './security/auditLogger.js';
 import dashboardRoutes from './routes/dashboardRoutes.js';
+import Timesheet from './models/TimeSheet.js'; // ✅ ADDED MISSING IMPORT
 
 const app = express();
 
@@ -35,7 +35,7 @@ connectDB();
 app.use(securityHeaders);
 app.use(sanitizeMiddleware);
 app.use(cors({ 
-  origin: true, // Allows all origins in development
+  origin: true,
   credentials: true
 }));
 app.use(express.json());
@@ -48,23 +48,47 @@ app.use(session({
   resave: false,
   saveUninitialized: false,
   cookie: { 
-    secure: false, // Set to true in production with HTTPS
+    secure: false,
     httpOnly: true,
     sameSite: 'lax',
     maxAge: 24 * 60 * 60 * 1000
   }
 }));
-// Archive old timesheets every month
-const archiveJob = () => {
-  const now = new Date();
-  if (now.getDate() === 1) { // Run on 1st of every month
-    Timesheet.archiveOldTimesheets();
+
+// ✅ FIXED: Archive job with proper implementation
+const archiveOldTimesheets = async () => {
+  try {
+    const oneYearAgo = new Date();
+    oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+    
+    const result = await Timesheet.updateMany(
+      { 
+        createdAt: { $lt: oneYearAgo },
+        isArchived: false 
+      },
+      { 
+        isArchived: true,
+        archiveDate: new Date()
+      }
+    );
+    
+    console.log(`✅ Archived ${result.modifiedCount} old timesheets`);
+  } catch (error) {
+    console.error('❌ Archive job failed:', error);
   }
 };
 
-// Run on server start and schedule monthly
-setInterval(archiveJob, 24 * 60 * 60 * 1000); // Daily check
-archiveJob(); // Run immediately on start
+// Schedule archive job to run on 1st of every month
+const scheduleArchiveJob = () => {
+  const now = new Date();
+  if (now.getDate() === 1) {
+    archiveOldTimesheets();
+  }
+};
+
+// Run archive check daily
+setInterval(scheduleArchiveJob, 24 * 60 * 60 * 1000);
+scheduleArchiveJob(); // Run on startup
 
 // Static files
 app.use('/uploads', express.static('uploads')); 
