@@ -105,7 +105,112 @@ function updateTimesheetCounts(timesheets) {
         console.error('Error updating timesheet counts:', error);
     }
 }
+    async function exportTimesheetToCSV(timesheetId) {
+    try {
+        const response = await apiClient.exportTimesheetToCSV(timesheetId);
+        
+        // Create download link
+        const blob = new Blob([response], { type: 'text/csv' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `timesheet-${timesheetId}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+        
+        showNotification('Timesheet exported successfully!', 'success');
+    } catch (error) {
+        console.error('Export error:', error);
+        showNotification('Failed to export timesheet', 'error');
+    }
+}
 
+// NEW: View timesheet history
+    async function loadTimesheetHistory() {
+        try {
+            const timesheets = await apiClient.getMyTimesheets();
+        
+            // Group by year and month for organized display
+            const groupedTimesheets = timesheets.reduce((acc, timesheet) => {
+                const year = timesheet.year;
+                const month = new Date(timesheet.weekStartDate).getMonth() + 1;
+            
+                if (!acc[year]) acc[year] = {};
+                if (!acc[year][month]) acc[year][month] = [];
+            
+                acc[year][month].push(timesheet);
+                return acc;
+            }, {});
+        
+            displayTimesheetHistory(groupedTimesheets);
+        } catch (error) {
+            console.error('Error loading timesheet history:', error);
+            showNotification('Failed to load timesheet history', 'error');
+        }
+    }
+
+    // NEW: Display timesheet history in modal
+    function displayTimesheetHistory(groupedTimesheets) {
+        const modal = document.getElementById('history-modal');
+        const content = document.getElementById('history-content');
+    
+        let html = '<div class="timesheet-history">';
+    
+        Object.keys(groupedTimesheets).sort((a, b) => b - a).forEach(year => {
+            html += `<h3>${year}</h3>`;
+        
+            Object.keys(groupedTimesheets[year]).sort((a, b) => b - a).forEach(month => {
+                const monthName = new Date(parseInt(year), parseInt(month) - 1).toLocaleString('default', { month: 'long' });
+                html += `<h4>${monthName}</h4>`;
+                html += '<div class="history-timesheets">';
+            
+                groupedTimesheets[year][month].forEach(timesheet => {
+                    const statusClass = `status-${timesheet.status}`;
+                    html += `
+                        <div class="history-item ${statusClass}">
+                            <div class="history-info">
+                                <span class="week-range">
+                                    Week ${timesheet.weekNumber}: ${new Date(timesheet.weekStartDate).toLocaleDateString()} - ${new Date(timesheet.weekEndDate).toLocaleDateString()}
+                                </span>
+                                <span class="total-hours">Total: ${timesheet.totalHours} hrs</span>
+                                <span class="timesheet-status ${statusClass}">${timesheet.status}</span>
+                            </div>
+                            <div class="history-actions">
+                                <button class="btn-small btn-view" onclick="viewTimesheetDetails('${timesheet._id}')">
+                                    <i class="fas fa-eye"></i> View
+                                </button>
+                                <button class="btn-small btn-export" onclick="exportTimesheetToCSV('${timesheet._id}')">
+                                    <i class="fas fa-download"></i> Export
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                });
+            
+                html += '</div>';
+            });
+        });
+    
+        html += '</div>';
+        content.innerHTML = html;
+        modal.style.display = 'block';
+    }
+
+    // NEW: View timesheet details
+    async function viewTimesheetDetails(timesheetId) {
+        try {
+            const timesheet = await apiClient.getTimesheetById(timesheetId);
+            displayTimesheetDetails(timesheet);
+        } catch (error) {
+            console.error('Error loading timesheet details:', error);
+            showNotification('Failed to load timesheet details', 'error');
+        }
+    }
+
+    // Add this to your initializeDashboard function
+    
 function initializeDashboard() {
     console.log('🎯 Initializing dashboard components...');
     
@@ -117,6 +222,7 @@ function initializeDashboard() {
     const timesheetLogs = [
         { employee: employeeCode, date: new Date().toISOString().split('T')[0], status: 'Pending' }
     ];
+    
 
     // Handle Summary card click
     const summaryCard = document.getElementById('summary-card');
@@ -177,6 +283,10 @@ function initializeDashboard() {
         const modal = document.getElementById('access-denied-modal');
         modal.style.display = 'block';
     });
+    const historyBtn = document.getElementById('history-btn');
+        if (historyBtn) {
+            historyBtn.addEventListener('click', loadTimesheetHistory);
+        }
 
     // Close access denied modal when clicking the close button
     document.getElementById('close-access-modal').addEventListener('click', function() {

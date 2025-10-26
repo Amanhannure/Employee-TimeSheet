@@ -54,6 +54,17 @@ app.use(session({
     maxAge: 24 * 60 * 60 * 1000
   }
 }));
+// Archive old timesheets every month
+const archiveJob = () => {
+  const now = new Date();
+  if (now.getDate() === 1) { // Run on 1st of every month
+    Timesheet.archiveOldTimesheets();
+  }
+};
+
+// Run on server start and schedule monthly
+setInterval(archiveJob, 24 * 60 * 60 * 1000); // Daily check
+archiveJob(); // Run immediately on start
 
 // Static files
 app.use('/uploads', express.static('uploads')); 

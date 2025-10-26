@@ -354,6 +354,35 @@ class ApiClient {
 
         return await response.blob();
     }
+    // Add to ApiClient class
+    async exportTimesheetToCSV(id) {
+        const response = await fetch(`${this.baseURL}/timesheets/export/${id}`, {
+            headers: this.getHeaders()
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to export timesheet');
+        }
+
+        return await response.text();
+    }
+
+    async exportMultipleTimesheets(ids) {
+        return await this.request('/timesheets/export-multiple', {
+            method: 'POST',
+            body: JSON.stringify({ ids })
+        });
+    }
+
+    async getTimesheetById(id) {
+        return await this.request(`/timesheets/${id}`);
+    }
+
+    async archiveOldTimesheets() {
+        return await this.request('/timesheets/archive-old', {
+            method: 'POST'
+        });
+    }
 
     setTimeout(duration) {
         this.timeout = duration;
