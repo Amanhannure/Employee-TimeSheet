@@ -285,6 +285,75 @@ class ApiClient {
         const queryParams = new URLSearchParams(filters).toString();
         return await this.request(`/reports/employee-report?${queryParams}`);
     }
+    // Add to ApiClient class in api-client.js
+
+    async submitLeaveRequest(leaveData) {
+        const formData = new FormData();
+    
+        // Append form data
+        Object.keys(leaveData).forEach(key => {
+            if (key !== 'document') {
+                formData.append(key, leaveData[key]);
+            }
+        });
+    
+        // Append file if exists
+        if (leaveData.document) {
+            formData.append('document', leaveData.document);
+        }
+
+        const response = await fetch(`${this.baseURL}/leave`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${this.token}`
+            },
+            body: formData
+        });
+
+        const data = await response.json();
+    
+        if (!response.ok) {
+            throw new Error(data.message || 'Failed to submit leave request');
+        }
+    
+        return data;
+    }
+
+    async getMyLeaveRequests() {
+        return await this.request('/leave/my-requests');
+    }
+
+    async getAllLeaveRequests(filters = {}) {
+        const queryParams = new URLSearchParams(filters).toString();
+        return await this.request(`/leave?${queryParams}`);
+    }
+
+    async approveLeaveRequest(id) {
+        return await this.request(`/leave/${id}/approve`, {
+            method: 'PATCH'
+        });
+    }
+
+    async rejectLeaveRequest(id, rejectionReason) {
+        return await this.request(`/leave/${id}/reject`, {
+            method: 'PATCH',
+            body: JSON.stringify({ rejectionReason })
+        });
+    }
+
+    async downloadLeaveDocument(id) {
+        const response = await fetch(`${this.baseURL}/leave/download/${id}`, {
+            headers: {
+                'Authorization': `Bearer ${this.token}`
+            }
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to download document');
+        }
+
+        return await response.blob();
+    }
 
     setTimeout(duration) {
         this.timeout = duration;
