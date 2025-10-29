@@ -106,7 +106,6 @@ async function submitLeaveRequest(e) {
     
     try {
         const formData = new FormData();
-        const form = document.getElementById('leave-application-form');
         
         // Add form data
         formData.append('startDate', document.getElementById('start-date').value);
@@ -135,20 +134,14 @@ async function submitLeaveRequest(e) {
         submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Submitting...';
         submitBtn.disabled = true;
 
-        // Submit leave request
-        const response = await fetch('http://localhost:5000/api/leave', {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${localStorage.getItem('authToken')}`
-            },
-            body: formData
+        // Submit leave request using API client
+        const response = await apiClient.submitLeaveRequest({
+            startDate: formData.get('startDate'),
+            endDate: formData.get('endDate'),
+            leaveType: formData.get('leaveType'),
+            reason: formData.get('reason'),
+            document: fileInput.files[0] || null
         });
-
-        const data = await response.json();
-
-        if (!response.ok) {
-            throw new Error(data.message || 'Failed to submit leave request');
-        }
 
         showNotification('Leave request submitted successfully!', 'success');
         resetForm();
@@ -167,19 +160,7 @@ async function submitLeaveRequest(e) {
 
 async function loadMyLeaveRequests() {
     try {
-        const response = await fetch('http://localhost:5000/api/leave/my-requests', {
-            headers: {
-                'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
-                'Content-Type': 'application/json'
-            }
-        });
-
-        const leaveRequests = await response.json();
-
-        if (!response.ok) {
-            throw new Error(leaveRequests.message || 'Failed to load leave requests');
-        }
-
+        const leaveRequests = await apiClient.getMyLeaveRequests();
         displayLeaveRequests(leaveRequests);
         
     } catch (error) {
@@ -208,7 +189,13 @@ function displayLeaveRequests(leaveRequests) {
         return;
     }
 
-    requestsList.innerHTML = leaveRequests.map(request => `
+    requestsList.innerHTML = leaveRequests.map(request => {
+        const startDate = new Date(request.startDate).toLocaleDateString('en-GB');
+        const endDate = new Date(request.endDate).toLocaleDateString('en-GB');
+        const appliedDate = new Date(request.createdAt).toLocaleDateString('en-GB');
+        const processedDate = request.approvedAt ? new Date(request.approvedAt).toLocaleDateString('en-GB') : null;
+        
+        return `
         <div class="leave-request-card" data-id="${request._id}">
             <div class="leave-request-header">
                 <div>
@@ -216,11 +203,11 @@ function displayLeaveRequests(leaveRequests) {
                     <div class="leave-dates">
                         <div class="date-item">
                             <span class="date-label">From</span>
-                            <span class="date-value">${formatDate(request.startDate)}</span>
+                            <span class="date-value">${startDate}</span>
                         </div>
                         <div class="date-item">
                             <span class="date-label">To</span>
-                            <span class="date-value">${formatDate(request.endDate)}</span>
+                            <span class="date-value">${endDate}</span>
                         </div>
                     </div>
                 </div>
@@ -251,35 +238,17 @@ function displayLeaveRequests(leaveRequests) {
             ` : ''}
             
             <div class="leave-meta">
-                <small>Applied on: ${formatDate(request.createdAt)}</small>
-                ${request.approvedAt ? `<small>Processed on: ${formatDate(request.approvedAt)}</small>` : ''}
+                <small>Applied on: ${appliedDate}</small>
+                ${processedDate ? `<small>Processed on: ${processedDate}</small>` : ''}
             </div>
         </div>
-    `).join('');
+        `;
+    }).join('');
 }
 
 async function downloadDocument(leaveRequestId) {
     try {
-        const response = await fetch(`http://localhost:5000/api/leave/download/${leaveRequestId}`, {
-            headers: {
-                'Authorization': `Bearer ${localStorage.getItem('authToken')}`
-            }
-        });
-
-        if (!response.ok) {
-            throw new Error('Failed to download document');
-        }
-
-        const blob = await response.blob();
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `document-${leaveRequestId}`;
-        document.body.appendChild(a);
-        a.click();
-        window.URL.revokeObjectURL(url);
-        document.body.removeChild(a);
-        
+        await apiClient.downloadLeaveDocument(leaveRequestId);
     } catch (error) {
         console.error('Error downloading document:', error);
         showNotification('Failed to download document', 'error');
@@ -308,12 +277,5 @@ function resetForm() {
     document.getElementById('supporting-document').value = '';
 }
 
-// Add to your existing utils.js or keep here
-function formatDate(dateString) {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-GB', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric'
-    });
-}
+// Make functions globally available
+window.downloadDocument = downloadDocument;
