@@ -1,6 +1,24 @@
 import LeaveRequest from '../models/LeaveRequest.js';
 import User from '../models/User.js';
 
+// ✅ ADDED: Get leave request by ID
+export const getLeaveRequestById = async (req, res) => {
+  try {
+    const leaveRequest = await LeaveRequest.findById(req.params.id)
+      .populate('employee', 'firstName lastName employeeId department')
+      .populate('approvedBy', 'firstName lastName');
+
+    if (!leaveRequest) {
+      return res.status(404).json({ message: 'Leave request not found' });
+    }
+
+    res.json(leaveRequest);
+  } catch (error) {
+    console.error('Get leave request error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
 export const createLeaveRequest = async (req, res) => {
   try {
     const { startDate, endDate, leaveType, reason } = req.body;
@@ -65,10 +83,20 @@ export const getMyLeaveRequests = async (req, res) => {
 
 export const getAllLeaveRequests = async (req, res) => {
   try {
-    const { status } = req.query;
+    const { status, employee } = req.query;
     
     let filter = {};
-    if (status) filter.status = status;
+    if (status && status !== 'all') filter.status = status;
+    if (employee) {
+      const users = await User.find({
+        $or: [
+          { firstName: { $regex: employee, $options: 'i' } },
+          { lastName: { $regex: employee, $options: 'i' } },
+          { employeeId: { $regex: employee, $options: 'i' } }
+        ]
+      });
+      filter.employee = { $in: users.map(u => u._id) };
+    }
 
     const leaveRequests = await LeaveRequest.find(filter)
       .populate('employee', 'firstName lastName employeeId department')
@@ -84,7 +112,8 @@ export const getAllLeaveRequests = async (req, res) => {
 
 export const approveLeaveRequest = async (req, res) => {
   try {
-    const leaveRequest = await LeaveRequest.findById(req.params.id);
+    const { id } = req.params;
+    const leaveRequest = await LeaveRequest.findById(id);
     
     if (!leaveRequest) {
       return res.status(404).json({ message: 'Leave request not found' });
@@ -116,9 +145,10 @@ export const approveLeaveRequest = async (req, res) => {
 
 export const rejectLeaveRequest = async (req, res) => {
   try {
+    const { id } = req.params;
     const { rejectionReason } = req.body;
     
-    const leaveRequest = await LeaveRequest.findById(req.params.id);
+    const leaveRequest = await LeaveRequest.findById(id);
     
     if (!leaveRequest) {
       return res.status(404).json({ message: 'Leave request not found' });
@@ -152,7 +182,6 @@ export const rejectLeaveRequest = async (req, res) => {
     res.status(500).json({ message: 'Server error' });
   }
 };
-
 export const downloadDocument = async (req, res) => {
   try {
     const leaveRequest = await LeaveRequest.findById(req.params.id);
@@ -163,6 +192,7 @@ export const downloadDocument = async (req, res) => {
 
     // Check if user has permission to download
     const canDownload = req.user.role === 'admin' || 
+                       req.user.role === 'manager' ||
                        leaveRequest.employee.toString() === req.user.id;
 
     if (!canDownload) {
@@ -171,9 +201,33 @@ export const downloadDocument = async (req, res) => {
 
     const filePath = leaveRequest.supportingDocument.path;
     
+    // Set proper headers for download
+    res.setHeader('Content-Disposition', `attachment; filename="${leaveRequest.supportingDocument.originalName}"`);
+    res.setHeader('Content-Type', 'application/octet-stream');
+    
     res.download(filePath, leaveRequest.supportingDocument.originalName);
   } catch (error) {
     console.error('Download document error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// ✅ ADDED: Get leave statistics
+export const getLeaveStatistics = async (req, res) => {
+  try {
+    const total = await LeaveRequest.countDocuments();
+    const pending = await LeaveRequest.countDocuments({ status: 'pending' });
+    const approved = await LeaveRequest.countDocuments({ status: 'approved' });
+    const rejected = await LeaveRequest.countDocuments({ status: 'rejected' });
+
+    res.json({
+      total,
+      pending,
+      approved,
+      rejected
+    });
+  } catch (error) {
+    console.error('Get leave statistics error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 };

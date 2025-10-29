@@ -11,15 +11,6 @@ export const submitTimesheet = async (req, res) => {
       return res.status(400).json({ message: 'Week dates and entries are required' });
     }
 
-    // Check if all days have at least some hours
-    const daysWithHours = {};
-    entries.forEach(entry => {
-      if (entry.normalHours > 0 || entry.overtimeHours > 0) {
-        const dateStr = new Date(entry.date).toDateString();
-        daysWithHours[dateStr] = true;
-      }
-    });
-
     // Check if timesheet already exists for this week
     const existingTimesheet = await Timesheet.findOne({
       employee: req.user.id,
@@ -116,6 +107,78 @@ export const getAllTimesheets = async (req, res) => {
     res.json(timesheets);
   } catch (error) {
     console.error('Get all timesheets error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// ✅ ADDED: Approve timesheet function
+export const approveTimesheet = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const timesheet = await Timesheet.findById(id);
+    if (!timesheet) {
+      return res.status(404).json({ message: 'Timesheet not found' });
+    }
+
+    if (timesheet.status !== 'submitted') {
+      return res.status(400).json({ message: 'Timesheet is not in submitted status' });
+    }
+
+    timesheet.status = 'approved';
+    timesheet.approvedBy = req.user.id;
+    timesheet.approvedAt = new Date();
+    await timesheet.save();
+
+    const populatedTimesheet = await Timesheet.findById(id)
+      .populate('employee', 'firstName lastName employeeId department')
+      .populate('approvedBy', 'firstName lastName');
+
+    res.json({
+      message: 'Timesheet approved successfully',
+      timesheet: populatedTimesheet
+    });
+
+  } catch (error) {
+    console.error('Approve timesheet error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// ✅ ADDED: Reject timesheet function
+export const rejectTimesheet = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { remarks } = req.body;
+
+    const timesheet = await Timesheet.findById(id);
+    if (!timesheet) {
+      return res.status(404).json({ message: 'Timesheet not found' });
+    }
+
+    if (timesheet.status !== 'submitted') {
+      return res.status(400).json({ message: 'Timesheet is not in submitted status' });
+    }
+
+    if (!remarks) {
+      return res.status(400).json({ message: 'Rejection remarks are required' });
+    }
+
+    timesheet.status = 'rejected';
+    timesheet.rejectionReason = remarks;
+    await timesheet.save();
+
+    const populatedTimesheet = await Timesheet.findById(id)
+      .populate('employee', 'firstName lastName employeeId department')
+      .populate('approvedBy', 'firstName lastName');
+
+    res.json({
+      message: 'Timesheet rejected successfully',
+      timesheet: populatedTimesheet
+    });
+
+  } catch (error) {
+    console.error('Reject timesheet error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 };
