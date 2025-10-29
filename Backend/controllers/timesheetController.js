@@ -6,9 +6,24 @@ export const submitTimesheet = async (req, res) => {
   try {
     const { weekStartDate, weekEndDate, entries } = req.body;
     
+    console.log('📝 Submitting timesheet:', { 
+      weekStartDate, 
+      weekEndDate, 
+      entriesCount: entries?.length 
+    });
+
     // Validation
-    if (!weekStartDate || !weekEndDate || !entries || entries.length === 0) {
-      return res.status(400).json({ message: 'Week dates and entries are required' });
+    if (!weekStartDate || !weekEndDate) {
+      return res.status(400).json({ message: 'Week dates are required' });
+    }
+
+    if (!entries || entries.length === 0) {
+      return res.status(400).json({ message: 'At least one timesheet entry is required' });
+    }
+
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
     }
 
     // Check if timesheet already exists for this week
@@ -19,11 +34,23 @@ export const submitTimesheet = async (req, res) => {
     });
 
     if (existingTimesheet) {
-      return res.status(400).json({ message: 'Timesheet already submitted for this week' });
+      return res.status(400).json({ 
+        message: 'Timesheet already submitted for this week',
+        existingTimesheet 
+      });
     }
 
-    const user = await User.findById(req.user.id);
-    
+    // ✅ MANUAL CALCULATION of weekNumber and year
+    const startDate = new Date(weekStartDate);
+    const startOfYear = new Date(startDate.getFullYear(), 0, 1);
+    const days = Math.floor((startDate - startOfYear) / (24 * 60 * 60 * 1000));
+    const weekNumber = Math.ceil((days + 1) / 7);
+    const year = startDate.getFullYear();
+
+    // Calculate totals
+    const totalNormalHours = entries.reduce((sum, entry) => sum + (entry.normalHours || 0), 0);
+    const totalOvertimeHours = entries.reduce((sum, entry) => sum + (entry.overtimeHours || 0), 0);
+
     const timesheetData = {
       employee: req.user.id,
       employeeCode: user.employeeId,
@@ -31,10 +58,22 @@ export const submitTimesheet = async (req, res) => {
       department: user.department,
       weekStartDate: new Date(weekStartDate),
       weekEndDate: new Date(weekEndDate),
+      weekNumber: weekNumber, // ✅ ADDED MANUALLY
+      year: year, // ✅ ADDED MANUALLY
       entries: entries,
+      totalNormalHours: totalNormalHours,
+      totalOvertimeHours: totalOvertimeHours,
+      totalHours: totalNormalHours + totalOvertimeHours,
       status: 'submitted',
       submittedAt: new Date()
     };
+
+    console.log('💾 Saving timesheet data with manual calculations:', {
+      weekNumber,
+      year,
+      totalNormalHours,
+      totalOvertimeHours
+    });
 
     const timesheet = new Timesheet(timesheetData);
     await timesheet.save();
@@ -42,14 +81,19 @@ export const submitTimesheet = async (req, res) => {
     const populatedTimesheet = await Timesheet.findById(timesheet._id)
       .populate('employee', 'firstName lastName employeeId department');
 
+    console.log('✅ Timesheet submitted successfully');
+
     res.status(201).json({
       message: 'Timesheet submitted successfully',
       timesheet: populatedTimesheet
     });
 
   } catch (error) {
-    console.error('Submit timesheet error:', error);
-    res.status(500).json({ message: 'Server error' });
+    console.error('❌ Submit timesheet error:', error);
+    res.status(500).json({ 
+      message: 'Server error submitting timesheet',
+      error: error.message 
+    });
   }
 };
 
@@ -179,6 +223,33 @@ export const rejectTimesheet = async (req, res) => {
 
   } catch (error) {
     console.error('Reject timesheet error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// Add this function to your existing timesheetController.js
+export const getTimesheetById = async (req, res) => {
+  try {
+    const timesheet = await Timesheet.findById(req.params.id)
+      .populate('employee', 'firstName lastName employeeId department')
+      .populate('approvedBy', 'firstName lastName');
+
+    if (!timesheet) {
+      return res.status(404).json({ message: 'Timesheet not found' });
+    }
+
+    // Check if user has access to this timesheet
+    const hasAccess = req.user.role === 'admin' || 
+                     req.user.role === 'manager' ||
+                     timesheet.employee._id.toString() === req.user.id;
+
+    if (!hasAccess) {
+      return res.status(403).json({ message: 'Access denied' });
+    }
+
+    res.json(timesheet);
+  } catch (error) {
+    console.error('Get timesheet by ID error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 };

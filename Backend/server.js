@@ -31,6 +31,9 @@ console.log('MONGO_URI:', process.env.MONGO_URI ? '✓ Loaded' : '✗ Missing');
 // Connect to MongoDB
 connectDB();
 
+
+
+
 // Middleware
 app.use(securityHeaders);
 app.use(sanitizeMiddleware);
@@ -89,6 +92,7 @@ const scheduleArchiveJob = () => {
 // Run archive check daily
 setInterval(scheduleArchiveJob, 24 * 60 * 60 * 1000);
 scheduleArchiveJob(); // Run on startup
+console.log('🕒 Archive job scheduled - will run daily');
 
 // Static files
 app.use('/uploads', express.static('uploads')); 

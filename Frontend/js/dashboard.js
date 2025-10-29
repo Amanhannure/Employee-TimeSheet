@@ -566,6 +566,7 @@ async function submitTimesheet() {
 }
 
 // NEW: Collect timesheet data for submission
+// FIXED: Enhanced collectTimesheetData function
 function collectTimesheetData() {
     const userData = getUserData();
     const timesheetBody = document.getElementById('timesheet-body');
@@ -578,18 +579,21 @@ function collectTimesheetData() {
         const locationInput = row.querySelector('input[type="text"]');
         const dayCells = row.querySelectorAll('.time-cell');
         
-        if (projectSelect && projectSelect.value) {
+        if (projectSelect && projectSelect.value && projectSelect.value !== '') {
             const weekStartDate = document.getElementById('week-start-date').value;
             const weekEndDate = document.getElementById('week-end-date').value;
             
             // Create entry for each day with hours
-            const days = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
-            days.forEach((day, index) => {
+            const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+            const dayAbbr = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+            
+            dayAbbr.forEach((day, index) => {
                 const dayCell = dayCells[index];
                 if (dayCell) {
                     const normalHours = parseFloat(dayCell.getAttribute('data-normal-hours')) || 0;
                     const overtimeHours = parseFloat(dayCell.getAttribute('data-overtime-hours')) || 0;
                     const activityCode = dayCell.getAttribute('data-activity-code');
+                    const remark = dayCell.getAttribute('data-remark') || '';
                     
                     if (normalHours > 0 || overtimeHours > 0) {
                         // Calculate date for this day
@@ -598,11 +602,13 @@ function collectTimesheetData() {
                         
                         entries.push({
                             date: date.toISOString().split('T')[0],
+                            dayOfWeek: days[index],
                             projectCode: projectSelect.value,
                             location: locationInput?.value || '',
                             normalHours: normalHours,
                             overtimeHours: overtimeHours,
-                            activityCode: activityCode || 'MISC'
+                            activityCode: activityCode || 'MISC',
+                            remarks: remark
                         });
                     }
                 }
