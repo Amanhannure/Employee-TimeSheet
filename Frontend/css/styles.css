@@ -1,0 +1,376 @@
+/* Global Styles */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+body {
+    background: linear-gradient(135deg, #3498db, #8e44ad);
+    height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.container {
+    width: 100%;
+    max-width: 1200px;
+    padding: 0 20px;
+}
+
+/* Login Container */
+.login-container {
+    background-color: #fff;
+    border-radius: 10px;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+    overflow: hidden;
+    width: 100%;
+    max-width: 450px;
+    margin: 0 auto;
+}
+
+.login-header {
+    background-color: #2c3e50;
+    color: #fff;
+    padding: 20px;
+    text-align: center;
+}
+
+.login-header h1 {
+    margin-bottom: 10px;
+    font-size: 24px;
+}
+
+.company-logo-img {
+    max-width: 150px;
+    height: auto;
+    display: block;
+    margin: 0 auto 10px auto;
+}
+
+/* Form Tabs */
+.form-tabs {
+    display: flex;
+    border-bottom: 1px solid #ddd;
+}
+
+.tab-btn {
+    flex: 1;
+    padding: 15px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: 600;
+    transition: all 0.3s ease;
+    color: #7f8c8d;
+}
+
+.tab-btn.active {
+    color: #3498db;
+    border-bottom: 3px solid #3498db;
+}
+
+.tab-content {
+    padding: 20px;
+}
+
+.hidden {
+    display: none;
+}
+
+/* Form Styles */
+.form-group {
+    margin-bottom: 20px;
+    position: relative;
+}
+
+label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 600;
+    color: #2c3e50;
+}
+
+input[type="text"],
+input[type="password"],
+input[type="email"] {
+    width: 100%;
+    padding: 12px 15px;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    font-size: 16px;
+    transition: border-color 0.3s ease;
+}
+
+input:focus {
+    border-color: #3498db;
+    outline: none;
+}
+
+.toggle-password {
+    position: absolute;
+    right: 15px;
+    top: 42px;
+    cursor: pointer;
+    color: #7f8c8d;
+}
+
+.remember-forgot {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 14px;
+}
+
+.forgot-password {
+    color: #3498db;
+    text-decoration: none;
+}
+
+.forgot-password:hover {
+    text-decoration: underline;
+}
+
+.login-btn {
+    width: 100%;
+    padding: 12px;
+    background-color: #3498db;
+    color: #fff;
+    border: none;
+    border-radius: 5px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+
+.login-btn:hover {
+    background-color: #2980b9;
+}
+
+.login-footer {
+    text-align: center;
+    padding: 15px;
+    border-top: 1px solid #ddd;
+    color: #7f8c8d;
+    font-size: 12px;
+}
+
+/* Modal Styles */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+}
+
+.modal-content {
+    background-color: #fff;
+    margin: 10% auto;
+    padding: 20px;
+    border-radius: 10px;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+    width: 90%;
+    max-width: 450px;
+    position: relative;
+}
+
+.close-modal {
+    position: absolute;
+    right: 20px;
+    top: 15px;
+    font-size: 28px;
+    font-weight: bold;
+    cursor: pointer;
+    color: #7f8c8d;
+}
+
+.modal h2 {
+    margin-bottom: 20px;
+    color: #2c3e50;
+    text-align: center;
+}
+
+.reset-btn {
+    width: 100%;
+    padding: 12px;
+    background-color: #3498db;
+    color: #fff;
+    border: none;
+    border-radius: 5px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+    margin-top: 10px;
+}
+
+.reset-btn:hover {
+    background-color: #2980b9;
+}
+
+/* Password Reset Methods */
+.method-options {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin: 20px 0;
+}
+
+.method-btn {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    padding: 16px 20px;
+    border: 2px solid #e8ecef;
+    border-radius: 10px;
+    background: white;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-align: left;
+    width: 100%;
+}
+
+.method-btn:hover {
+    border-color: #3498db;
+    background: #f8fbff;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(52, 152, 219, 0.15);
+}
+
+.method-btn i {
+    font-size: 1.4em;
+    color: #3498db;
+    width: 30px;
+    text-align: center;
+}
+
+.method-title {
+    font-weight: 600;
+    color: #2c3e50;
+    display: block;
+}
+
+.method-desc {
+    font-size: 0.85em;
+    color: #7f8c8d;
+    display: block;
+    margin-top: 2px;
+}
+
+.method-info {
+    background: #f8f9fa;
+    padding: 15px;
+    border-radius: 8px;
+    margin: 20px 0;
+    border-left: 4px solid #3498db;
+}
+
+.method-info p {
+    margin: 0 0 8px 0;
+    font-weight: 600;
+    color: #2c3e50;
+}
+
+/* Success States */
+.success-icon {
+    text-align: center;
+    margin: 20px 0;
+}
+
+.success-icon i {
+    font-size: 4em;
+    color: #27ae60;
+}
+
+.email-display {
+    background: #f0f7ff;
+    padding: 15px;
+    border-radius: 8px;
+    margin: 15px 0;
+    text-align: center;
+    font-weight: 600;
+    color: #3498db;
+    border: 2px solid #d1e7ff;
+}
+
+/* Button Groups */
+.button-group {
+    display: flex;
+    gap: 10px;
+    margin-top: 20px;
+}
+
+.button-group .reset-btn {
+    flex: 1;
+    margin: 0;
+}
+
+.back-btn {
+    padding: 12px 20px;
+    background: transparent;
+    color: #7f8c8d;
+    border: 2px solid #bdc3c7;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    flex: 1;
+}
+
+.back-btn:hover {
+    background: #f8f9fa;
+    border-color: #95a5a6;
+}
+
+.resend-btn {
+    padding: 10px 20px;
+    background: transparent;
+    color: #3498db;
+    border: 2px solid #3498db;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.resend-btn:hover {
+    background: #3498db;
+    color: white;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .login-container {
+        max-width: 100%;
+    }
+    
+    .modal-content {
+        width: 95%;
+        margin: 5% auto;
+    }
+    
+    .button-group {
+        flex-direction: column;
+    }
+}
+
+@media (max-width: 480px) {
+    .method-btn {
+        padding: 14px 16px;
+        gap: 12px;
+    }
+    
+    .modal-content {
+        padding: 15px;
+    }
+}
