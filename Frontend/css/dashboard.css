@@ -661,3 +661,164 @@ select:disabled, select[readonly] {
 .large-modal {
     max-width: 800px;
 }
+/* ✅ ADDED: Leave Balance Section */
+.leave-balance-section {
+    background: white;
+    padding: 1.5rem;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    margin-bottom: 1.5rem;
+}
+
+.leave-balance-section h3 {
+    color: #2c3e50;
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 1.25rem;
+}
+
+.leave-balance-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 1rem;
+}
+
+.leave-balance-card {
+    display: flex;
+    align-items: center;
+    padding: 1.5rem;
+    border-radius: 8px;
+    border-left: 4px solid;
+    background: #f8f9fa;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.leave-balance-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+.leave-balance-card.casual {
+    border-left-color: #3498db;
+}
+
+.leave-balance-card.sick {
+    border-left-color: #e74c3c;
+}
+
+.leave-balance-card.personal {
+    border-left-color: #27ae60;
+}
+
+.leave-icon {
+    font-size: 2rem;
+    margin-right: 1rem;
+    width: 60px;
+    height: 60px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: white;
+}
+
+.leave-balance-card.casual .leave-icon {
+    color: #3498db;
+    background: #d6eaf8;
+}
+
+.leave-balance-card.sick .leave-icon {
+    color: #e74c3c;
+    background: #fadbd8;
+}
+
+.leave-balance-card.personal .leave-icon {
+    color: #27ae60;
+    background: #d5f4e6;
+}
+
+.leave-info {
+    flex: 1;
+}
+
+.leave-info h4 {
+    margin: 0 0 0.5rem 0;
+    color: #2c3e50;
+    font-size: 1rem;
+}
+
+.leave-stats {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    margin-bottom: 0.25rem;
+}
+
+.leave-stats .available {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #2c3e50;
+}
+
+.leave-stats .separator {
+    font-size: 1.25rem;
+    color: #7f8c8d;
+}
+
+.leave-stats .total {
+    font-size: 1.1rem;
+    color: #7f8c8d;
+}
+
+.leave-used {
+    font-size: 0.875rem;
+    color: #7f8c8d;
+}
+
+/* Responsive design for leave balance cards */
+@media (max-width: 768px) {
+    .leave-balance-cards {
+        grid-template-columns: 1fr;
+    }
+    
+    .leave-balance-card {
+        padding: 1rem;
+    }
+    
+    .leave-icon {
+        font-size: 1.5rem;
+        width: 50px;
+        height: 50px;
+        margin-right: 0.75rem;
+    }
+    
+    .leave-stats .available {
+        font-size: 1.25rem;
+    }
+}
+
+/* ✅ ADDED: Low balance warnings */
+.leave-balance-card.low-balance {
+    background: #fff3cd;
+    border-left-color: #ffc107;
+}
+
+.leave-balance-card.critical-balance {
+    background: #f8d7da;
+    border-left-color: #dc3545;
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.02); }
+    100% { transform: scale(1); }
+}
+
+.leave-balance-card.low-balance .leave-stats .available,
+.leave-balance-card.critical-balance .leave-stats .available {
+    color: #dc3545;
+    font-weight: 800;
+}

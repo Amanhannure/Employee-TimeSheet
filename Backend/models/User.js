@@ -64,6 +64,30 @@ const userSchema = new mongoose.Schema({
     default: 'active' 
   },
   
+  // ✅ ADDED: PL/SL/CL LEAVE BALANCE FIELDS
+  leaveBalance: {
+    casualLeave: { 
+      type: Number, 
+      default: 8,      // CL = 2/8
+      min: 0
+    },
+    sickLeave: { 
+      type: Number, 
+      default: 8,      // SL = 8
+      min: 0
+    },
+    personalLeave: { 
+      type: Number, 
+      default: 22,     // PL = 22
+      min: 0
+    }
+  },
+  maxLeaves: {
+    casualLeave: { type: Number, default: 8 },
+    sickLeave: { type: Number, default: 8 },
+    personalLeave: { type: Number, default: 22 }
+  },
+  
   // PASSWORD RESET FIELDS
   securityQuestion: {
     type: String,
@@ -118,6 +142,29 @@ userSchema.virtual('securityAnswer')
   .get(function() {
     return this._securityAnswer;
   });
+
+// ✅ ADDED: Method to get available leave balance
+userSchema.methods.getAvailableLeaves = function(leaveType) {
+  return this.leaveBalance[leaveType] || 0;
+};
+
+// ✅ ADDED: Method to deduct leaves
+userSchema.methods.deductLeaves = function(leaveType, days) {
+  if (this.leaveBalance[leaveType] >= days) {
+    this.leaveBalance[leaveType] -= days;
+    return true;
+  }
+  return false;
+};
+
+// ✅ ADDED: Method to add leaves (for admin)
+userSchema.methods.addLeaves = function(leaveType, days) {
+  const maxLeaves = this.maxLeaves[leaveType] || 0;
+  this.leaveBalance[leaveType] = Math.min(
+    (this.leaveBalance[leaveType] || 0) + days, 
+    maxLeaves
+  );
+};
 
 // Pre-save middleware to hash password
 userSchema.pre('save', async function(next) {

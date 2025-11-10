@@ -379,7 +379,16 @@ class ApiClient {
     }
 
     // LEAVE MANAGEMENT METHODS
+
+
+        // ✅ ADDED: Get leave balance
+    async getLeaveBalance() {
+        return await this.request('/leave/balance');
+    }
+
+
     async submitLeaveRequest(leaveData) {
+        console.log('🔍 API Client: Submitting leave request', leaveData);
         const formData = new FormData();
 
         // Append form data
@@ -388,11 +397,17 @@ class ApiClient {
                 formData.append(key, leaveData[key]);
             }
         });
-
+        console.log('🔍 API Client: FormData entries:');
+        for (let [key, value] of formData.entries()) {
+            console.log(`${key}:`, value);
+        }
         // Append file if exists
+        
         if (leaveData.document) {
             formData.append('document', leaveData.document);
         }
+
+
 
         const response = await fetch(`${this.baseURL}/leave`, {
             method: 'POST',
@@ -401,8 +416,10 @@ class ApiClient {
             },
             body: formData
         });
+        console.log('🔍 API Client: Response status:', response.status);
 
         const data = await response.json();
+        console.log('🔍 API Client: Response data:', data);
 
         if (!response.ok) {
             throw new Error(data.message || 'Failed to submit leave request');

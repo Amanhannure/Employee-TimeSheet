@@ -69,18 +69,40 @@
                         <p>Submit your leave request with supporting documents</p>
                     </div>
                     
+                    <!-- ✅ ADDED: Available Leave Balance Display -->
+                    <div class="available-leaves-info">
+                        <h4><i class="fas fa-info-circle"></i> Available Leaves</h4>
+                        <div class="leaves-quick-view">
+                            <div class="leave-quick-item">
+                                <span class="leave-type-badge cl">CL</span>
+                                <span class="leave-count" id="available-cl">2/8</span>
+                            </div>
+                            <div class="leave-quick-item">
+                                <span class="leave-type-badge sl">SL</span>
+                                <span class="leave-count" id="available-sl">8/8</span>
+                            </div>
+                            <div class="leave-quick-item">
+                                <span class="leave-type-badge pl">PL</span>
+                                <span class="leave-count" id="available-pl">22/22</span>
+                            </div>
+                        </div>
+                    </div>
+                    
                     <form id="leave-application-form" class="leave-form">
                         <div class="form-row">
                             <div class="form-group">
                                 <label for="leave-type">Leave Type *</label>
-                                <select id="leave-type" name="leaveType" required>
+                                <select id="leave-type" name="leaveType" required onchange="updateLeaveTypeInfo()">
                                     <option value="">Select Leave Type</option>
-                                    <option value="sick">Sick Leave</option>
-                                    <option value="casual">Casual Leave</option>
-                                    <option value="annual">Annual Leave</option>
+                                    <option value="casual">Casual Leave (CL)</option>
+                                    <option value="sick">Sick Leave (SL)</option>
+                                    <option value="personal">Personal Leave (PL)</option>
                                     <option value="emergency">Emergency Leave</option>
                                     <option value="other">Other</option>
                                 </select>
+                                <div class="leave-type-info" id="leave-type-info" style="display: none;">
+                                    <small>Available: <span id="selected-leave-available">0</span> days</small>
+                                </div>
                             </div>
                             <div class="form-group">
                                 <label for="employee-code">Employee Code</label>
@@ -91,11 +113,20 @@
                         <div class="form-row">
                             <div class="form-group">
                                 <label for="start-date">Start Date *</label>
-                                <input type="date" id="start-date" name="startDate" required>
+                                <input type="date" id="start-date" name="startDate" required onchange="calculateLeaveDays()">
                             </div>
                             <div class="form-group">
                                 <label for="end-date">End Date *</label>
-                                <input type="date" id="end-date" name="endDate" required>
+                                <input type="date" id="end-date" name="endDate" required onchange="calculateLeaveDays()">
+                            </div>
+                        </div>
+
+                        <!-- ✅ ADDED: Leave Duration Display -->
+                        <div class="form-group full-width" id="leave-duration-info" style="display: none;">
+                            <div class="duration-display">
+                                <i class="fas fa-calendar-alt"></i>
+                                <span>Total Leave Days: <strong id="total-days">0</strong> days</span>
+                                <span class="duration-dates" id="duration-dates"></span>
                             </div>
                         </div>
 

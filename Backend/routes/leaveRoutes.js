@@ -7,7 +7,8 @@ import {
   rejectLeaveRequest,
   downloadDocument,
   getLeaveStatistics,
-  getLeaveRequestById
+  getLeaveRequestById,
+  getLeaveBalance  // ✅ ADDED
 } from '../controllers/leaveController.js';
 import { authenticate, authorizeAdmin, authorizeManager } from '../middleware/authMiddleware.js';
 import upload from '../config/multer.js';
@@ -17,6 +18,7 @@ const router = express.Router();
 // Employee routes
 router.post('/', authenticate, upload.single('document'), createLeaveRequest);
 router.get('/my-requests', authenticate, getMyLeaveRequests);
+router.get('/balance', authenticate, getLeaveBalance); // ✅ ADDED: Get leave balance
 router.get('/download/:id', authenticate, downloadDocument);
 router.get('/:id', authenticate, getLeaveRequestById);
 

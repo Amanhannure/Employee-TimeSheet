@@ -14,6 +14,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     console.log('✅ User authenticated:', userData);
 
     // Update user info on the page
+    loadLeaveBalance();
     updateUserInfo(userData);
     
     try {
@@ -1122,6 +1123,77 @@ function updateDisabledCells(startDayIndex) {
             }
         });
     });
+    // ✅ ADDED: Load leave balance
+// Frontend/js/dashboard.js - ADD DEBUG LOGGING
+
+// ✅ ADDED: Enhanced leave balance loading
+async function loadLeaveBalance() {
+    console.log('🔍 DEBUG: Loading leave balance for dashboard...');
+    try {
+        const balance = await apiClient.request('/leave/balance');
+        console.log('✅ DEBUG: Dashboard balance response:', balance);
+        updateLeaveBalanceDisplay(balance);
+    } catch (error) {
+        console.error('❌ DEBUG: Error loading dashboard balance:', error);
+        // Set default values if API fails
+        updateLeaveBalanceDisplay({
+            casualLeave: { available: 8, max: 8, used: 0 },
+            sickLeave: { available: 8, max: 8, used: 0 },
+            personalLeave: { available: 22, max: 22, used: 0 }
+        });
+    }
+}
+
+// ✅ ADDED: Update leave balance display
+function updateLeaveBalanceDisplay(balance) {
+    // Casual Leave (CL)
+    document.getElementById('cl-available').textContent = balance.casualLeave.available;
+    document.getElementById('cl-total').textContent = balance.casualLeave.max;
+    document.getElementById('cl-used').textContent = `Used: ${balance.casualLeave.used} days`;
+    
+    // Sick Leave (SL)
+    document.getElementById('sl-available').textContent = balance.sickLeave.available;
+    document.getElementById('sl-total').textContent = balance.sickLeave.max;
+    document.getElementById('sl-used').textContent = `Used: ${balance.sickLeave.used} days`;
+    
+    // Personal Leave (PL)
+    document.getElementById('pl-available').textContent = balance.personalLeave.available;
+    document.getElementById('pl-total').textContent = balance.personalLeave.max;
+    document.getElementById('pl-used').textContent = `Used: ${balance.personalLeave.used} days`;
+    
+    // Add visual indicators for low balance
+    updateLeaveBalanceVisuals(balance);
+}
+
+// ✅ ADDED: Visual indicators for low leave balance
+function updateLeaveBalanceVisuals(balance) {
+    const clCard = document.querySelector('.leave-balance-card.casual');
+    const slCard = document.querySelector('.leave-balance-card.sick');
+    const plCard = document.querySelector('.leave-balance-card.personal');
+    
+    // Remove existing warning classes
+    [clCard, slCard, plCard].forEach(card => {
+        card.classList.remove('low-balance', 'critical-balance');
+    });
+    
+    // Casual Leave warnings
+    if (balance.casualLeave.available <= 2) {
+        clCard.classList.add(balance.casualLeave.available === 0 ? 'critical-balance' : 'low-balance');
+    }
+    
+    // Sick Leave warnings
+    if (balance.sickLeave.available <= 2) {
+        slCard.classList.add(balance.sickLeave.available === 0 ? 'critical-balance' : 'low-balance');
+    }
+    
+    // Personal Leave warnings
+    if (balance.personalLeave.available <= 5) {
+        plCard.classList.add(balance.personalLeave.available === 0 ? 'critical-balance' : 'low-balance');
+    }
+}
+
+
+
 }
 
 // ==================== END OF INTEGRATED DASHBOARD.JS ====================

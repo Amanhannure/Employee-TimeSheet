@@ -484,4 +484,157 @@
     .leave-dates {
         grid-template-columns: 1fr;
     }
+    
+}
+/* ✅ ADDED: Available Leaves Info */
+.available-leaves-info {
+    background: #e8f4fd;
+    border: 1px solid #b6e0fe;
+    border-radius: 8px;
+    padding: 1rem 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.available-leaves-info h4 {
+    margin: 0 0 0.75rem 0;
+    color: #2c3e50;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 1rem;
+}
+
+.leaves-quick-view {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.leave-quick-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    background: white;
+    border-radius: 6px;
+    border: 1px solid #e9ecef;
+}
+
+.leave-type-badge {
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: white;
+    min-width: 30px;
+    text-align: center;
+}
+
+.leave-type-badge.cl {
+    background: #3498db;
+}
+
+.leave-type-badge.sl {
+    background: #e74c3c;
+}
+
+.leave-type-badge.pl {
+    background: #27ae60;
+}
+
+.leave-count {
+    font-weight: 600;
+    color: #2c3e50;
+}
+
+/* ✅ ADDED: Leave Type Info */
+.leave-type-info {
+    margin-top: 0.5rem;
+    padding: 0.5rem;
+    background: #f8f9fa;
+    border-radius: 4px;
+    border-left: 3px solid #3498db;
+}
+
+.leave-type-info small {
+    color: #495057;
+    font-weight: 500;
+}
+
+/* ✅ ADDED: Leave Duration Display */
+.duration-display {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem;
+    background: #f8f9fa;
+    border-radius: 6px;
+    border: 1px solid #e9ecef;
+}
+
+.duration-display i {
+    color: #3498db;
+    font-size: 1.25rem;
+}
+
+.duration-dates {
+    margin-left: auto;
+    color: #6c757d;
+    font-size: 0.875rem;
+}
+
+/* ✅ ADDED: Form validation styles */
+.form-group.error input,
+.form-group.error select,
+.form-group.error textarea {
+    border-color: #e74c3c;
+    background-color: #fdf2f2;
+}
+
+.form-group .error-message {
+    color: #e74c3c;
+    font-size: 0.875rem;
+    margin-top: 0.25rem;
+    display: none;
+}
+
+.form-group.error .error-message {
+    display: block;
+}
+
+/* ✅ ADDED: Insufficient leave warning */
+.insufficient-leave-warning {
+    background: #f8d7da;
+    color: #721c24;
+    padding: 0.75rem;
+    border-radius: 4px;
+    border: 1px solid #f5c6cb;
+    margin-top: 0.5rem;
+    display: none;
+}
+
+.insufficient-leave-warning.show {
+    display: block;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+    .leaves-quick-view {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+    
+    .leave-quick-item {
+        justify-content: space-between;
+    }
+    
+    .duration-display {
+        flex-direction: column;
+        gap: 0.5rem;
+        align-items: flex-start;
+    }
+    
+    .duration-dates {
+        margin-left: 0;
+    }
 }

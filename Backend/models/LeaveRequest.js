@@ -14,9 +14,10 @@ const leaveRequestSchema = new mongoose.Schema({
     type: Date,
     required: true
   },
+  // ✅ UPDATED: Changed leave types to match PL/SL/CL
   leaveType: {
     type: String,
-    enum: ['sick', 'casual', 'annual', 'emergency', 'other'],
+    enum: ['casual', 'sick', 'personal', 'emergency', 'other'],
     required: true
   },
   reason: {
@@ -39,7 +40,30 @@ const leaveRequestSchema = new mongoose.Schema({
     ref: 'User'
   },
   approvedAt: Date,
-  rejectionReason: String
+  rejectionReason: String,
+  
+  // ✅ ADDED: Track leave days deducted
+  totalDays: {
+    type: Number,
+    default: 0
+  },
+  
+  // ✅ ADDED: Track if leaves were deducted
+  leavesDeducted: {
+    type: Boolean,
+    default: false
+  }
 }, { timestamps: true });
+
+// ✅ ADDED: Calculate total days before saving
+leaveRequestSchema.pre('save', function(next) {
+  if (this.startDate && this.endDate) {
+    const start = new Date(this.startDate);
+    const end = new Date(this.endDate);
+    const timeDiff = end.getTime() - start.getTime();
+    this.totalDays = Math.ceil(timeDiff / (1000 * 3600 * 24)) + 1; // Inclusive of both dates
+  }
+  next();
+});
 
 export default mongoose.model('LeaveRequest', leaveRequestSchema);
