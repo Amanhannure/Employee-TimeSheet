@@ -30,7 +30,7 @@ const timesheetSchema = new mongoose.Schema({
   totalHours: { type: Number, default: 0 },
   status: { 
     type: String, 
-    enum: ['draft', 'submitted', 'approved', 'rejected'], 
+    enum: ['draft', 'pending', 'approved', 'rejected'], // ✅ FIXED: Changed 'submitted' to 'pending'
     default: 'draft' 
   },
   submittedAt: Date,

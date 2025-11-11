@@ -1,4 +1,95 @@
 // admin.js - Complete Admin Dashboard Integration
+
+// ==================== UTILITY FUNCTIONS ====================
+
+// Sanitize HTML to prevent XSS attacks
+function sanitizeHTML(str) {
+    if (!str) return '';
+    
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+}
+
+// Format date for display
+function formatDate(dateString) {
+    if (!dateString) return 'N/A';
+    try {
+        const date = new Date(dateString);
+        return date.toLocaleDateString('en-US', { 
+            year: 'numeric', 
+            month: 'short', 
+            day: 'numeric' 
+        });
+    } catch (error) {
+        return 'Invalid Date';
+    }
+}
+
+// Get user data from localStorage
+function getUserData() {
+    try {
+        const userData = localStorage.getItem('userData');
+        return userData ? JSON.parse(userData) : null;
+    } catch (error) {
+        console.error('Error parsing user data:', error);
+        return null;
+    }
+}
+
+// Show notification
+function showNotification(message, type = 'info', duration = 5000) {
+    try {
+        if (typeof window.showNotification === 'function') {
+            window.showNotification(message, type, duration);
+        } else {
+            // Fallback notification
+            console.log(`📢 ${type.toUpperCase()}: ${message}`);
+            
+            // Create simple notification element
+            const notification = document.createElement('div');
+            notification.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                padding: 15px 20px;
+                border-radius: 5px;
+                color: white;
+                z-index: 10000;
+                font-family: Arial, sans-serif;
+                font-size: 14px;
+                max-width: 300px;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                transition: all 0.3s ease;
+            `;
+            
+            // Set background color based on type
+            const colors = {
+                success: '#27ae60',
+                error: '#e74c3c',
+                warning: '#f39c12',
+                info: '#3498db'
+            };
+            notification.style.backgroundColor = colors[type] || colors.info;
+            
+            notification.textContent = message;
+            document.body.appendChild(notification);
+            
+            // Remove notification after duration
+            setTimeout(() => {
+                if (notification.parentNode) {
+                    notification.parentNode.removeChild(notification);
+                }
+            }, duration);
+        }
+    } catch (error) {
+        console.error('Error showing notification:', error);
+        console.log(`📢 ${type.toUpperCase()}: ${message}`);
+    }
+}
+
+// ==================== MAIN DASHBOARD CODE ====================
+
 document.addEventListener('DOMContentLoaded', async function() {
     console.log('🔄 Initializing Admin Dashboard...');
     
@@ -13,7 +104,10 @@ document.addEventListener('DOMContentLoaded', async function() {
     }
 
     // Update admin name
-    document.getElementById('admin-name').textContent = `${userData.firstName} ${userData.lastName}`;
+    const adminNameEl = document.getElementById('admin-name');
+    if (adminNameEl) {
+        adminNameEl.textContent = `${userData.firstName} ${userData.lastName}`;
+    }
 
     // Initialize event listeners
     initializeEventListeners();
@@ -27,7 +121,10 @@ function initializeEventListeners() {
     const toggleSidebar = document.getElementById('toggle-sidebar');
     if (toggleSidebar) {
         toggleSidebar.addEventListener('click', function() {
-            document.querySelector('.dashboard-container').classList.toggle('sidebar-collapsed');
+            const dashboardContainer = document.querySelector('.dashboard-container');
+            if (dashboardContainer) {
+                dashboardContainer.classList.toggle('sidebar-collapsed');
+            }
         });
     }
 
@@ -44,11 +141,14 @@ function initializeEventListeners() {
     const searchMiscButton = document.getElementById('searchMiscButton');
     if (searchMiscButton) {
         searchMiscButton.addEventListener('click', async function() {
-            const searchTerm = document.getElementById('searchMiscHours').value;
-            if (searchTerm.trim()) {
-                await searchMiscellaneousHours(searchTerm);
-            } else {
-                showNotification('Please enter search term', 'error');
+            const searchInput = document.getElementById('searchMiscHours');
+            if (searchInput) {
+                const searchTerm = searchInput.value;
+                if (searchTerm.trim()) {
+                    await searchMiscellaneousHours(searchTerm);
+                } else {
+                    showNotification('Please enter search term', 'error');
+                }
             }
         });
     }
@@ -76,6 +176,17 @@ function initializeEventListeners() {
             localStorage.removeItem('userData');
             window.location.href = 'index.html';
         });
+    }
+
+    // Modal close buttons
+    const closeMiscModal = document.getElementById('closeMiscModal');
+    if (closeMiscModal) {
+        closeMiscModal.addEventListener('click', closeMiscellaneousHoursModal);
+    }
+
+    const closeDetailsModal = document.getElementById('closeTimesheetDetailsModal');
+    if (closeDetailsModal) {
+        closeDetailsModal.addEventListener('click', closeTimesheetDetailsModal);
     }
 }
 
@@ -151,7 +262,7 @@ async function loadDashboardData() {
 
 function updateDashboardCards(users, timesheets) {
     try {
-        console.log('📈 Updating dashboard cards with:', { users, timesheets });
+        console.log('📈 Updating dashboard cards with:', { users: users.length, timesheets: timesheets.length });
         
         // Ensure users is an array
         const usersArray = Array.isArray(users) ? users : [];
@@ -504,7 +615,7 @@ async function searchMiscellaneousHours(searchTerm) {
                         <strong>Recent Entries:</strong>
                         <ul style="margin-top: 5px; padding-left: 20px;">
                             ${miscEntries.slice(0, 5).map(entry => 
-                                `<li>${formatDate(entry.date)}: ${((entry.normalHours || 0) + (entry.overtimeHours || 0)).toFixed(1)} hours - ${entry.projectCode || 'MISC'}</li>`
+                                `<li>${formatDate(entry.date)}: ${((entry.normalHours || 0) + (entry.overtimeHours || 0)).toFixed(1)} hours - ${sanitizeHTML(entry.projectCode || 'MISC')}</li>`
                             ).join('')}
                         </ul>
                     </div>
@@ -720,3 +831,6 @@ window.onclick = function(event) {
 window.openMiscellaneousHoursModal = openMiscellaneousHoursModal;
 window.closeMiscellaneousHoursModal = closeMiscellaneousHoursModal;
 window.closeTimesheetDetailsModal = closeTimesheetDetailsModal;
+window.sanitizeHTML = sanitizeHTML;
+window.formatDate = formatDate;
+window.showNotification = showNotification;

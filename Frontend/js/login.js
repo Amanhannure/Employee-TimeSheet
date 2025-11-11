@@ -1,3 +1,159 @@
+// ==================== LOADING STATE MANAGEMENT ====================
+
+// Set loading state for buttons and forms
+function setLoadingState(button, isLoading, loadingText = 'Loading...') {
+    if (!button) return;
+    
+    const originalHTML = button.getAttribute('data-original-html') || button.innerHTML;
+    
+    if (isLoading) {
+        // Save original content
+        button.setAttribute('data-original-html', originalHTML);
+        
+        // Show loading state
+        button.innerHTML = `<i class="fas fa-spinner fa-spin"></i> ${loadingText}`;
+        button.disabled = true;
+        
+        // Add loading class to parent form if it exists
+        const form = button.closest('form');
+        if (form) {
+            form.classList.add('loading');
+        }
+    } else {
+        // Restore original state
+        button.innerHTML = originalHTML;
+        button.disabled = false;
+        
+        // Remove loading class from parent form
+        const form = button.closest('form');
+        if (form) {
+            form.classList.remove('loading');
+        }
+    }
+}
+
+// Reset login form
+function resetLoginForm() {
+    const loginForm = document.getElementById('login-form');
+    const errorDiv = document.getElementById('login-error');
+    
+    if (loginForm) {
+        loginForm.reset();
+        loginForm.classList.remove('loading');
+    }
+    
+    if (errorDiv) {
+        errorDiv.style.display = 'none';
+        errorDiv.textContent = '';
+    }
+}
+
+// ==================== MODAL MANAGEMENT ====================
+
+// Show specific modal
+function showModal(modalId) {
+    hideAllModals();
+    const modal = document.getElementById(modalId);
+    if (modal) {
+        modal.style.display = 'block';
+    }
+}
+
+// Hide all modals
+function hideAllModals() {
+    const modals = document.querySelectorAll('.modal');
+    modals.forEach(modal => {
+        modal.style.display = 'none';
+    });
+}
+
+// Redirect based on user role
+function redirectBasedOnRole(role) {
+    switch (role) {
+        case 'admin':
+        case 'manager':
+            window.location.href = 'admin-dashboard.html';
+            break;
+        case 'employee':
+        default:
+            window.location.href = 'dashboard.html';
+            break;
+    }
+}
+
+// ==================== PASSWORD VALIDATION ====================
+
+// Check password strength
+function checkPasswordStrength(password) {
+    if (!password) {
+        return { strength: 0, feedback: '', className: '' };
+    }
+    
+    let strength = 0;
+    let feedback = [];
+    
+    // Length check
+    if (password.length >= 8) strength++;
+    else feedback.push('at least 8 characters');
+    
+    // Lowercase check
+    if (/[a-z]/.test(password)) strength++;
+    else feedback.push('lowercase letters');
+    
+    // Uppercase check
+    if (/[A-Z]/.test(password)) strength++;
+    else feedback.push('uppercase letters');
+    
+    // Number check
+    if (/[0-9]/.test(password)) strength++;
+    else feedback.push('numbers');
+    
+    // Special character check
+    if (/[^A-Za-z0-9]/.test(password)) strength++;
+    else feedback.push('special characters');
+    
+    let className = '';
+    let strengthText = '';
+    
+    switch (strength) {
+        case 5:
+            className = 'strong';
+            strengthText = 'Strong';
+            break;
+        case 4:
+            className = 'good';
+            strengthText = 'Good';
+            break;
+        case 3:
+            className = 'fair';
+            strengthText = 'Fair';
+            break;
+        default:
+            className = 'weak';
+            strengthText = 'Weak';
+            break;
+    }
+    
+    return {
+        strength: strength,
+        feedback: feedback.length > 0 ? `Needs: ${feedback.join(', ')}` : strengthText,
+        className: className
+    };
+}
+
+// Check password match
+function checkPasswordMatch(password, confirmPassword) {
+    if (!confirmPassword) {
+        return { match: false, message: '', className: '' };
+    }
+    
+    if (password === confirmPassword) {
+        return { match: true, message: 'Passwords match', className: 'match' };
+    } else {
+        return { match: false, message: 'Passwords do not match', className: 'no-match' };
+    }
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     // ==================== INITIALIZATION ====================
     const token = localStorage.getItem('authToken');

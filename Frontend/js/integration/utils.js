@@ -1,400 +1,357 @@
-const validateInput = (input) => {
-  if (typeof input !== 'string') return false;
-  if (input.length > 255) return false;
-  if (/[<>]/.test(input)) return false;
-  return true;
-};
+// ==================== UTILITY FUNCTIONS ====================
 
-const sanitizeHTML = (str) => {
-  if (typeof str !== 'string') return '';
-  const div = document.createElement('div');
-  div.textContent = str;
-  return div.innerHTML;
-};
+// Get user data from localStorage
+function getUserData() {
+    try {
+        const userData = localStorage.getItem('userData');
+        if (!userData) {
+            console.warn('❌ No user data found in localStorage');
+            return null;
+        }
+        
+        const parsedData = JSON.parse(userData);
+        console.log('✅ Retrieved user data:', parsedData);
+        return parsedData;
+    } catch (error) {
+        console.error('❌ Error parsing user data:', error);
+        return null;
+    }
+}
 
-// Enhanced notification system
-function showNotification(message, type = 'info') {
-    // Remove any existing notifications first
-    const existingNotifications = document.querySelectorAll('.notification');
+// Save user data to localStorage
+function saveUserData(userData) {
+    try {
+        localStorage.setItem('userData', JSON.stringify(userData));
+        console.log('✅ User data saved to localStorage');
+        return true;
+    } catch (error) {
+        console.error('❌ Error saving user data:', error);
+        return false;
+    }
+}
+
+// Show notification to user
+function showNotification(message, type = 'info', duration = 5000) {
+    // Remove existing notifications
+    const existingNotifications = document.querySelectorAll('.custom-notification');
     existingNotifications.forEach(notification => {
         if (notification.parentNode) {
             notification.parentNode.removeChild(notification);
         }
     });
 
+    // Create notification element
     const notification = document.createElement('div');
-    notification.className = `notification notification-${type}`;
+    notification.className = `custom-notification notification-${type}`;
     
-    const icons = {
-        success: 'check-circle',
-        error: 'exclamation-circle',
-        warning: 'exclamation-triangle',
-        info: 'info-circle'
-    };
+    // Add icon based on type
+    let icon = 'ℹ️';
+    switch (type) {
+        case 'success':
+            icon = '✅';
+            break;
+        case 'error':
+            icon = '❌';
+            break;
+        case 'warning':
+            icon = '⚠️';
+            break;
+        case 'info':
+        default:
+            icon = 'ℹ️';
+    }
     
     notification.innerHTML = `
         <div class="notification-content">
-            <i class="fas fa-${icons[type] || 'info-circle'}"></i>
-            <span>${sanitizeHTML(message)}</span>
+            <span class="notification-icon">${icon}</span>
+            <span class="notification-message">${message}</span>
+            <button class="notification-close" onclick="this.parentElement.parentElement.remove()">×</button>
         </div>
     `;
 
-    // Add styles if not exists
+    // Add styles if not already added
     if (!document.querySelector('#notification-styles')) {
         const styles = document.createElement('style');
         styles.id = 'notification-styles';
         styles.textContent = `
-            .notification {
+            .custom-notification {
                 position: fixed;
                 top: 20px;
                 right: 20px;
-                padding: 15px 20px;
-                border-radius: 8px;
-                color: white;
                 z-index: 10000;
-                transform: translateX(400px);
-                transition: transform 0.3s ease;
-                max-width: 400px;
+                min-width: 300px;
+                max-width: 500px;
+                background: white;
+                border-radius: 8px;
                 box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-                font-family: Arial, sans-serif;
-                font-size: 14px;
+                border-left: 4px solid #007bff;
+                animation: slideInRight 0.3s ease-out;
             }
-            .notification.show {
-                transform: translateX(0);
-            }
+            
             .notification-success {
-                background: #28a745;
-                border-left: 4px solid #1e7e34;
+                border-left-color: #28a745;
             }
+            
             .notification-error {
-                background: #dc3545;
-                border-left: 4px solid #c82333;
+                border-left-color: #dc3545;
             }
+            
             .notification-warning {
-                background: #ffc107;
-                color: #212529;
-                border-left: 4px solid #e0a800;
+                border-left-color: #ffc107;
             }
+            
             .notification-info {
-                background: #17a2b8;
-                border-left: 4px solid #138496;
+                border-left-color: #17a2b8;
             }
+            
             .notification-content {
                 display: flex;
                 align-items: center;
-                gap: 10px;
+                padding: 12px 16px;
             }
-            .notification-content i {
-                font-size: 16px;
+            
+            .notification-icon {
+                font-size: 18px;
+                margin-right: 12px;
+            }
+            
+            .notification-message {
+                flex: 1;
+                font-size: 14px;
+                color: #333;
+            }
+            
+            .notification-close {
+                background: none;
+                border: none;
+                font-size: 20px;
+                cursor: pointer;
+                color: #666;
+                margin-left: 12px;
+            }
+            
+            .notification-close:hover {
+                color: #333;
+            }
+            
+            @keyframes slideInRight {
+                from {
+                    transform: translateX(100%);
+                    opacity: 0;
+                }
+                to {
+                    transform: translateX(0);
+                    opacity: 1;
+                }
             }
         `;
         document.head.appendChild(styles);
     }
 
+    // Add to page
     document.body.appendChild(notification);
 
-    // Show notification with animation
-    setTimeout(() => {
-        notification.classList.add('show');
-    }, 100);
-
-    // Remove after 5 seconds
-    setTimeout(() => {
-        notification.classList.remove('show');
+    // Auto remove after duration
+    if (duration > 0) {
         setTimeout(() => {
             if (notification.parentNode) {
                 notification.parentNode.removeChild(notification);
             }
-        }, 300);
-    }, 5000);
-}
-
-// Password strength checker (updated for 4-character minimum)
-function checkPasswordStrength(password) {
-    if (!password || password.length === 0) {
-        return { strength: 0, feedback: '', className: '' };
+        }, duration);
     }
 
-    let strength = 0;
-    let feedback = '';
-
-    // Basic length check (minimum 4 characters)
-    if (password.length >= 4) strength++;
-    if (password.length >= 6) strength++;
-    if (/[A-Z]/.test(password)) strength++;
-    if (/[0-9]/.test(password)) strength++;
-    if (/[^A-Za-z0-9]/.test(password)) strength++;
-
-    switch(strength) {
-        case 0:
-        case 1:
-            feedback = 'Weak';
-            break;
-        case 2:
-        case 3:
-            feedback = 'Medium';
-            break;
-        case 4:
-        case 5:
-            feedback = 'Strong';
-            break;
-    }
-
-    return {
-        strength,
-        feedback,
-        className: `strength-${feedback.toLowerCase()}`
-    };
+    return notification;
 }
 
-// Password match checker
-function checkPasswordMatch(password, confirmPassword) {
-    if (!confirmPassword || confirmPassword.length === 0) {
-        return { match: null, message: '', className: '' };
-    }
-
-    if (password === confirmPassword) {
-        return { 
-            match: true, 
-            message: '✓ Passwords match', 
-            className: 'match-success' 
-        };
-    } else {
-        return { 
-            match: false, 
-            message: '✗ Passwords do not match', 
-            className: 'match-error' 
-        };
-    }
-}
-
-// User data management
-function getUserData() {
-    try {
-        const userData = localStorage.getItem('userData');
-        return userData ? JSON.parse(userData) : null;
-    } catch (error) {
-        console.error('Error parsing user data:', error);
-        return null;
-    }
-}
-
-function setUserData(userData) {
-    try {
-        localStorage.setItem('userData', JSON.stringify(userData));
-    } catch (error) {
-        console.error('Error saving user data:', error);
-    }
-}
-
-function clearUserData() {
-    localStorage.removeItem('userData');
-    localStorage.removeItem('authToken');
-}
-
-// Date formatting utilities
-function formatDate(date, includeTime = false) {
-    if (!date) return 'N/A';
+// Format date to YYYY-MM-DD
+function formatDate(date) {
+    if (!date) return '';
     
-    try {
-        const dateObj = new Date(date);
-        if (isNaN(dateObj.getTime())) return 'Invalid Date';
-        
-        const options = { 
-            year: 'numeric', 
-            month: '2-digit', 
-            day: '2-digit' 
-        };
-        
-        if (includeTime) {
-            options.hour = '2-digit';
-            options.minute = '2-digit';
-        }
-        
-        return dateObj.toLocaleDateString('en-GB', options);
-    } catch (error) {
-        console.error('Error formatting date:', error);
-        return 'Invalid Date';
-    }
-}
-
-function formatTime(date) {
-    if (!date) return 'N/A';
+    const d = new Date(date);
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
     
-    try {
-        const dateObj = new Date(date);
-        if (isNaN(dateObj.getTime())) return 'Invalid Time';
-        
-        return dateObj.toLocaleTimeString('en-GB', { 
-            hour: '2-digit', 
-            minute: '2-digit' 
-        });
-    } catch (error) {
-        console.error('Error formatting time:', error);
-        return 'Invalid Time';
-    }
+    return `${year}-${month}-${day}`;
 }
 
-// Role-based utilities
-function getUserRole() {
-    const userData = getUserData();
-    return userData ? userData.role : null;
+// Format date for display (DD/MM/YYYY)
+function formatDisplayDate(date) {
+    if (!date) return '';
+    
+    const d = new Date(date);
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    
+    return `${day}/${month}/${year}`;
 }
 
-function isAdmin() {
-    return getUserRole() === 'admin';
-}
-
-function isManager() {
-    const role = getUserRole();
-    return role === 'manager' || role === 'admin';
-}
-
-function isEmployee() {
-    const role = getUserRole();
-    return role === 'employee' || !role;
-}
-
-// Navigation utilities
-function redirectBasedOnRole() {
-    const userData = getUserData();
-    if (!userData) {
-        window.location.href = 'index.html';
-        return;
-    }
-
-    switch(userData.role) {
-        case 'admin':
-        case 'manager':
-            window.location.href = 'admin-dashboard.html';
-            break;
-        case 'employee':
-            window.location.href = 'dashboard.html';
-            break;
-        default:
-            window.location.href = 'dashboard.html';
-    }
-}
-
-function logout() {
-    clearUserData();
-    window.location.href = 'index.html';
-}
-
-// Form validation utilities
-function validateEmail(email) {
+// Validate email format
+function isValidEmail(email) {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     return emailRegex.test(email);
 }
 
-function validateEmployeeCode(code) {
-    const codeRegex = /^T\d+$/;
-    return codeRegex.test(code);
-}
-
-function validatePhoneNumber(phone) {
-    const phoneRegex = /^[\d\s\-\+\(\)]{10,}$/;
-    return phoneRegex.test(phone.replace(/\s/g, ''));
-}
-
-// Loading state management
-function setLoadingState(element, isLoading, loadingText = 'Loading...') {
-    if (!element) return;
-
-    if (isLoading) {
-        element.setAttribute('data-original-text', element.innerHTML);
-        element.disabled = true;
-        element.innerHTML = `<i class="fas fa-spinner fa-spin"></i> ${loadingText}`;
-    } else {
-        const originalText = element.getAttribute('data-original-text');
-        if (originalText) {
-            element.innerHTML = originalText;
+// Validate required fields
+function validateRequiredFields(fields, data) {
+    const errors = [];
+    
+    fields.forEach(field => {
+        if (!data[field] || data[field].toString().trim() === '') {
+            errors.push(`${field} is required`);
         }
-        element.disabled = false;
-    }
-}
-
-// Modal management
-function showModal(modalId) {
-    const modal = document.getElementById(modalId);
-    if (modal) {
-        modal.style.display = 'block';
-        document.body.style.overflow = 'hidden';
-        
-        setTimeout(() => {
-            const modalContent = modal.querySelector('.modal-content');
-            if (modalContent) {
-                modalContent.classList.add('modal-show');
-            }
-        }, 10);
-    }
-}
-
-function hideModal(modalId) {
-    const modal = document.getElementById(modalId);
-    if (modal) {
-        const modalContent = modal.querySelector('.modal-content');
-        if (modalContent) {
-            modalContent.classList.remove('modal-show');
-        }
-        
-        setTimeout(() => {
-            modal.style.display = 'none';
-            document.body.style.overflow = '';
-        }, 300);
-    }
-}
-
-function hideAllModals() {
-    document.querySelectorAll('.modal').forEach(modal => {
-        const modalContent = modal.querySelector('.modal-content');
-        if (modalContent) {
-            modalContent.classList.remove('modal-show');
-        }
-        
-        setTimeout(() => {
-            modal.style.display = 'none';
-            document.body.style.overflow = '';
-        }, 300);
     });
+    
+    return errors;
 }
 
-// Auto-initialize logout functionality
-document.addEventListener('DOMContentLoaded', function() {
-    const userData = getUserData();
-    if (userData) {
-        const logoutBtn = document.getElementById('logout-btn');
-        if (logoutBtn) {
-            logoutBtn.addEventListener('click', logout);
-        }
-    }
-});
-
-// Export utilities for use in other modules
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = {
-        validateInput,
-        sanitizeHTML,
-        showNotification,
-        checkPasswordStrength,
-        checkPasswordMatch,
-        getUserData,
-        setUserData,
-        clearUserData,
-        formatDate,
-        formatTime,
-        getUserRole,
-        isAdmin,
-        isManager,
-        isEmployee,
-        redirectBasedOnRole,
-        logout,
-        validateEmail,
-        validateEmployeeCode,
-        validatePhoneNumber,
-        setLoadingState,
-        showModal,
-        hideModal,
-        hideAllModals
+// Debounce function for search inputs
+function debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+        const later = () => {
+            clearTimeout(timeout);
+            func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
     };
 }
+
+// Format hours (convert to decimal if needed)
+function formatHours(hours) {
+    if (typeof hours === 'string') {
+        // Handle fraction format (e.g., "7.5" or "7 1/2")
+        if (hours.includes('/')) {
+            const [whole, fraction] = hours.split(' ');
+            if (fraction) {
+                const [numerator, denominator] = fraction.split('/');
+                return parseFloat(whole) + (parseFloat(numerator) / parseFloat(denominator));
+            }
+        }
+    }
+    return parseFloat(hours) || 0;
+}
+
+// Calculate week number from date
+function getWeekNumber(date) {
+    if (!date) return null;
+    
+    const d = new Date(date);
+    d.setHours(0, 0, 0, 0);
+    d.setDate(d.getDate() + 4 - (d.getDay() || 7));
+    
+    const yearStart = new Date(d.getFullYear(), 0, 1);
+    const weekNo = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+    
+    return {
+        weekNumber: weekNo,
+        year: d.getFullYear()
+    };
+}
+
+// Check if user has specific role
+function hasRole(requiredRole) {
+    const userData = getUserData();
+    return userData && userData.role === requiredRole;
+}
+
+// Check if user is admin or manager
+function isAdminOrManager() {
+    const userData = getUserData();
+    return userData && (userData.role === 'admin' || userData.role === 'manager');
+}
+
+// Redirect to login page
+function redirectToLogin() {
+    localStorage.removeItem('authToken');
+    localStorage.removeItem('userData');
+    window.location.href = 'index.html';
+}
+
+// Handle API errors consistently
+function handleApiError(error, defaultMessage = 'An error occurred') {
+    console.error('API Error:', error);
+    
+    let message = defaultMessage;
+    
+    if (error.message) {
+        message = error.message;
+    }
+    
+    if (error.response && error.response.data && error.response.data.message) {
+        message = error.response.data.message;
+    }
+    
+    showNotification(message, 'error');
+    
+    // Redirect to login if unauthorized
+    if (error.status === 401 || error.message.includes('unauthorized')) {
+        setTimeout(redirectToLogin, 2000);
+    }
+    
+    return message;
+}
+
+// Format currency (if needed for future features)
+function formatCurrency(amount, currency = 'USD') {
+    return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: currency
+    }).format(amount);
+}
+
+// Generate random ID (for temporary client-side IDs)
+function generateId() {
+    return '_' + Math.random().toString(36).substr(2, 9);
+}
+
+// Deep clone object
+function deepClone(obj) {
+    return JSON.parse(JSON.stringify(obj));
+}
+
+// Get current week dates (Monday to Sunday)
+function getCurrentWeekDates() {
+    const today = new Date();
+    const currentDay = today.getDay();
+    
+    // Calculate Monday (start of week)
+    const mondayOffset = currentDay === 0 ? -6 : 1 - currentDay;
+    const monday = new Date(today);
+    monday.setDate(today.getDate() + mondayOffset);
+    
+    // Calculate Sunday (end of week)
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+    
+    return {
+        start: monday,
+        end: sunday,
+        startFormatted: formatDate(monday),
+        endFormatted: formatDate(sunday)
+    };
+}
+
+// Export functions for global use
+window.getUserData = getUserData;
+window.saveUserData = saveUserData;
+window.showNotification = showNotification;
+window.formatDate = formatDate;
+window.formatDisplayDate = formatDisplayDate;
+window.isValidEmail = isValidEmail;
+window.validateRequiredFields = validateRequiredFields;
+window.debounce = debounce;
+window.formatHours = formatHours;
+window.getWeekNumber = getWeekNumber;
+window.hasRole = hasRole;
+window.isAdminOrManager = isAdminOrManager;
+window.redirectToLogin = redirectToLogin;
+window.handleApiError = handleApiError;
+window.formatCurrency = formatCurrency;
+window.generateId = generateId;
+window.deepClone = deepClone;
+window.getCurrentWeekDates = getCurrentWeekDates;
+
+console.log('✅ Utility functions loaded');

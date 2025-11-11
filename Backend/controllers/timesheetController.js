@@ -64,7 +64,7 @@ export const submitTimesheet = async (req, res) => {
       totalNormalHours: totalNormalHours,
       totalOvertimeHours: totalOvertimeHours,
       totalHours: totalNormalHours + totalOvertimeHours,
-      status: 'submitted',
+      status: 'pending', // ✅ FIXED: Changed from 'submitted' to 'pending'
       submittedAt: new Date()
     };
 
@@ -72,7 +72,8 @@ export const submitTimesheet = async (req, res) => {
       weekNumber,
       year,
       totalNormalHours,
-      totalOvertimeHours
+      totalOvertimeHours,
+      status: 'pending' // ✅ FIXED
     });
 
     const timesheet = new Timesheet(timesheetData);
@@ -81,7 +82,7 @@ export const submitTimesheet = async (req, res) => {
     const populatedTimesheet = await Timesheet.findById(timesheet._id)
       .populate('employee', 'firstName lastName employeeId department');
 
-    console.log('✅ Timesheet submitted successfully');
+    console.log('✅ Timesheet submitted successfully with status: pending');
 
     res.status(201).json({
       message: 'Timesheet submitted successfully',
@@ -155,7 +156,7 @@ export const getAllTimesheets = async (req, res) => {
   }
 };
 
-// ✅ ADDED: Approve timesheet function
+// ✅ FIXED: Approve timesheet function - checks for 'pending' status
 export const approveTimesheet = async (req, res) => {
   try {
     const { id } = req.params;
@@ -165,8 +166,8 @@ export const approveTimesheet = async (req, res) => {
       return res.status(404).json({ message: 'Timesheet not found' });
     }
 
-    if (timesheet.status !== 'submitted') {
-      return res.status(400).json({ message: 'Timesheet is not in submitted status' });
+    if (timesheet.status !== 'pending') { // ✅ FIXED: Changed from 'submitted' to 'pending'
+      return res.status(400).json({ message: 'Timesheet is not in pending status' });
     }
 
     timesheet.status = 'approved';
@@ -189,7 +190,7 @@ export const approveTimesheet = async (req, res) => {
   }
 };
 
-// ✅ ADDED: Reject timesheet function
+// ✅ FIXED: Reject timesheet function - checks for 'pending' status
 export const rejectTimesheet = async (req, res) => {
   try {
     const { id } = req.params;
@@ -200,8 +201,8 @@ export const rejectTimesheet = async (req, res) => {
       return res.status(404).json({ message: 'Timesheet not found' });
     }
 
-    if (timesheet.status !== 'submitted') {
-      return res.status(400).json({ message: 'Timesheet is not in submitted status' });
+    if (timesheet.status !== 'pending') { // ✅ FIXED: Changed from 'submitted' to 'pending'
+      return res.status(400).json({ message: 'Timesheet is not in pending status' });
     }
 
     if (!remarks) {
