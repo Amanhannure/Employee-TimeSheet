@@ -24,40 +24,40 @@ document.addEventListener('DOMContentLoaded', async function() {
 
 async function loadAllUsers() {
     try {
-        let allUsers = [];
-        let currentPage = 1;
-        let totalPages = 1;
+        console.log('Starting to load all users...');
         
-        // Fetch all pages until we have all users
-        do {
-            console.log(`Fetching page ${currentPage} of users...`);
-            const response = await apiClient.getUsers({ page: currentPage, pageSize: 50 });
-            
-            // Extract users from current page
-            const users = response.users || [];
-            allUsers = [...allUsers, ...users];
-            
-            // Update pagination info
-            totalPages = response.totalPages || 1;
-            currentPage++;
-            
-            console.log(`Fetched ${users.length} users from page ${currentPage - 1}, total so far: ${allUsers.length}`);
-            
-        } while (currentPage <= totalPages);
+        // Just fetch the first page since pagination isn't working properly
+        console.log('Fetching users...');
+        const users = await apiClient.getUsers({ page: 1, pageSize: 1000 });
         
-        window.users = allUsers;
+        console.log('API Response:', users?.length || 0, 'users');
         
-        console.log(`✅ Successfully loaded all ${allUsers.length} users from ${totalPages} pages`);
+        // Remove duplicates based on _id since pagination might return same data
+        const uniqueUsers = [];
+        const seenIds = new Set();
+        
+        if (users && users.length > 0) {
+            users.forEach(user => {
+                if (user._id && !seenIds.has(user._id)) {
+                    seenIds.add(user._id);
+                    uniqueUsers.push(user);
+                }
+            });
+        }
+        
+        window.users = uniqueUsers;
+        
+        console.log(`✅ Successfully loaded ${uniqueUsers.length} unique users`);
         
         const grid = document.getElementById('usersGrid');
         grid.innerHTML = '';
         
-        if (allUsers.length === 0) {
+        if (uniqueUsers.length === 0) {
             grid.innerHTML = '<div class="no-users">No users found</div>';
             return;
         }
         
-        allUsers.forEach(user => {
+        uniqueUsers.forEach(user => {
             const card = createUserCard(user);
             grid.appendChild(card);
         });
@@ -84,8 +84,20 @@ function createUserCard(user) {
         designation: user.designation || 'Not specified',
         department: user.department || 'Not assigned',
         status: user.status || 'active',
-        phone: user.phone || 'N/A'
+        phone: user.phone || 'N/A',
+        joinDate: user.joinDate || ''
     };
+    
+    // Format join date if available
+    let formattedDate = 'Not set';
+    if (safeUser.joinDate) {
+        try {
+            const date = new Date(safeUser.joinDate);
+            formattedDate = date.toLocaleDateString();
+        } catch (e) {
+            formattedDate = safeUser.joinDate;
+        }
+    }
     
     card.innerHTML = `
         <div class="user-header">
@@ -109,6 +121,10 @@ function createUserCard(user) {
             <div class="stat-item">
                 <div class="stat-label">Department</div>
                 <div class="stat-value">${safeUser.department}</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-label">Join Date</div>
+                <div class="stat-value">${formattedDate}</div>
             </div>
             <div class="stat-item">
                 <div class="stat-label">Status</div>
@@ -138,6 +154,8 @@ function updateOverviewCards() {
     document.getElementById('totalUsers').textContent = totalUsers;
     document.getElementById('activeUsers').textContent = activeUsers;
     document.getElementById('InactiveUsers').textContent = inactiveUsers;
+    
+    console.log(`Overview updated: ${totalUsers} total, ${activeUsers} active, ${inactiveUsers} inactive`);
 }
 
 async function addUser() {
@@ -181,7 +199,8 @@ async function addUser() {
             return;
         }
         
-        await apiClient.registerUser(userData);
+        console.log('Adding new user:', userData);
+        await apiClient.register(userData);
         await loadAllUsers();
         updateOverviewCards();
         closeAddUserModal();
@@ -198,10 +217,10 @@ async function openEditUserModal(userId) {
         
         let user;
         try {
-            // Try to get user from API
-            user = await apiClient.getUser(userId);
+            // Use the correct API client method
+            user = await apiClient.getUserById(userId);
         } catch (error) {
-            console.log('getUser failed, trying alternative method...');
+            console.log('getUserById failed, trying alternative method...');
             // If API fails, find user in loaded data
             user = window.users.find(u => u._id === userId);
         }
@@ -224,7 +243,19 @@ async function openEditUserModal(userId) {
         document.getElementById('editRole').value = user.role || 'employee';
         document.getElementById('editDesignation').value = user.designation || '';
         document.getElementById('editDepartment').value = user.department || '';
-        document.getElementById('editJoinDate').value = user.joinDate ? user.joinDate.split('T')[0] : '';
+        
+        // Handle join date formatting
+        let joinDateValue = '';
+        if (user.joinDate) {
+            try {
+                const date = new Date(user.joinDate);
+                joinDateValue = date.toISOString().split('T')[0];
+            } catch (e) {
+                joinDateValue = user.joinDate;
+            }
+        }
+        document.getElementById('editJoinDate').value = joinDateValue;
+        
         document.getElementById('editStatus').value = user.status || 'active';
         
         document.getElementById('editUserModal').style.display = 'block';
@@ -263,16 +294,8 @@ async function updateUser() {
         console.log('Updating user with ID:', userId);
         console.log('Update data:', userData);
         
-        // Try different update methods
-        let result;
-        try {
-            // First try updateUser
-            result = await apiClient.updateUser(userId, userData);
-        } catch (error) {
-            console.log('updateUser failed, trying updateUserRole...');
-            // If updateUser doesn't work, try updateUserRole
-            result = await apiClient.updateUserRole(userId, userData);
-        }
+        // Use the correct API client method
+        const result = await apiClient.updateUser(userId, userData);
         
         console.log('Update result:', result);
         
@@ -290,7 +313,7 @@ async function openDeleteUserModal(userId) {
     try {
         let user;
         try {
-            user = await apiClient.getUser(userId);
+            user = await apiClient.getUserById(userId);
         } catch (error) {
             user = window.users.find(u => u._id === userId);
         }
@@ -300,7 +323,10 @@ async function openDeleteUserModal(userId) {
             return;
         }
 
-        document.getElementById('deleteUserName').textContent = `${user.firstName || ''} ${user.lastName || ''} (${user.employeeId || ''})`.trim();
+        const userName = `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Unknown User';
+        const userEmployeeId = user.employeeId || 'No ID';
+        
+        document.getElementById('deleteUserName').textContent = `${userName} (${userEmployeeId})`;
         document.getElementById('deleteUserModal').dataset.userId = userId;
         document.getElementById('deleteUserModal').style.display = 'block';
     } catch (error) {
@@ -316,6 +342,7 @@ async function confirmDeleteUser() {
             throw new Error('No user ID provided for deletion');
         }
         
+        console.log('Deleting user with ID:', userId);
         await apiClient.deleteUser(userId);
         await loadAllUsers();
         updateOverviewCards();
@@ -332,7 +359,8 @@ function filterUsers() {
     const roleFilter = document.getElementById('filterRole').value;
     const statusFilter = document.getElementById('filterStatus').value;
     
-    const filteredUsers = (window.users || []).filter(user => {
+    const users = window.users || [];
+    const filteredUsers = users.filter(user => {
         const searchFields = [
             user.firstName || '',
             user.lastName || '',
@@ -343,7 +371,7 @@ function filterUsers() {
             user.department || ''
         ];
         
-        const matchesSearch = searchFields.some(field => 
+        const matchesSearch = searchTerm === '' || searchFields.some(field => 
             field.toLowerCase().includes(searchTerm)
         );
         const matchesRole = roleFilter === 'all' || user.role === roleFilter;
@@ -364,6 +392,8 @@ function filterUsers() {
         const card = createUserCard(user);
         grid.appendChild(card);
     });
+    
+    console.log(`Filtered ${filteredUsers.length} users from ${users.length} total`);
 }
 
 function openAddUserModal() {
@@ -405,6 +435,7 @@ function showNotification(message, type = 'success') {
         box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
         z-index: 1000;
         animation: slideIn 0.3s ease;
+        font-weight: 500;
     `;
     
     document.body.appendChild(notification);
@@ -415,141 +446,6 @@ function showNotification(message, type = 'success') {
         }
     }, 3000);
 }
-
-// Add CSS for animations and styling
-const style = document.createElement('style');
-style.textContent = `
-    @keyframes slideIn {
-        from {
-            transform: translateX(100%);
-            opacity: 0;
-        }
-        to {
-            transform: translateX(0);
-            opacity: 1;
-        }
-    }
-    
-    .no-users {
-        text-align: center;
-        padding: 3rem;
-        color: #6b7280;
-        font-style: italic;
-        grid-column: 1 / -1;
-        font-size: 1.1rem;
-        background: #f9fafb;
-        border-radius: 0.5rem;
-        margin: 1rem 0;
-    }
-    
-    .users-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
-        gap: 1.5rem;
-        margin-top: 1rem;
-    }
-    
-    .user-card {
-        background: white;
-        border-radius: 0.75rem;
-        padding: 1.5rem;
-        box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1);
-        border: 1px solid #e5e7eb;
-        transition: all 0.2s ease;
-    }
-    
-    .user-card:hover {
-        box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
-        transform: translateY(-2px);
-    }
-    
-    .user-employee-id {
-        font-size: 0.875rem;
-        color: #6b7280;
-        margin: 0.25rem 0;
-    }
-    
-    .status-active {
-        color: #10b981;
-        font-weight: 600;
-    }
-    
-    .status-inactive {
-        color: #ef4444;
-        font-weight: 600;
-    }
-    
-    .status-probation {
-        color: #f59e0b;
-        font-weight: 600;
-    }
-    
-    .status-on notice period {
-        color: #8b5cf6;
-        font-weight: 600;
-    }
-    
-    .status-resigned {
-        color: #6b7280;
-        font-weight: 600;
-    }
-    
-    .role-admin {
-        background: #ef4444;
-        color: white;
-    }
-    
-    .role-manager {
-        background: #f59e0b;
-        color: white;
-    }
-    
-    .role-employee {
-        background: #10b981;
-        color: white;
-    }
-    
-    .user-role {
-        padding: 0.25rem 0.75rem;
-        border-radius: 1rem;
-        font-size: 0.75rem;
-        font-weight: 600;
-        text-transform: capitalize;
-    }
-    
-    .input-hint {
-        display: block;
-        font-size: 0.75rem;
-        color: #6b7280;
-        margin-top: 0.25rem;
-    }
-    
-    .password-hint {
-        display: block;
-        font-size: 0.75rem;
-        color: #6b7280;
-        margin-top: 0.25rem;
-    }
-    
-    .search-filter {
-        display: flex;
-        gap: 1rem;
-        align-items: center;
-    }
-    
-    .search-filter input,
-    .search-filter select {
-        padding: 0.5rem 0.75rem;
-        border: 1px solid #d1d5db;
-        border-radius: 0.375rem;
-        font-size: 0.875rem;
-    }
-    
-    .search-filter input {
-        width: 250px;
-    }
-`;
-document.head.appendChild(style);
 
 document.getElementById('toggle-sidebar').addEventListener('click', function() {
     document.querySelector('.dashboard-container').classList.toggle('sidebar-collapsed');
