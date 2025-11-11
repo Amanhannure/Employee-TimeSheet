@@ -33,6 +33,11 @@ const determineRoleFromDesignation = (designation) => {
   return 'employee';
 };
 
+// Validate password length
+const validatePasswordLength = (password) => {
+  return password && password.length >= 4;
+};
+
 // Register a new admin
 export const registerAdmin = async (req, res) => {
   try {
@@ -41,6 +46,11 @@ export const registerAdmin = async (req, res) => {
     // Validation
     if (!username || !password || !employeeId || !firstName || !lastName) {
       return res.status(400).json({ message: 'Username, password, employeeId, firstName, and lastName are required' });
+    }
+
+    // Validate password length
+    if (!validatePasswordLength(password)) {
+      return res.status(400).json({ message: 'Password must be at least 4 characters long' });
     }
 
     // Check if user already exists
@@ -95,6 +105,9 @@ export const registerAdmin = async (req, res) => {
     });
   } catch (error) {
     console.error('Register admin error:', error);
+    if (error.message.includes('Password must be at least 4 characters long')) {
+      return res.status(400).json({ message: error.message });
+    }
     res.status(500).json({ message: 'Server error during registration' });
   }
 };
@@ -129,6 +142,16 @@ export const bulkRegister = async (req, res) => {
             username: username || 'unknown',
             employeeId: employeeId || 'unknown',
             error: 'Missing required fields: username, password, employeeId, firstName, lastName, or email'
+          });
+          continue;
+        }
+
+        // Validate password length
+        if (!validatePasswordLength(password)) {
+          results.failed.push({
+            username,
+            employeeId,
+            error: 'Password must be at least 4 characters long'
           });
           continue;
         }
@@ -227,6 +250,11 @@ export const registerUser = async (req, res) => {
       return res.status(400).json({ message: 'Username, password, employeeId, firstName, lastName, and email are required' });
     }
 
+    // Validate password length
+    if (!validatePasswordLength(password)) {
+      return res.status(400).json({ message: 'Password must be at least 4 characters long' });
+    }
+
     // Check if user already exists
     const existingUser = await User.findOne({ $or: [{ username }, { employeeId }, { email }] });
     if (existingUser) {
@@ -289,6 +317,9 @@ export const registerUser = async (req, res) => {
     });
   } catch (error) {
     console.error('Register user error:', error);
+    if (error.message.includes('Password must be at least 4 characters long')) {
+      return res.status(400).json({ message: error.message });
+    }
     res.status(500).json({ message: 'Server error during registration' });
   }
 };
@@ -471,8 +502,9 @@ export const changePassword = async (req, res) => {
       return res.status(400).json({ message: 'Current password and new password are required' });
     }
 
-    if (newPassword.length < 6) {
-      return res.status(400).json({ message: 'New password must be at least 6 characters long' });
+    // Updated to 4 characters minimum
+    if (!validatePasswordLength(newPassword)) {
+      return res.status(400).json({ message: 'New password must be at least 4 characters long' });
     }
 
     const user = await User.findById(userId);
@@ -495,6 +527,9 @@ export const changePassword = async (req, res) => {
 
   } catch (error) {
     console.error('Change password error:', error);
+    if (error.message.includes('Password must be at least 4 characters long')) {
+      return res.status(400).json({ message: error.message });
+    }
     res.status(500).json({ message: 'Server error during password change' });
   }
 };
@@ -768,9 +803,10 @@ export const resetPassword = async (req, res) => {
       });
     }
 
-    if (newPassword.length < 6) {
+    // Updated to 4 characters minimum
+    if (!validatePasswordLength(newPassword)) {
       return res.status(400).json({ 
-        message: 'Password must be at least 6 characters long' 
+        message: 'Password must be at least 4 characters long' 
       });
     }
 
@@ -808,6 +844,9 @@ export const resetPassword = async (req, res) => {
 
   } catch (error) {
     console.error('Reset password error:', error);
+    if (error.message.includes('Password must be at least 4 characters long')) {
+      return res.status(400).json({ message: error.message });
+    }
     res.status(500).json({ message: 'Server error during password reset' });
   }
 };

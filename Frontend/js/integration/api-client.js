@@ -34,22 +34,21 @@ class ApiClient {
         };
 
         try {
-            console.log(`API Call: ${options.method || 'GET'} ${url}`); // Debug log
+            console.log(`🔗 API Call: ${options.method || 'GET'} ${url}`, options.body ? JSON.parse(options.body) : '');
             const response = await fetch(url, config);
             
             clearTimeout(timeoutId);
+
+            // Log response status for debugging
+            console.log(`📡 Response: ${response.status} ${response.statusText} for ${endpoint}`);
 
             if (response.status === 401) {
                 this.handleUnauthorized();
                 throw new Error('Authentication required');
             }
 
-            // Handle 404 specifically
-            if (response.status === 404) {
-                throw new Error(`Endpoint not found: ${endpoint}`);
-            }
-
             const data = await response.json();
+            console.log(`📦 Response data for ${endpoint}:`, data);
             
             if (!response.ok) {
                 throw new Error(data.message || `Request failed with status ${response.status}`);
@@ -60,10 +59,11 @@ class ApiClient {
             clearTimeout(timeoutId);
             
             if (error.name === 'AbortError') {
+                console.error(`⏰ Timeout error for ${endpoint}`);
                 throw new Error('Request timeout - please try again');
             }
             
-            console.error('API Request failed:', error);
+            console.error(`❌ API Request failed for ${endpoint}:`, error);
             throw error;
         }
     }
@@ -88,12 +88,13 @@ class ApiClient {
         return true;
     }
 
-    // PASSWORD RESET METHODS - SINGLE DEFINITION
+    // ==================== PASSWORD RESET METHODS ====================
     async initiatePasswordReset(data) {
         if (!this.validateInput(data)) {
             throw new Error('Invalid input format');
         }
-        return await this.request('/auth/forgot-password', {
+        console.log('🔄 Initiating password reset for:', data);
+        return await this.request('/auth/password/forgot', {
             method: 'POST',
             body: JSON.stringify(data)
         });
@@ -103,7 +104,8 @@ class ApiClient {
         if (!this.validateInput(data)) {
             throw new Error('Invalid input format');
         }
-        return await this.request('/auth/verify-security-answer', {
+        console.log('🔐 Verifying security answer for:', data.employeeCode);
+        return await this.request('/auth/password/verify-security', {
             method: 'POST',
             body: JSON.stringify(data)
         });
@@ -113,7 +115,8 @@ class ApiClient {
         if (!this.validateInput(data)) {
             throw new Error('Invalid input format');
         }
-        return await this.request('/auth/send-email-code', {
+        console.log('📧 Sending email code for:', data.employeeCode);
+        return await this.request('/auth/password/send-code', {
             method: 'POST',
             body: JSON.stringify(data)
         });
@@ -123,7 +126,8 @@ class ApiClient {
         if (!this.validateInput(data)) {
             throw new Error('Invalid input format');
         }
-        return await this.request('/auth/verify-email-code', {
+        console.log('✅ Verifying email code for:', data.employeeCode);
+        return await this.request('/auth/password/verify-code', {
             method: 'POST',
             body: JSON.stringify(data)
         });
@@ -133,7 +137,8 @@ class ApiClient {
         if (!this.validateInput(data)) {
             throw new Error('Invalid input format');
         }
-        return await this.request('/auth/reset-password', {
+        console.log('🔄 Resetting password for:', data.employeeCode, 'Token exists:', !!data.resetToken);
+        return await this.request('/auth/password/reset', {
             method: 'POST',
             body: JSON.stringify(data)
         });
@@ -143,17 +148,17 @@ class ApiClient {
         if (!this.validateInput(data)) {
             throw new Error('Invalid input format');
         }
-        return await this.request('/auth/setup-security-question', {
+        return await this.request('/auth/security/setup', {
             method: 'POST',
             body: JSON.stringify(data)
         });
     }
 
     async checkSecuritySetup() {
-        return await this.request('/auth/check-security-setup');
+        return await this.request('/auth/security/check');
     }
 
-    // AUTHENTICATION METHODS
+    // ==================== AUTHENTICATION METHODS ====================
     async login(credentials) {
         if (!this.validateInput(credentials)) {
             throw new Error('Invalid input format');
@@ -194,49 +199,83 @@ class ApiClient {
         return await this.request('/auth/profile');
     }
 
-    // USER MANAGEMENT METHODS
-    async getUser(id) {
-        if (!id || typeof id !== 'string') {
-            throw new Error('Invalid user ID format');
+    async updateProfile(profileData) {
+        if (!this.validateInput(profileData)) {
+            throw new Error('Invalid profile data format');
         }
-        return await this.request(`/users/${id}`);
+        return await this.request('/auth/profile', {
+            method: 'PUT',
+            body: JSON.stringify(profileData)
+        });
     }
 
+    async changePassword(passwordData) {
+        if (!this.validateInput(passwordData)) {
+            throw new Error('Invalid password data format');
+        }
+        return await this.request('/auth/password/change', {
+            method: 'PUT',
+            body: JSON.stringify(passwordData)
+        });
+    }
+
+    // ==================== USER MANAGEMENT METHODS ====================
     async getUsers(filters = {}) {
         if (!this.validateInput(filters)) {
             throw new Error('Invalid filter format');
         }
         const queryParams = new URLSearchParams(filters).toString();
-        return await this.request(`/users?${queryParams}`);
+        return await this.request(`/auth/admin/users?${queryParams}`);
     }
 
-    async createUser(userData) {
+    async getTeamUsers() {
+        return await this.request('/auth/team/users');
+    }
+
+    async registerUser(userData) {
         if (!this.validateInput(userData)) {
             throw new Error('Invalid user data format');
         }
-        return await this.request('/users', {
+        return await this.request('/auth/admin/register', {
             method: 'POST',
             body: JSON.stringify(userData)
         });
     }
 
-    async updateUser(id, userData) {
-        if (!this.validateInput(userData)) {
-            throw new Error('Invalid user data format');
+    async bulkRegister(usersData) {
+        if (!this.validateInput({ users: usersData })) {
+            throw new Error('Invalid users data format');
         }
-        return await this.request(`/users/${id}`, {
+        return await this.request('/auth/admin/bulk-register', {
+            method: 'POST',
+            body: JSON.stringify({ users: usersData })
+        });
+    }
+
+    async updateUserStatus(userId, status) {
+        if (!userId || typeof userId !== 'string') {
+            throw new Error('Invalid user ID format');
+        }
+        return await this.request(`/auth/admin/users/${userId}/status`, {
             method: 'PUT',
-            body: JSON.stringify(userData)
+            body: JSON.stringify({ status })
         });
     }
 
-    async deleteUser(id) {
-        return await this.request(`/users/${id}`, {
-            method: 'DELETE'
+    async updateUserRole(userId, roleData) {
+        if (!userId || typeof userId !== 'string') {
+            throw new Error('Invalid user ID format');
+        }
+        if (!this.validateInput(roleData)) {
+            throw new Error('Invalid role data format');
+        }
+        return await this.request(`/auth/admin/users/${userId}/role`, {
+            method: 'PUT',
+            body: JSON.stringify(roleData)
         });
     }
 
-    // PROJECTS METHODS
+    // ==================== PROJECTS METHODS ====================
     async getProjects() {
         return await this.request('/projects');
     }
@@ -271,7 +310,7 @@ class ApiClient {
         });
     }
 
-    // TIMESHEET METHODS
+    // ==================== TIMESHEET METHODS ====================
     async submitTimesheet(timesheetData) {
         if (!this.validateInput(timesheetData)) {
             throw new Error('Invalid timesheet data format');
@@ -314,19 +353,7 @@ class ApiClient {
         return await this.request(`/timesheets/${id}`);
     }
 
-    async exportTimesheetToCSV(id) {
-        const response = await fetch(`${this.baseURL}/timesheets/export/${id}`, {
-            headers: this.getHeaders()
-        });
-
-        if (!response.ok) {
-            throw new Error('Failed to export timesheet');
-        }
-
-        return await response.text();
-    }
-
-    // ACTIVITY CODES METHODS
+    // ==================== ACTIVITY CODES METHODS ====================
     async getActivityCodes(department = '') {
         if (department && typeof department !== 'string') {
             throw new Error('Invalid department format');
@@ -361,7 +388,7 @@ class ApiClient {
         });
     }
 
-    // REPORTS METHODS
+    // ==================== REPORTS METHODS ====================
     async getHoursTracking(filters = {}) {
         if (!this.validateInput(filters)) {
             throw new Error('Invalid filter format');
@@ -378,18 +405,16 @@ class ApiClient {
         return await this.request(`/reports/employee-report?${queryParams}`);
     }
 
-    // LEAVE MANAGEMENT METHODS
+    // ==================== LEAVE MANAGEMENT METHODS ====================
     async submitLeaveRequest(leaveData) {
         const formData = new FormData();
 
-        // Append form data
         Object.keys(leaveData).forEach(key => {
             if (key !== 'document') {
                 formData.append(key, leaveData[key]);
             }
         });
 
-        // Append file if exists
         if (leaveData.document) {
             formData.append('document', leaveData.document);
         }
@@ -421,8 +446,6 @@ class ApiClient {
     }
 
     async approveLeaveRequest(id) {
-        console.log('API: Approving leave request:', id);
-        
         const response = await fetch(`${this.baseURL}/leave/${id}/approve`, {
             method: 'PATCH',
             headers: {
@@ -441,8 +464,6 @@ class ApiClient {
     }
 
     async rejectLeaveRequest(id, rejectionReason) {
-        console.log('API: Rejecting leave request:', id, rejectionReason);
-        
         const response = await fetch(`${this.baseURL}/leave/${id}/reject`, {
             method: 'PATCH',
             headers: {
@@ -461,69 +482,11 @@ class ApiClient {
         return data;
     }
 
-    async downloadLeaveDocument(id) {
-        console.log('API: Downloading document for leave:', id);
-        
-        const response = await fetch(`${this.baseURL}/leave/download/${id}`, {
-            headers: {
-                'Authorization': `Bearer ${this.token}`
-            }
-        });
-
-        if (!response.ok) {
-            const errorText = await response.text();
-            let errorMessage = 'Failed to download document';
-            
-            try {
-                const errorData = JSON.parse(errorText);
-                errorMessage = errorData.message || errorMessage;
-            } catch {
-                errorMessage = errorText || errorMessage;
-            }
-            
-            throw new Error(errorMessage);
-        }
-
-        const contentType = response.headers.get('content-type');
-        if (contentType && contentType.includes('application/json')) {
-            const errorData = await response.json();
-            throw new Error(errorData.message || 'Server returned error instead of file');
-        }
-
-        const contentDisposition = response.headers.get('content-disposition');
-        let filename = `document-${id}`;
-        
-        if (contentDisposition) {
-            const filenameMatch = contentDisposition.match(/filename="?(.+)"?/);
-            if (filenameMatch) {
-                filename = filenameMatch[1];
-            }
-        }
-
-        const blob = await response.blob();
-        
-        // Create download link
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        window.URL.revokeObjectURL(url);
-        
-        return blob;
-    }
-
-    async getLeaveRequestById(id) {
-        return await this.request(`/leave/${id}`);
-    }
-
     async getLeaveStatistics() {
         return await this.request('/leave/stats/statistics');
     }
 
-    // UTILITY METHODS
+    // ==================== UTILITY METHODS ====================
     setTimeout(duration) {
         this.timeout = duration;
     }
@@ -534,25 +497,25 @@ class ApiClient {
         localStorage.removeItem('userData');
     }
 
-    // DEBUG METHOD: Check if endpoints exist
-    async testEndpoints() {
+    // DEBUG METHOD: Test password reset endpoints
+    async testPasswordResetEndpoints() {
         const endpoints = [
-            '/auth/forgot-password',
-            '/auth/verify-security-answer',
-            '/auth/send-email-code',
-            '/auth/verify-email-code',
-            '/auth/reset-password',
-            '/auth/login'
+            '/auth/password/forgot',
+            '/auth/password/verify-security', 
+            '/auth/password/send-code',
+            '/auth/password/verify-code',
+            '/auth/password/reset'
         ];
 
+        console.log('🧪 Testing password reset endpoints:');
         for (const endpoint of endpoints) {
             try {
                 const response = await fetch(`${this.baseURL}${endpoint}`, {
                     method: 'OPTIONS'
                 });
-                console.log(`${endpoint}: ${response.status === 404 ? 'NOT FOUND' : 'EXISTS'}`);
+                console.log(`   ${endpoint}: ${response.status === 404 ? '❌ NOT FOUND' : '✅ EXISTS'}`);
             } catch (error) {
-                console.log(`${endpoint}: ERROR - ${error.message}`);
+                console.log(`   ${endpoint}: ❌ ERROR - ${error.message}`);
             }
         }
     }

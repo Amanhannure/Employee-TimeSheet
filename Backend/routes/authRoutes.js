@@ -29,27 +29,27 @@ router.post('/login', login);
 router.post('/login-admin', loginAdmin);
 
 // Password reset routes (public) - UPDATED TO MATCH FRONTEND
-router.post('/forgot-password', initiatePasswordReset);
-router.post('/verify-security-answer', verifySecurityAnswer);
-router.post('/send-email-code', sendEmailCode);
-router.post('/verify-email-code', verifyEmailCode);
-router.post('/reset-password', resetPassword);
+router.post('/password/forgot', initiatePasswordReset); // Changed from /forgot-password
+router.post('/password/verify-security', verifySecurityAnswer); // Changed from /verify-security-answer
+router.post('/password/send-code', sendEmailCode); // Changed from /send-email-code
+router.post('/password/verify-code', verifyEmailCode); // Changed from /verify-email-code
+router.post('/password/reset', resetPassword); // Changed from /reset-password
 
 // Protected routes (require authentication)
 router.get('/profile', authenticate, getProfile);
 router.put('/profile', authenticate, updateProfile);
-router.put('/change-password', authenticate, changePassword);
-router.post('/setup-security-question', authenticate, setupSecurityQuestion);
-router.get('/check-security-setup', authenticate, checkSecuritySetup);
+router.put('/password/change', authenticate, changePassword); // Changed from /change-password
+router.post('/security/setup', authenticate, setupSecurityQuestion); // Changed from /setup-security-question
+router.get('/security/check', authenticate, checkSecuritySetup); // Changed from /check-security-setup
 
 // Admin only routes
-router.post('/register', authenticate, authorizeAdmin, registerUser);
-router.post('/bulk-register', authenticate, authorizeAdmin, bulkRegister);
-router.get('/users', authenticate, authorizeAdmin, getUsers);
-router.put('/users/:userId/status', authenticate, authorizeAdmin, updateUserStatus);
-router.put('/users/:userId/role', authenticate, authorizeAdmin, updateUserRole);
+router.post('/admin/register', authenticate, authorizeAdmin, registerUser); // Changed from /register
+router.post('/admin/bulk-register', authenticate, authorizeAdmin, bulkRegister); // Changed from /bulk-register
+router.get('/admin/users', authenticate, authorizeAdmin, getUsers); // Changed from /users
+router.put('/admin/users/:userId/status', authenticate, authorizeAdmin, updateUserStatus);
+router.put('/admin/users/:userId/role', authenticate, authorizeAdmin, updateUserRole);
 
 // Manager and Admin routes (extended permissions)
-router.get('/team-users', authenticate, authorizeManager, getUsers); // Managers can view their team
+router.get('/team/users', authenticate, authorizeManager, getUsers); // Changed from /team-users
 
 export default router;

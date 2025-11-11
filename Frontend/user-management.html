@@ -121,7 +121,14 @@
                                 <option value="admin">Admin</option>
                                 <option value="manager">Manager</option>
                                 <option value="employee">Employee</option>
-                                <option value="projects">Projects</option>
+                            </select>
+                            <select id="filterStatus">
+                                <option value="all">All Status</option>
+                                <option value="active">Active</option>
+                                <option value="inactive">Inactive</option>
+                                <option value="probation">Probation</option>
+                                <option value="on notice period">On Notice Period</option>
+                                <option value="resigned">Resigned</option>
                             </select>
                         </div>
                     </div>
@@ -144,24 +151,24 @@
             <form id="addUserForm">
                 <div class="form-row">
                     <div class="form-group">
+                        <label for="employeeId">Employee ID *</label>
+                        <input type="text" id="employeeId" name="employeeId" required pattern="T\d+" title="Must start with T followed by numbers (e.g., T1040)">
+                        <small class="input-hint">Format: T followed by numbers (e.g., T1040)</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="username">Username *</label>
+                        <input type="text" id="username" name="username" required>
+                    </div>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
                         <label for="firstName">First Name *</label>
                         <input type="text" id="firstName" name="firstName" required>
                     </div>
                     <div class="form-group">
                         <label for="lastName">Last Name *</label>
                         <input type="text" id="lastName" name="lastName" required>
-                    </div>
-                </div>
-                
-                <!-- ADDED: Employee ID Field -->
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="employeeId">Employee ID *</label>
-                        <input type="text" id="employeeId" name="employeeId" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="username">Username *</label>
-                        <input type="text" id="username" name="username" required>
                     </div>
                 </div>
                 
@@ -190,12 +197,15 @@
                             <option value="admin">Admin</option>
                             <option value="manager">Manager</option>
                             <option value="employee">Employee</option>
-                            <option value="projects">Projects</option>
                         </select>
                     </div>
                 </div>
                 
                 <div class="form-row">
+                    <div class="form-group">
+                        <label for="designation">Designation</label>
+                        <input type="text" id="designation" name="designation">
+                    </div>
                     <div class="form-group">
                         <label for="department">Department</label>
                         <select id="department" name="department">
@@ -211,22 +221,21 @@
                             <option value="Admin/Accounts">Admin/Accounts Department</option>
                         </select>
                     </div>
-                    <div class="form-group">
-                        <label for="joinDate">Join Date</label>
-                        <input type="date" id="joinDate" name="joinDate">
-                    </div>
                 </div>
                 
                 <div class="form-row">
                     <div class="form-group">
-                        <label for="teamLeader">Team Leader Name</label>
-                        <input type="text" id="teamLeader" name="teamLeader">
+                        <label for="joinDate">Join Date</label>
+                        <input type="date" id="joinDate" name="joinDate">
                     </div>
                     <div class="form-group">
                         <label for="status">Status</label>
                         <select id="status" name="status">
                             <option value="active" selected>Active</option>
                             <option value="inactive">Inactive</option>
+                            <option value="probation">Probation</option>
+                            <option value="on notice period">On Notice Period</option>
+                            <option value="resigned">Resigned</option>
                         </select>
                     </div>
                 </div>
@@ -250,23 +259,24 @@
                 <input type="hidden" id="editUserId" name="userId">
                 <div class="form-row">
                     <div class="form-group">
+                        <label for="editEmployeeId">Employee ID *</label>
+                        <input type="text" id="editEmployeeId" name="employeeId" required pattern="T\d+" title="Must start with T followed by numbers (e.g., T1040)" readonly>
+                        <small class="input-hint">Employee ID cannot be changed</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="editUsername">Username *</label>
+                        <input type="text" id="editUsername" name="username" required>
+                    </div>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
                         <label for="editFirstName">First Name *</label>
                         <input type="text" id="editFirstName" name="firstName" required>
                     </div>
                     <div class="form-group">
                         <label for="editLastName">Last Name *</label>
                         <input type="text" id="editLastName" name="lastName" required>
-                    </div>
-                </div>
-                
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="editEmployeeId">Employee ID *</label>
-                        <input type="text" id="editEmployeeId" name="employeeId" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="editUsername">Username *</label>
-                        <input type="text" id="editUsername" name="username" required>
                     </div>
                 </div>
                 
@@ -288,12 +298,19 @@
                             <option value="admin">Admin</option>
                             <option value="manager">Manager</option>
                             <option value="employee">Employee</option>
-                            <option value="projects">Projects</option>
                         </select>
                     </div>
                     <div class="form-group">
+                        <label for="editDesignation">Designation</label>
+                        <input type="text" id="editDesignation" name="designation">
+                    </div>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
                         <label for="editDepartment">Department</label>
                         <select id="editDepartment" name="department">
+                            <option value="">Select Department</option>
                             <option value="Process">Process Department</option>
                             <option value="Loss and Prevention">Loss and Prevention Department</option>
                             <option value="Project">Project Department</option>
@@ -305,26 +322,21 @@
                             <option value="Admin/Accounts">Admin/Accounts Department</option>
                         </select>
                     </div>
-                </div>
-                
-                <div class="form-row">
                     <div class="form-group">
                         <label for="editJoinDate">Join Date</label>
                         <input type="date" id="editJoinDate" name="joinDate">
                     </div>
-                    <div class="form-group">
-                        <label for="editTeamLeader">Team Leader Name</label>
-                        <input type="text" id="editTeamLeader" name="teamLeader">
-                    </div>
                 </div>
                 
-                <!-- ADDED: Status Field in Edit Modal -->
                 <div class="form-row">
                     <div class="form-group">
                         <label for="editStatus">Status</label>
                         <select id="editStatus" name="status">
                             <option value="active">Active</option>
                             <option value="inactive">Inactive</option>
+                            <option value="probation">Probation</option>
+                            <option value="on notice period">On Notice Period</option>
+                            <option value="resigned">Resigned</option>
                         </select>
                     </div>
                 </div>

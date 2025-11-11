@@ -104,7 +104,13 @@ const userSchema = new mongoose.Schema({
 // Virtual for plain password (to hash before saving)
 userSchema.virtual('password')
   .set(function(password) {
+    // Validate password length (minimum 4 characters)
+    if (password && password.length < 4) {
+      throw new Error('Password must be at least 4 characters long');
+    }
     this._password = password;
+    // Force mongoose to recognize password as modified
+    this.markModified('password');
   })
   .get(function() {
     return this._password;
@@ -114,6 +120,8 @@ userSchema.virtual('password')
 userSchema.virtual('securityAnswer')
   .set(function(answer) {
     this._securityAnswer = answer;
+    // Force mongoose to recognize security answer as modified
+    this.markModified('securityAnswer');
   })
   .get(function() {
     return this._securityAnswer;
@@ -121,28 +129,48 @@ userSchema.virtual('securityAnswer')
 
 // Pre-save middleware to hash password
 userSchema.pre('save', async function(next) {
-  if (this.isModified('password') && this.password) {
+  console.log('🔄 Pre-save middleware triggered');
+  console.log('📝 Modified fields:', this.modifiedPaths());
+  console.log('🔑 _password exists:', !!this._password);
+  
+  // Check if password is being set via virtual field
+  if (this._password) {
     try {
+      console.log('🔐 Hashing new password...');
+      // Additional validation for password length
+      if (this._password.length < 4) {
+        throw new Error('Password must be at least 4 characters long');
+      }
+      
       const salt = await bcrypt.genSalt(10);
-      this.passwordHash = await bcrypt.hash(this.password, salt);
+      this.passwordHash = await bcrypt.hash(this._password, salt);
+      this._password = undefined; // Clear the temporary password
+      this.lastPasswordReset = new Date();
+      console.log('✅ Password hashed successfully');
       next();
     } catch (error) {
+      console.error('❌ Password hashing error:', error);
       next(error);
     }
   } else {
+    console.log('⏭️ Skipping password hashing - no password to hash');
     next();
   }
 });
 
 // Pre-save middleware to hash security answer if provided
 userSchema.pre('save', async function(next) {
-  if (this.isModified('securityAnswer') && this.securityAnswer) {
+  if (this._securityAnswer) {
     try {
+      console.log('🔐 Hashing security answer...');
       const salt = await bcrypt.genSalt(10);
-      this.securityAnswerHash = await bcrypt.hash(this.securityAnswer, salt);
+      this.securityAnswerHash = await bcrypt.hash(this._securityAnswer, salt);
+      this._securityAnswer = undefined; // Clear the temporary security answer
       this.securitySetupCompleted = true;
+      console.log('✅ Security answer hashed successfully');
       next();
     } catch (error) {
+      console.error('❌ Security answer hashing error:', error);
       next(error);
     }
   } else {
@@ -152,10 +180,11 @@ userSchema.pre('save', async function(next) {
 
 // Method to verify password
 userSchema.methods.verifyPassword = async function(password) {
+  if (!this.passwordHash) return false;
   return await bcrypt.compare(password, this.passwordHash);
 };
 
-// Method to hash security answer
+// Method to hash security answer (for direct use)
 userSchema.methods.hashSecurityAnswer = async function(answer) {
   const salt = await bcrypt.genSalt(10);
   this.securityAnswerHash = await bcrypt.hash(answer, salt);
@@ -209,6 +238,23 @@ userSchema.methods.hasSecurityQuestion = function() {
 // Check if user can reset password via email
 userSchema.methods.canResetViaEmail = function() {
   return !!this.email;
+};
+
+// Static method to validate password length
+userSchema.statics.validatePasswordLength = function(password) {
+  return password && password.length >= 4;
+};
+
+// Method to set password directly (alternative method)
+userSchema.methods.setPassword = async function(newPassword) {
+  if (!newPassword || newPassword.length < 4) {
+    throw new Error('Password must be at least 4 characters long');
+  }
+  
+  const salt = await bcrypt.genSalt(10);
+  this.passwordHash = await bcrypt.hash(newPassword, salt);
+  this.lastPasswordReset = new Date();
+  return this.save();
 };
 
 export default mongoose.model('User', userSchema);

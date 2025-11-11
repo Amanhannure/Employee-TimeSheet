@@ -1,240 +1,35 @@
 document.addEventListener('DOMContentLoaded', function() {
-    // ==================== UTILITY FUNCTIONS ====================
-    function showModal(modalId) {
-        hideAllModals();
-        const modal = document.getElementById(modalId);
-        if (modal) {
-            modal.style.display = 'block';
-            
-            // Add animation class
-            setTimeout(() => {
-                const modalContent = modal.querySelector('.modal-content');
-                if (modalContent) {
-                    modalContent.classList.add('modal-show');
-                }
-            }, 10);
-        }
-    }
-
-    function hideAllModals() {
-        document.querySelectorAll('.modal').forEach(modal => {
-            modal.style.display = 'none';
-            const modalContent = modal.querySelector('.modal-content');
-            if (modalContent) {
-                modalContent.classList.remove('modal-show');
-            }
-        });
-    }
-
-    function showNotification(message, type) {
-        // Remove any existing notifications first
-        const existingNotifications = document.querySelectorAll('.notification');
-        existingNotifications.forEach(notification => {
-            if (notification.parentNode) {
-                notification.parentNode.removeChild(notification);
-            }
-        });
-
-        // Create notification element
-        const notification = document.createElement('div');
-        notification.className = `notification notification-${type}`;
-        notification.innerHTML = `
-            <div class="notification-content">
-                <i class="fas fa-${type === 'success' ? 'check' : 'exclamation'}-circle"></i>
-                <span>${message}</span>
-            </div>
-        `;
-
-        // Add styles if not exists
-        if (!document.querySelector('#notification-styles')) {
-            const styles = document.createElement('style');
-            styles.id = 'notification-styles';
-            styles.textContent = `
-                .notification {
-                    position: fixed;
-                    top: 20px;
-                    right: 20px;
-                    padding: 15px 20px;
-                    border-radius: 5px;
-                    color: white;
-                    z-index: 10000;
-                    transform: translateX(400px);
-                    transition: transform 0.3s ease;
-                    max-width: 400px;
-                    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-                }
-                .notification.show {
-                    transform: translateX(0);
-                }
-                .notification-success {
-                    background: #28a745;
-                    border-left: 4px solid #1e7e34;
-                }
-                .notification-error {
-                    background: #dc3545;
-                    border-left: 4px solid #c82333;
-                }
-                .notification-content {
-                    display: flex;
-                    align-items: center;
-                    gap: 10px;
-                }
-            `;
-            document.head.appendChild(styles);
-        }
-
-        // Add to page
-        document.body.appendChild(notification);
-
-        // Show notification
-        setTimeout(() => {
-            notification.classList.add('show');
-        }, 100);
-
-        // Remove after 5 seconds
-        setTimeout(() => {
-            notification.classList.remove('show');
-            setTimeout(() => {
-                if (notification.parentNode) {
-                    notification.parentNode.removeChild(notification);
-                }
-            }, 300);
-        }, 5000);
-    }
-
-    function checkPasswordStrength(password) {
-        const strengthElement = document.getElementById('password-strength');
-        if (!strengthElement) return;
-        
-        if (password.length === 0) {
-            strengthElement.textContent = '';
-            strengthElement.className = 'password-strength';
-            return;
-        }
-
-        let strength = 0;
-        let feedback = '';
-
-        if (password.length >= 6) strength++;
-        if (password.length >= 8) strength++;
-        if (/[A-Z]/.test(password)) strength++;
-        if (/[0-9]/.test(password)) strength++;
-        if (/[^A-Za-z0-9]/.test(password)) strength++;
-
-        switch(strength) {
-            case 0:
-            case 1:
-                feedback = 'Weak';
-                strengthElement.className = 'password-strength strength-weak';
-                break;
-            case 2:
-            case 3:
-                feedback = 'Medium';
-                strengthElement.className = 'password-strength strength-medium';
-                break;
-            case 4:
-            case 5:
-                feedback = 'Strong';
-                strengthElement.className = 'password-strength strength-strong';
-                break;
-        }
-
-        strengthElement.textContent = `Password strength: ${feedback}`;
-    }
-
-    function checkPasswordMatch() {
-        const password = document.getElementById('new-password');
-        const confirmPassword = document.getElementById('confirm-password');
-        const matchElement = document.getElementById('password-match');
-        
-        if (!password || !confirmPassword || !matchElement) return;
-
-        if (confirmPassword.value.length === 0) {
-            matchElement.textContent = '';
-            matchElement.className = 'password-match';
-            return;
-        }
-
-        if (password.value === confirmPassword.value) {
-            matchElement.textContent = '✓ Passwords match';
-            matchElement.className = 'password-match match-success';
-        } else {
-            matchElement.textContent = '✗ Passwords do not match';
-            matchElement.className = 'password-match match-error';
-        }
-    }
-
-    function redirectBasedOnRole(role) {
-        switch(role) {
-            case 'admin':
-            case 'manager':
-                window.location.href = 'admin-dashboard.html';
-                break;
-            case 'employee':
-                window.location.href = 'dashboard.html';
-                break;
-            default:
-                window.location.href = 'dashboard.html';
-        }
+    // ==================== INITIALIZATION ====================
+    const token = localStorage.getItem('authToken');
+    const userData = JSON.parse(localStorage.getItem('userData') || 'null');
+    
+    // Redirect if already logged in
+    if (token && userData) {
+        redirectBasedOnRole(userData.role);
+        return;
     }
 
     // ==================== MAIN LOGIN FUNCTIONALITY ====================
-    const token = localStorage.getItem('authToken');
-    const userData = localStorage.getItem('userData');
     
-    if (token && userData) {
-        const user = JSON.parse(userData);
-        redirectBasedOnRole(user.role);
-    }
-
-    // Tab functionality
-    const tabBtns = document.querySelectorAll('.tab-btn');
-    const tabContents = document.querySelectorAll('.tab-content');
-
-    tabBtns.forEach(btn => {
-        btn.addEventListener('click', function() {
-            tabBtns.forEach(b => b.classList.remove('active'));
-            this.classList.add('active');
-            
-            tabContents.forEach(content => content.classList.add('hidden'));
-            
-            const tabId = this.getAttribute('data-tab');
-            document.getElementById(`${tabId}-tab`).classList.remove('hidden');
-        });
-    });
-
     // Employee login form
     const employeeForm = document.getElementById('employee-login-form');
     if (employeeForm) {
         employeeForm.addEventListener('submit', async function(e) {
             e.preventDefault();
             
-            const employeeCode = document.getElementById('employee-code').value;
+            const employeeCode = document.getElementById('employee-code').value.trim();
             const password = document.getElementById('employee-password').value;
+            const rememberMe = document.getElementById('employee-remember').checked;
             
-            try {
-                const loginButton = this.querySelector('button[type="submit"]');
-                loginButton.disabled = true;
-                loginButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Signing In...';
-                
-                const result = await apiClient.login({
-                    username: employeeCode,
-                    password: password
-                });
-                
-                showNotification('Login successful!', 'success');
-                
-                setTimeout(() => {
-                    redirectBasedOnRole(result.user.role);
-                }, 1000);
-                
-            } catch (error) {
-                showNotification(error.message || 'Login failed', 'error');
-                
-                const loginButton = this.querySelector('button[type="submit"]');
-                loginButton.disabled = false;
-                loginButton.innerHTML = '<i class="fas fa-sign-in-alt"></i> Sign In';
+            if (!employeeCode || !password) {
+                showNotification('Please enter both employee code and password', 'error');
+                return;
             }
+
+            await handleLogin({
+                username: employeeCode,
+                password: password
+            }, employeeForm, 'employee');
         });
     }
 
@@ -244,41 +39,29 @@ document.addEventListener('DOMContentLoaded', function() {
         adminForm.addEventListener('submit', async function(e) {
             e.preventDefault();
             
-            const adminCode = document.getElementById('admin-code').value;
+            const adminCode = document.getElementById('admin-code').value.trim();
             const password = document.getElementById('admin-password').value;
+            const rememberMe = document.getElementById('admin-remember').checked;
             
-            try {
-                const loginButton = this.querySelector('button[type="submit"]');
-                loginButton.disabled = true;
-                loginButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Signing In...';
-                
-                const result = await apiClient.loginAdmin({
-                    username: adminCode,
-                    password: password
-                });
-                
-                showNotification('Admin login successful!', 'success');
-                
-                setTimeout(() => {
-                    window.location.href = 'admin-dashboard.html';
-                }, 1000);
-                
-            } catch (error) {
-                showNotification(error.message || 'Admin login failed', 'error');
-                
-                const loginButton = this.querySelector('button[type="submit"]');
-                loginButton.disabled = false;
-                loginButton.innerHTML = '<i class="fas fa-sign-in-alt"></i> Sign In';
+            if (!adminCode || !password) {
+                showNotification('Please enter both admin code and password', 'error');
+                return;
             }
+
+            await handleLogin({
+                username: adminCode,
+                password: password
+            }, adminForm, 'admin');
         });
     }
 
     // ==================== PASSWORD RESET FUNCTIONALITY ====================
-    const forgotPasswordLinks = document.querySelectorAll('.forgot-password');
-
-    // Create enhanced modals for password reset flow
+    
+    // Initialize password reset modals
     createPasswordResetModals();
-
+    
+    // Forgot password links
+    const forgotPasswordLinks = document.querySelectorAll('.forgot-password');
     forgotPasswordLinks.forEach(link => {
         link.addEventListener('click', function(e) {
             e.preventDefault();
@@ -293,41 +76,69 @@ document.addEventListener('DOMContentLoaded', function() {
             const targetId = this.getAttribute('data-target');
             const passwordInput = document.getElementById(targetId);
             
-            if (passwordInput && passwordInput.type === 'password') {
-                passwordInput.type = 'text';
-                this.classList.remove('fa-eye');
-                this.classList.add('fa-eye-slash');
-            } else if (passwordInput) {
-                passwordInput.type = 'password';
-                this.classList.remove('fa-eye-slash');
-                this.classList.add('fa-eye');
+            if (passwordInput) {
+                if (passwordInput.type === 'password') {
+                    passwordInput.type = 'text';
+                    this.classList.remove('fa-eye');
+                    this.classList.add('fa-eye-slash');
+                } else {
+                    passwordInput.type = 'password';
+                    this.classList.remove('fa-eye-slash');
+                    this.classList.add('fa-eye');
+                }
             }
         });
     });
 
-    // Enhanced modal close functionality
+    // Modal close functionality
     document.addEventListener('click', function(e) {
-        // Close modal when clicking X
-        if (e.target.classList.contains('close-modal')) {
-            hideAllModals();
-        }
-        
-        // Close modal when clicking outside
-        if (e.target.classList.contains('modal')) {
+        if (e.target.classList.contains('close-modal') || e.target.classList.contains('modal')) {
             hideAllModals();
         }
     });
 
-    // Add escape key to close modals
+    // Escape key to close modals
     document.addEventListener('keydown', function(e) {
         if (e.key === 'Escape') {
             hideAllModals();
         }
     });
 
-    // ==================== PASSWORD RESET MODAL FUNCTIONS ====================
+    // ==================== CORE FUNCTIONS ====================
+    
+    async function handleLogin(credentials, form, userType) {
+        try {
+            const loginButton = form.querySelector('button[type="submit"]');
+            setLoadingState(loginButton, true, 'Signing In...');
+            
+            let result;
+            if (userType === 'admin') {
+                result = await apiClient.loginAdmin(credentials);
+            } else {
+                result = await apiClient.login(credentials);
+            }
+            
+            showNotification('Login successful!', 'success');
+            
+            // Store remember me preference
+            if (document.getElementById(`${userType}-remember`).checked) {
+                localStorage.setItem('rememberMe', 'true');
+            }
+            
+            setTimeout(() => {
+                redirectBasedOnRole(result.user.role);
+            }, 1000);
+            
+        } catch (error) {
+            console.error('Login error:', error);
+            showNotification(error.message || 'Login failed. Please check your credentials.', 'error');
+            
+            const loginButton = form.querySelector('button[type="submit"]');
+            setLoadingState(loginButton, false);
+        }
+    }
+
     function createPasswordResetModals() {
-        // Check if modals already exist
         if (document.getElementById('initiate-reset-modal')) {
             return;
         }
@@ -375,7 +186,9 @@ document.addEventListener('DOMContentLoaded', function() {
                         </button>
                     </div>
                     <div id="method-info" class="method-info"></div>
-                    <button id="back-to-initiate" class="back-btn">Back</button>
+                    <button type="button" id="back-to-initiate" class="back-btn">
+                        <i class="fas fa-arrow-left"></i> Back
+                    </button>
                 </div>
             </div>
 
@@ -395,8 +208,12 @@ document.addEventListener('DOMContentLoaded', function() {
                                    placeholder="Enter your answer">
                         </div>
                         <div class="button-group">
-                            <button type="button" id="back-to-method-from-security" class="back-btn">Back</button>
-                            <button type="submit" class="reset-btn">Verify Answer</button>
+                            <button type="button" id="back-to-method-from-security" class="back-btn">
+                                <i class="fas fa-arrow-left"></i> Back
+                            </button>
+                            <button type="submit" class="reset-btn">
+                                <i class="fas fa-check"></i> Verify Answer
+                            </button>
                         </div>
                     </form>
                 </div>
@@ -419,8 +236,12 @@ document.addEventListener('DOMContentLoaded', function() {
                             <div class="code-hint">Check your email for the 6-digit verification code</div>
                         </div>
                         <div class="button-group">
-                            <button type="button" id="back-to-method-from-email" class="back-btn">Back</button>
-                            <button type="submit" class="reset-btn">Verify Code</button>
+                            <button type="button" id="back-to-method-from-email" class="back-btn">
+                                <i class="fas fa-arrow-left"></i> Back
+                            </button>
+                            <button type="submit" class="reset-btn">
+                                <i class="fas fa-check"></i> Verify Code
+                            </button>
                         </div>
                     </form>
                     <div class="resend-section">
@@ -442,20 +263,26 @@ document.addEventListener('DOMContentLoaded', function() {
                         <div class="form-group">
                             <label for="new-password">New Password</label>
                             <input type="password" id="new-password" name="newPassword" required 
-                                   placeholder="Enter new password (min. 6 characters)">
+                                   placeholder="Enter new password (min. 4 characters)"
+                                   minlength="4">
                             <i class="fas fa-eye toggle-password" data-target="new-password"></i>
                             <div id="password-strength" class="password-strength"></div>
                         </div>
                         <div class="form-group">
                             <label for="confirm-password">Confirm Password</label>
                             <input type="password" id="confirm-password" name="confirmPassword" required 
-                                   placeholder="Confirm your new password">
+                                   placeholder="Confirm your new password"
+                                   minlength="4">
                             <i class="fas fa-eye toggle-password" data-target="confirm-password"></i>
                             <div id="password-match" class="password-match"></div>
                         </div>
                         <div class="button-group">
-                            <button type="button" id="back-to-verification" class="back-btn">Back</button>
-                            <button type="submit" class="reset-btn">Reset Password</button>
+                            <button type="button" id="back-to-verification" class="back-btn">
+                                <i class="fas fa-arrow-left"></i> Back
+                            </button>
+                            <button type="submit" class="reset-btn">
+                                <i class="fas fa-key"></i> Reset Password
+                            </button>
                         </div>
                     </form>
                 </div>
@@ -469,7 +296,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     </div>
                     <h2>Password Reset Successful!</h2>
                     <p>Your password has been reset successfully. You can now log in with your new password.</p>
-                    <button id="go-to-login" class="login-btn">
+                    <button type="button" id="go-to-login" class="login-btn">
                         <i class="fas fa-sign-in-alt"></i> Go to Login
                     </button>
                 </div>
@@ -487,13 +314,14 @@ document.addEventListener('DOMContentLoaded', function() {
                         <p>No password reset methods are available for your account.</p>
                         <p>Please contact your system administrator to set up password recovery options.</p>
                     </div>
-                    <button id="close-contact-modal" class="reset-btn">OK</button>
+                    <button type="button" id="close-contact-modal" class="reset-btn">OK</button>
                 </div>
             </div>
         `;
 
         document.body.insertAdjacentHTML('beforeend', modalsHTML);
         setupPasswordResetEventListeners();
+        setupPasswordValidation();
     }
 
     function setupPasswordResetEventListeners() {
@@ -517,12 +345,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
                 try {
                     const button = this.querySelector('button[type="submit"]');
-                    button.disabled = true;
-                    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Checking...';
+                    setLoadingState(button, true, 'Checking...');
 
                     const result = await apiClient.initiatePasswordReset({ employeeCode });
                     
-                    button.disabled = false;
+                    setLoadingState(button, false);
                     button.innerHTML = '<i class="fas fa-key"></i> Continue';
 
                     if (result.contactAdmin) {
@@ -544,8 +371,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
                 } catch (error) {
                     const button = document.querySelector('#initiate-reset-form button[type="submit"]');
-                    button.disabled = false;
-                    button.innerHTML = '<i class="fas fa-key"></i> Continue';
+                    setLoadingState(button, false);
                     showNotification(error.message || 'Failed to initiate password reset', 'error');
                 }
             });
@@ -560,37 +386,16 @@ document.addEventListener('DOMContentLoaded', function() {
         });
 
         // Back Buttons
-        const backToInitiate = document.getElementById('back-to-initiate');
-        if (backToInitiate) {
-            backToInitiate.addEventListener('click', () => {
-                showModal('initiate-reset-modal');
-            });
-        }
-
-        const backToMethodFromSecurity = document.getElementById('back-to-method-from-security');
-        if (backToMethodFromSecurity) {
-            backToMethodFromSecurity.addEventListener('click', () => {
-                showModal('method-selection-modal');
-            });
-        }
-
-        const backToMethodFromEmail = document.getElementById('back-to-method-from-email');
-        if (backToMethodFromEmail) {
-            backToMethodFromEmail.addEventListener('click', () => {
-                showModal('method-selection-modal');
-            });
-        }
-
-        const backToVerification = document.getElementById('back-to-verification');
-        if (backToVerification) {
-            backToVerification.addEventListener('click', () => {
-                if (currentMethod === 'security_question') {
-                    showModal('security-question-modal');
-                } else {
-                    showModal('email-verification-modal');
-                }
-            });
-        }
+        setupBackButton('back-to-initiate', 'initiate-reset-modal');
+        setupBackButton('back-to-method-from-security', 'method-selection-modal');
+        setupBackButton('back-to-method-from-email', 'method-selection-modal');
+        setupBackButton('back-to-verification', () => {
+            if (currentMethod === 'security_question') {
+                showModal('security-question-modal');
+            } else {
+                showModal('email-verification-modal');
+            }
+        });
 
         // Security Question Form
         const securityQuestionForm = document.getElementById('security-question-form');
@@ -606,8 +411,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
                 try {
                     const button = this.querySelector('button[type="submit"]');
-                    button.disabled = true;
-                    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Verifying...';
+                    setLoadingState(button, true, 'Verifying...');
 
                     const result = await apiClient.verifySecurityAnswer({
                         employeeCode: currentEmployeeCode,
@@ -620,8 +424,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     
                 } catch (error) {
                     const button = document.querySelector('#security-question-form button[type="submit"]');
-                    button.disabled = false;
-                    button.innerHTML = 'Verify Answer';
+                    setLoadingState(button, false);
                     showNotification(error.message || 'Incorrect security answer', 'error');
                 }
             });
@@ -641,8 +444,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
                 try {
                     const button = this.querySelector('button[type="submit"]');
-                    button.disabled = true;
-                    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Verifying...';
+                    setLoadingState(button, true, 'Verifying...');
 
                     const result = await apiClient.verifyEmailCode({
                         employeeCode: currentEmployeeCode,
@@ -655,8 +457,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     
                 } catch (error) {
                     const button = document.querySelector('#email-verification-form button[type="submit"]');
-                    button.disabled = false;
-                    button.innerHTML = 'Verify Code';
+                    setLoadingState(button, false);
                     showNotification(error.message || 'Invalid verification code', 'error');
                 }
             });
@@ -667,21 +468,17 @@ document.addEventListener('DOMContentLoaded', function() {
         if (resendCodeBtn) {
             resendCodeBtn.addEventListener('click', async function() {
                 try {
-                    const button = this;
-                    button.disabled = true;
-                    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending...';
+                    setLoadingState(this, true, 'Sending...');
 
                     const result = await apiClient.sendEmailCode({ employeeCode: currentEmployeeCode });
                     
-                    button.disabled = false;
-                    button.innerHTML = '<i class="fas fa-redo"></i> Resend Code';
+                    setLoadingState(this, false);
+                    this.innerHTML = '<i class="fas fa-redo"></i> Resend Code';
                     
                     showNotification('Verification code sent successfully', 'success');
                     
                 } catch (error) {
-                    const button = document.getElementById('resend-code-btn');
-                    button.disabled = false;
-                    button.innerHTML = '<i class="fas fa-redo"></i> Resend Code';
+                    setLoadingState(resendCodeBtn, false);
                     showNotification(error.message || 'Failed to resend code', 'error');
                 }
             });
@@ -700,15 +497,14 @@ document.addEventListener('DOMContentLoaded', function() {
                     return;
                 }
 
-                if (newPassword.length < 6) {
-                    showNotification('Password must be at least 6 characters', 'error');
+                if (newPassword.length < 4) {
+                    showNotification('Password must be at least 4 characters', 'error');
                     return;
                 }
 
                 try {
                     const button = this.querySelector('button[type="submit"]');
-                    button.disabled = true;
-                    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Resetting...';
+                    setLoadingState(button, true, 'Resetting...');
 
                     await apiClient.resetPassword({
                         employeeCode: currentEmployeeCode,
@@ -720,8 +516,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     
                 } catch (error) {
                     const button = document.querySelector('#reset-password-form button[type="submit"]');
-                    button.disabled = false;
-                    button.innerHTML = 'Reset Password';
+                    setLoadingState(button, false);
                     showNotification(error.message || 'Password reset failed', 'error');
                 }
             });
@@ -732,15 +527,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (goToLoginBtn) {
             goToLoginBtn.addEventListener('click', function() {
                 hideAllModals();
-                // Clear all forms
-                document.querySelectorAll('form').forEach(form => form.reset());
-                const strengthElement = document.getElementById('password-strength');
-                const matchElement = document.getElementById('password-match');
-                if (strengthElement) strengthElement.textContent = '';
-                if (matchElement) matchElement.textContent = '';
-                currentEmployeeCode = '';
-                currentResetToken = '';
-                currentMethod = '';
+                resetPasswordResetForms();
             });
         }
 
@@ -749,6 +536,48 @@ document.addEventListener('DOMContentLoaded', function() {
         if (closeContactModal) {
             closeContactModal.addEventListener('click', function() {
                 hideAllModals();
+                resetPasswordResetForms();
+            });
+        }
+    }
+
+    function setupBackButton(buttonId, targetModal) {
+        const button = document.getElementById(buttonId);
+        if (button) {
+            button.addEventListener('click', () => {
+                if (typeof targetModal === 'function') {
+                    targetModal();
+                } else {
+                    showModal(targetModal);
+                }
+            });
+        }
+    }
+
+    function setupPasswordValidation() {
+        const newPasswordInput = document.getElementById('new-password');
+        const confirmPasswordInput = document.getElementById('confirm-password');
+
+        if (newPasswordInput) {
+            newPasswordInput.addEventListener('input', function() {
+                const strength = checkPasswordStrength(this.value);
+                const strengthElement = document.getElementById('password-strength');
+                if (strengthElement) {
+                    strengthElement.textContent = strength.feedback ? `Password strength: ${strength.feedback}` : '';
+                    strengthElement.className = `password-strength ${strength.className}`;
+                }
+            });
+        }
+
+        if (confirmPasswordInput) {
+            confirmPasswordInput.addEventListener('input', function() {
+                const newPassword = document.getElementById('new-password').value;
+                const match = checkPasswordMatch(newPassword, this.value);
+                const matchElement = document.getElementById('password-match');
+                if (matchElement) {
+                    matchElement.textContent = match.message;
+                    matchElement.className = `password-match ${match.className}`;
+                }
             });
         }
     }
@@ -810,5 +639,21 @@ document.addEventListener('DOMContentLoaded', function() {
                 showNotification(error.message || 'Failed to send verification code', 'error');
             }
         }
+    }
+
+    function resetPasswordResetForms() {
+        // Clear all forms
+        document.querySelectorAll('form').forEach(form => form.reset());
+        
+        // Clear password strength indicators
+        const strengthElement = document.getElementById('password-strength');
+        const matchElement = document.getElementById('password-match');
+        if (strengthElement) strengthElement.textContent = '';
+        if (matchElement) matchElement.textContent = '';
+        
+        // Reset state variables
+        currentEmployeeCode = '';
+        currentResetToken = '';
+        currentMethod = '';
     }
 });
