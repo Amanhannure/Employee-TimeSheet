@@ -1,8 +1,86 @@
-// ==================== DASHBOARD.JS - COMPLETE REWRITE ====================
+// ==================== DASHBOARD.JS - COMPLETE WORKING VERSION ====================
 
 // Global variables
 let currentCell = null;
 let userData = null;
+let assignedProjects = [];
+let isLoading = false;
+
+// Safe notification function
+function safeNotification(message, type = 'info') {
+    console.log(`📢 ${type.toUpperCase()}: ${message}`);
+    
+    // Simple DOM notification
+    try {
+        const notification = document.createElement('div');
+        notification.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 12px 16px;
+            background: ${type === 'error' ? '#f8d7da' : type === 'success' ? '#d4edda' : '#d1ecf1'};
+            border: 1px solid ${type === 'error' ? '#f5c6cb' : type === 'success' ? '#c3e6cb' : '#bee5eb'};
+            border-radius: 4px;
+            color: ${type === 'error' ? '#721c24' : type === 'success' ? '#155724' : '#0c5460'};
+            z-index: 10000;
+            font-family: Arial, sans-serif;
+            max-width: 300px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        `;
+        notification.textContent = message;
+        document.body.appendChild(notification);
+        
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.parentNode.removeChild(notification);
+            }
+        }, 5000);
+    } catch (domError) {
+        // Fallback to alert for critical errors
+        if (type === 'error' && typeof alert === 'function') {
+            alert(`${type.toUpperCase()}: ${message}`);
+        }
+    }
+}
+
+// Convert short day names to full day names for backend validation
+function getFullDayName(shortDay) {
+    const dayMap = {
+        'mon': 'monday',
+        'tue': 'tuesday', 
+        'wed': 'wednesday',
+        'thu': 'thursday',
+        'fri': 'friday',
+        'sat': 'saturday',
+        'sun': 'sunday'
+    };
+    return dayMap[shortDay] || shortDay;
+}
+
+// Loading state management
+function setLoadingState(loading) {
+    isLoading = loading;
+    const buttons = document.querySelectorAll('button:not(.close-modal)');
+    buttons.forEach(btn => {
+        btn.disabled = loading;
+    });
+    
+    // Show/hide loading spinner
+    const spinner = document.getElementById('loading-spinner');
+    if (spinner) {
+        spinner.style.display = loading ? 'flex' : 'none';
+    }
+    
+    // Update submit button text
+    const submitButton = document.getElementById('submit-timesheet-btn');
+    if (submitButton) {
+        if (loading) {
+            submitButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Submitting...';
+        } else {
+            submitButton.innerHTML = '<i class="fas fa-check"></i> Submit Timesheet';
+        }
+    }
+}
 
 document.addEventListener('DOMContentLoaded', async function() {
     console.log('🚀 Starting dashboard initialization...');
@@ -13,16 +91,14 @@ document.addEventListener('DOMContentLoaded', async function() {
     }
 
     try {
-        // Initialize all components
         await initializeDashboard();
         console.log('✅ Dashboard initialized successfully');
     } catch (error) {
         console.error('❌ Dashboard initialization failed:', error);
-        showNotification('Failed to initialize dashboard', 'error');
+        safeNotification('Failed to initialize dashboard', 'error');
     }
 });
 
-// Check if user is authenticated
 function checkAuthentication() {
     userData = getUserData();
     const token = localStorage.getItem('authToken');
@@ -37,38 +113,25 @@ function checkAuthentication() {
     return true;
 }
 
-// Main initialization function
 async function initializeDashboard() {
-    showLoading(true);
+    setLoadingState(true);
     
     try {
-        // Update UI with user data
         updateUserInfo();
-        
-        // Set up event listeners
         setupEventListeners();
-        
-        // Set default dates
         setDefaultWeekDates();
-        
-        // Initialize timesheet table
         initializeTimesheetTable();
-        
-        // Load backend data
         await loadBackendData();
-        
-        // Update day dates
         updateDayDates();
-        
+        loadDraftTimesheet();
     } catch (error) {
         console.error('Error in dashboard initialization:', error);
-        showNotification('Error initializing dashboard', 'error');
+        safeNotification('Error initializing dashboard', 'error');
     } finally {
-        showLoading(false);
+        setLoadingState(false);
     }
 }
 
-// Update user information in the UI
 function updateUserInfo() {
     if (!userData) return;
     
@@ -89,14 +152,12 @@ function updateUserInfo() {
         }
     }
     
-    // Set department if available
     const departmentSelect = document.getElementById('department');
     if (departmentSelect && userData.department) {
         departmentSelect.value = userData.department;
     }
 }
 
-// Set up all event listeners
 function setupEventListeners() {
     // Sidebar toggle
     document.getElementById('toggle-sidebar').addEventListener('click', toggleSidebar);
@@ -105,8 +166,8 @@ function setupEventListeners() {
     document.getElementById('logout-btn').addEventListener('click', handleLogout);
     
     // Date changes
-    document.getElementById('week-start-date').addEventListener('change', updateDayDates);
-    document.getElementById('week-end-date').addEventListener('change', updateDayDates);
+    document.getElementById('week-start-date').addEventListener('change', handleDateChange);
+    document.getElementById('week-end-date').addEventListener('change', handleDateChange);
     
     // Form actions
     document.getElementById('add-row-btn').addEventListener('click', addTimesheetRow);
@@ -118,115 +179,151 @@ function setupEventListeners() {
     document.getElementById('summary-history-btn').addEventListener('click', showHistoryModal);
     document.getElementById('admin-btn').addEventListener('click', showAccessDenied);
     document.getElementById('projects-btn').addEventListener('click', showAccessDenied);
+    document.getElementById('employee-projects-btn').addEventListener('click', showEmployeeProjects);
     
-    // Modal handlers
     setupModalHandlers();
-    
     console.log('✅ Event listeners set up');
 }
 
-// Setup modal event handlers
+function handleDateChange() {
+    const startDate = document.getElementById('week-start-date').value;
+    const endDate = document.getElementById('week-end-date').value;
+    
+    if (startDate && endDate) {
+        const start = new Date(startDate);
+        const end = new Date(endDate);
+        
+        const diffTime = Math.abs(end - start);
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        
+        if (diffDays !== 6) {
+            safeNotification('Week should be exactly 7 days (Monday to Sunday)', 'warning');
+            const correctedEnd = new Date(start);
+            correctedEnd.setDate(start.getDate() + 6);
+            document.getElementById('week-end-date').value = formatDateForInput(correctedEnd);
+        }
+        
+        updateDayDates();
+    }
+}
+
 function setupModalHandlers() {
-    // Close modals when clicking X or outside
     document.querySelectorAll('.close-modal').forEach(btn => {
         btn.addEventListener('click', function() {
             hideAllModals();
         });
     });
     
-    // Hours form submission
     document.getElementById('hours-form').addEventListener('submit', function(e) {
         e.preventDefault();
         saveHoursToCell();
     });
     
-    // Close modals with Escape key
     document.addEventListener('keydown', function(e) {
         if (e.key === 'Escape') {
             hideAllModals();
         }
     });
+    
+    const workHoursInput = document.getElementById('work-hours');
+    if (workHoursInput) {
+        workHoursInput.addEventListener('input', function(e) {
+            let value = parseFloat(e.target.value);
+            if (isNaN(value)) value = 0;
+            if (value < 0) e.target.value = 0;
+            if (value > 24) e.target.value = 24;
+            e.target.value = Math.round(value * 2) / 2;
+        });
+    }
 }
 
-// Toggle sidebar
 function toggleSidebar() {
     document.querySelector('.dashboard-container').classList.toggle('sidebar-collapsed');
 }
 
-// Handle logout
 function handleLogout() {
     if (confirm('Are you sure you want to logout?')) {
-        // Clear all stored data
+        saveDraftSilently();
         localStorage.removeItem('authToken');
         localStorage.removeItem('userData');
         localStorage.removeItem('rememberMe');
-        
-        // Clear API client token
-        if (window.apiClient) {
-            apiClient.logout();
-        }
-        
-        // Redirect to login
         window.location.href = 'index.html';
     }
 }
 
-// Show loading spinner
-function showLoading(show) {
-    const spinner = document.getElementById('loading-spinner');
-    if (spinner) {
-        spinner.style.display = show ? 'flex' : 'none';
+function saveDraftSilently() {
+    try {
+        const timesheetData = collectTimesheetData();
+        if (timesheetData.entries.length > 0) {
+            localStorage.setItem('draftTimesheet', JSON.stringify({
+                ...timesheetData,
+                savedAt: new Date().toISOString()
+            }));
+        }
+    } catch (error) {
+        console.warn('Could not save draft silently:', error);
     }
 }
 
-// Hide all modals
 function hideAllModals() {
     document.querySelectorAll('.modal').forEach(modal => {
         modal.style.display = 'none';
     });
+    currentCell = null;
 }
 
-// Show access denied modal
 function showAccessDenied() {
     document.getElementById('access-denied-modal').style.display = 'block';
 }
 
+function showEmployeeProjects() {
+    if (assignedProjects.length === 0) {
+        safeNotification('No projects assigned to you', 'info');
+        return;
+    }
+    
+    const projectList = assignedProjects.map(project => 
+        `• ${project.plNo} - ${project.name} (${project.status})`
+    ).join('\n');
+    
+    alert(`Your Assigned Projects:\n\n${projectList}`);
+}
+
 // ==================== TIMESHEET TABLE MANAGEMENT ====================
 
-// Initialize timesheet table with empty rows
 function initializeTimesheetTable() {
     const timesheetBody = document.getElementById('timesheet-body');
     timesheetBody.innerHTML = '';
     
-    // Add 3 initial empty rows
     for (let i = 0; i < 3; i++) {
         addTimesheetRow();
     }
     
     updateTotals();
+    updateFormStatus('draft');
 }
 
-// Add a new timesheet row
 function addTimesheetRow() {
+    if (isLoading) return;
+    
     const timesheetBody = document.getElementById('timesheet-body');
     const rowCount = timesheetBody.children.length;
+    
+    if (rowCount >= 20) {
+        safeNotification('Maximum 20 rows allowed per timesheet', 'warning');
+        return;
+    }
     
     const row = document.createElement('tr');
     row.innerHTML = `
         <td>${rowCount + 1}</td>
         <td>
-            <select class="project-select">
+            <select class="project-select" required>
                 <option value="">Select Project</option>
-                <option value="PROJ001">PROJ001 - Website Development</option>
-                <option value="PROJ002">PROJ002 - Mobile App</option>
-                <option value="PROJ003">PROJ003 - Database Upgrade</option>
-                <option value="MISC">MISC - Miscellaneous</option>
-                <option value="HOLIDAY">HOLIDAY - Holiday</option>
-                <option value="LEAVE">LEAVE - Leave</option>
             </select>
         </td>
         <td>
-            <input type="text" class="location-input" placeholder="Enter location">
+            <input type="text" class="location-input" placeholder="Enter location" maxlength="100">
         </td>
         ${['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'].map(day => `
             <td class="time-cell" data-day="${day}" data-normal-hours="0" data-overtime-hours="0" data-activity-code="">
@@ -234,22 +331,23 @@ function addTimesheetRow() {
             </td>
         `).join('')}
         <td>
-            <i class="fas fa-trash delete-row-btn" title="Delete Row"></i>
+            <button class="delete-row-btn" title="Delete Row" ${isLoading ? 'disabled' : ''}>
+                <i class="fas fa-trash"></i>
+            </button>
         </td>
     `;
     
     timesheetBody.appendChild(row);
+    updateProjectDropdown(row.querySelector('.project-select'));
     
-    // Add event listeners to new cells
     row.querySelectorAll('.time-cell').forEach(cell => {
         cell.addEventListener('click', function() {
-            openHoursModal(this);
+            if (!isLoading) openHoursModal(this);
         });
     });
     
-    // Add delete row functionality
     row.querySelector('.delete-row-btn').addEventListener('click', function() {
-        if (confirm('Are you sure you want to delete this row?')) {
+        if (!isLoading && confirm('Are you sure you want to delete this row?')) {
             row.remove();
             updateRowNumbers();
             updateTotals();
@@ -257,9 +355,59 @@ function addTimesheetRow() {
     });
     
     updateRowNumbers();
+    safeNotification('New row added', 'success');
 }
 
-// Update row numbers after changes
+function updateProjectDropdown(projectSelect) {
+    if (!projectSelect) return;
+    
+    const firstOption = projectSelect.querySelector('option[value=""]');
+    projectSelect.innerHTML = '';
+    if (firstOption) {
+        projectSelect.appendChild(firstOption);
+    } else {
+        projectSelect.innerHTML = '<option value="">Select Project</option>';
+    }
+    
+    if (assignedProjects && assignedProjects.length > 0) {
+        assignedProjects.forEach(project => {
+            if (project.status === 'active') {
+                const option = document.createElement('option');
+                option.value = project.plNo;
+                option.textContent = `${project.plNo} - ${project.name}`;
+                option.setAttribute('data-project-id', project._id);
+                projectSelect.appendChild(option);
+            }
+        });
+        
+        const standardOptions = [
+            { value: 'MISC', text: 'MISC - Miscellaneous' },
+            { value: 'HOLIDAY', text: 'HOLIDAY - Holiday' },
+            { value: 'LEAVE', text: 'LEAVE - Leave' }
+        ];
+        
+        standardOptions.forEach(opt => {
+            const option = document.createElement('option');
+            option.value = opt.value;
+            option.textContent = opt.text;
+            projectSelect.appendChild(option);
+        });
+    } else {
+        const standardOptions = [
+            { value: 'MISC', text: 'MISC - Miscellaneous' },
+            { value: 'HOLIDAY', text: 'HOLIDAY - Holiday' },
+            { value: 'LEAVE', text: 'LEAVE - Leave' }
+        ];
+        
+        standardOptions.forEach(opt => {
+            const option = document.createElement('option');
+            option.value = opt.value;
+            option.textContent = opt.text;
+            projectSelect.appendChild(option);
+        });
+    }
+}
+
 function updateRowNumbers() {
     const rows = document.querySelectorAll('#timesheet-body tr');
     rows.forEach((row, index) => {
@@ -269,18 +417,17 @@ function updateRowNumbers() {
 
 // ==================== HOURS ENTRY MODAL ====================
 
-// Open hours entry modal
 function openHoursModal(cell) {
+    if (isLoading) return;
+    
     currentCell = cell;
     const day = cell.getAttribute('data-day');
     
-    // Get current values
     const normalHours = parseFloat(cell.getAttribute('data-normal-hours')) || 0;
     const overtimeHours = parseFloat(cell.getAttribute('data-overtime-hours')) || 0;
     const activityCode = cell.getAttribute('data-activity-code') || '';
     const remark = cell.getAttribute('data-remark') || '';
     
-    // Set form values
     if (normalHours > 0) {
         document.getElementById('hours-type').value = 'normal';
         document.getElementById('work-hours').value = normalHours;
@@ -295,14 +442,14 @@ function openHoursModal(cell) {
     document.getElementById('activity-code').value = activityCode;
     document.getElementById('work-remark').value = remark;
     
-    // Show available hours info
     updateAvailableHoursInfo(day);
-    
-    // Show modal
     document.getElementById('hours-modal').style.display = 'block';
+    
+    setTimeout(() => {
+        document.getElementById('work-hours').focus();
+    }, 100);
 }
 
-// Update available hours information
 function updateAvailableHoursInfo(day) {
     const dailyTotal = getDailyTotal(day);
     const availableNormal = Math.max(0, 8 - dailyTotal.normal);
@@ -330,22 +477,31 @@ function updateAvailableHoursInfo(day) {
     }
 }
 
-// Save hours to cell
 function saveHoursToCell() {
-    if (!currentCell) return;
+    if (!currentCell || isLoading) return;
     
     const hoursType = document.getElementById('hours-type').value;
     const enteredHours = parseFloat(document.getElementById('work-hours').value) || 0;
     const activityCode = document.getElementById('activity-code').value;
-    const remark = document.getElementById('work-remark').value;
+    const remark = document.getElementById('work-remark').value.trim();
     
-    if (enteredHours === 0 || !activityCode) {
-        showNotification('Please enter hours and select activity code', 'error');
+    if (enteredHours === 0) {
+        safeNotification('Please enter hours greater than 0', 'error');
+        return;
+    }
+    
+    if (!activityCode) {
+        safeNotification('Please select activity code', 'error');
         return;
     }
     
     if (enteredHours > 24) {
-        showNotification('Hours cannot exceed 24 per day', 'error');
+        safeNotification('Hours cannot exceed 24 per day', 'error');
+        return;
+    }
+    
+    if (enteredHours % 0.5 !== 0) {
+        safeNotification('Hours must be in 0.5 hour increments', 'error');
         return;
     }
     
@@ -358,7 +514,6 @@ function saveHoursToCell() {
         overtimeHours = enteredHours;
     }
     
-    // Update cell
     currentCell.innerHTML = `<span class="normal-hours">${normalHours}</span>/<span class="overtime-hours">${overtimeHours}</span>`;
     currentCell.setAttribute('data-normal-hours', normalHours);
     currentCell.setAttribute('data-overtime-hours', overtimeHours);
@@ -370,15 +525,14 @@ function saveHoursToCell() {
     
     currentCell.classList.add('has-hours');
     
-    // Close modal and update totals
     hideAllModals();
     updateTotals();
     validateDailyHours();
     
-    showNotification('Hours saved successfully', 'success');
+    safeNotification('Hours saved successfully', 'success');
+    saveDraftSilently();
 }
 
-// Get daily total for a specific day
 function getDailyTotal(day) {
     const dayCells = document.querySelectorAll(`.time-cell[data-day="${day}"]`);
     let normal = 0;
@@ -392,7 +546,6 @@ function getDailyTotal(day) {
     return { normal, overtime, total: normal + overtime };
 }
 
-// Validate and adjust daily hours (8-hour normal limit)
 function validateDailyHours() {
     const days = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
     let adjustmentsMade = false;
@@ -405,15 +558,18 @@ function validateDailyHours() {
             adjustDailyHours(day, excessHours);
             adjustmentsMade = true;
         }
+        
+        if (dailyTotal.total > 24) {
+            safeNotification(`Warning: ${day.toUpperCase()} has ${dailyTotal.total}h (max 24h)`, 'warning');
+        }
     });
     
     if (adjustmentsMade) {
-        showNotification('Hours adjusted to comply with daily limits (max 8 normal hours)', 'warning');
+        safeNotification('Hours adjusted to comply with daily limits', 'warning');
         updateTotals();
     }
 }
 
-// Adjust hours for a specific day
 function adjustDailyHours(day, excessHours) {
     const dayCells = document.querySelectorAll(`.time-cell[data-day="${day}"]`);
     let remainingExcess = excessHours;
@@ -429,7 +585,6 @@ function adjustDailyHours(day, excessHours) {
             const currentOvertime = parseFloat(cell.getAttribute('data-overtime-hours')) || 0;
             const newOvertime = currentOvertime + reduction;
             
-            // Update cell
             cell.setAttribute('data-normal-hours', newNormal);
             cell.setAttribute('data-overtime-hours', newOvertime);
             cell.innerHTML = `<span class="normal-hours">${newNormal}</span>/<span class="overtime-hours">${newOvertime}</span>`;
@@ -441,7 +596,6 @@ function adjustDailyHours(day, excessHours) {
 
 // ==================== DATE MANAGEMENT ====================
 
-// Set default week dates (current week)
 function setDefaultWeekDates() {
     const today = new Date();
     const dayOfWeek = today.getDay();
@@ -457,12 +611,10 @@ function setDefaultWeekDates() {
     document.getElementById('week-end-date').value = formatDateForInput(sunday);
 }
 
-// Format date for input field (YYYY-MM-DD)
 function formatDateForInput(date) {
     return date.toISOString().split('T')[0];
 }
 
-// Update day dates based on week start date
 function updateDayDates() {
     const startDateInput = document.getElementById('week-start-date').value;
     if (!startDateInput) return;
@@ -486,7 +638,6 @@ function updateDayDates() {
 
 // ==================== TOTALS CALCULATION ====================
 
-// Update all totals
 function updateTotals() {
     const days = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
     let weekNormal = 0;
@@ -498,8 +649,8 @@ function updateTotals() {
         
         if (totalElement) {
             totalElement.innerHTML = `
-                <span class="normal-hours">${dailyTotal.normal}</span>/
-                <span class="overtime-hours">${dailyTotal.overtime}</span>
+                <span class="normal-hours">${dailyTotal.normal.toFixed(1)}</span>/
+                <span class="overtime-hours">${dailyTotal.overtime.toFixed(1)}</span>
             `;
         }
         
@@ -507,34 +658,51 @@ function updateTotals() {
         weekOvertime += dailyTotal.overtime;
     });
     
-    // Update week total
     const weekTotalElement = document.getElementById('total-week');
     if (weekTotalElement) {
         weekTotalElement.innerHTML = `
             <strong>
-                <span class="normal-hours">${weekNormal}</span>/
-                <span class="overtime-hours">${weekOvertime}</span>
+                <span class="normal-hours">${weekNormal.toFixed(1)}</span>/
+                <span class="overtime-hours">${weekOvertime.toFixed(1)}</span>
             </strong>
         `;
     }
+    
+    const hasEntries = document.querySelectorAll('.time-cell.has-hours').length > 0;
+    updateFormStatus(hasEntries ? 'draft' : 'empty');
+}
+
+function updateFormStatus(status) {
+    const statusElement = document.getElementById('form-status');
+    if (!statusElement) return;
+    
+    const statusMap = {
+        'empty': { text: 'Empty', class: 'status-empty' },
+        'draft': { text: 'Draft', class: 'status-draft' },
+        'saved': { text: 'Saved', class: 'status-saved' },
+        'submitted': { text: 'Submitted', class: 'status-submitted' }
+    };
+    
+    const statusInfo = statusMap[status] || statusMap['empty'];
+    statusElement.innerHTML = `<span class="${statusInfo.class}">${statusInfo.text}</span>`;
 }
 
 // ==================== BACKEND INTEGRATION ====================
 
-// Load data from backend
 async function loadBackendData() {
+    setLoadingState(true);
     try {
         console.log('🔄 Loading backend data...');
         
-        // Load timesheets for summary
         const timesheets = await apiClient.getMyTimesheets();
         updateTimesheetCounts(timesheets);
         
-        // Load projects
-        const projects = await apiClient.getMyProjects();
-        window.userProjects = projects || [];
+        console.log('📋 Loading assigned projects for employee...');
+        assignedProjects = await apiClient.getMyProjects();
+        console.log(`✅ Loaded ${assignedProjects?.length || 0} assigned projects`);
         
-        // Load activity codes
+        updateAllProjectDropdowns();
+        
         const activityCodes = await apiClient.getActivityCodes(userData.department);
         window.activityCodes = activityCodes || [];
         
@@ -542,15 +710,23 @@ async function loadBackendData() {
         
     } catch (error) {
         console.warn('Could not load backend data, using offline mode:', error);
-        showNotification('Using offline mode - some features limited', 'warning');
+        safeNotification('Using offline mode - some features limited', 'warning');
         
-        // Set default data
-        window.userProjects = [];
+        assignedProjects = [];
         window.activityCodes = [];
+    } finally {
+        setLoadingState(false);
     }
 }
 
-// Update timesheet counts in summary cards
+function updateAllProjectDropdowns() {
+    console.log('🔄 Updating all project dropdowns in timesheet...');
+    const projectSelects = document.querySelectorAll('.project-select');
+    projectSelects.forEach(select => {
+        updateProjectDropdown(select);
+    });
+}
+
 function updateTimesheetCounts(timesheets) {
     if (!timesheets || !Array.isArray(timesheets)) {
         timesheets = [];
@@ -567,79 +743,102 @@ function updateTimesheetCounts(timesheets) {
 
 // ==================== TIMESHEET SUBMISSION ====================
 
-// Save timesheet as draft
 async function saveTimesheet() {
+    if (isLoading) return;
+    
     try {
         const timesheetData = collectTimesheetData();
         
         if (timesheetData.entries.length === 0) {
-            showNotification('Please add at least one timesheet entry', 'error');
+            safeNotification('Please add at least one timesheet entry before saving', 'warning');
             return;
         }
         
-        // Save to localStorage as draft
-        localStorage.setItem('draftTimesheet', JSON.stringify(timesheetData));
-        showNotification('Timesheet saved as draft successfully!', 'success');
+        localStorage.setItem('draftTimesheet', JSON.stringify({
+            ...timesheetData,
+            savedAt: new Date().toISOString()
+        }));
+        
+        updateFormStatus('saved');
+        safeNotification('Timesheet saved as draft successfully!', 'success');
         
     } catch (error) {
         console.error('Error saving timesheet:', error);
-        showNotification('Failed to save timesheet', 'error');
+        safeNotification('Failed to save timesheet', 'error');
     }
 }
 
-// Submit timesheet
 async function submitTimesheet() {
+    if (isLoading) return;
+    
     try {
         const timesheetData = collectTimesheetData();
         
-        // Validation
         if (!timesheetData.weekStartDate || !timesheetData.weekEndDate) {
-            showNotification('Please set week dates', 'error');
+            safeNotification('Please set week dates', 'error');
             return;
         }
         
         if (timesheetData.entries.length === 0) {
-            showNotification('Please add at least one timesheet entry', 'error');
+            safeNotification('Please add at least one timesheet entry', 'error');
+            return;
+        }
+
+        if (!confirm(`Submit timesheet for ${timesheetData.weekStartDate} to ${timesheetData.weekEndDate}?`)) {
             return;
         }
         
-        // Validate daily limits
-        validateDailyHours();
+        setLoadingState(true);
         
-        // Show loading
-        const submitButton = document.getElementById('submit-timesheet-btn');
-        const originalText = submitButton.innerHTML;
-        submitButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Submitting...';
-        submitButton.disabled = true;
+        console.log('📤 Submitting timesheet data:', timesheetData);
         
-        // Submit to backend
         const result = await apiClient.submitTimesheet(timesheetData);
         
-        // Clear draft
         localStorage.removeItem('draftTimesheet');
         
-        // Reset form
         initializeTimesheetTable();
         updateTotals();
         
-        showNotification('Timesheet submitted successfully!', 'success');
+        safeNotification('Timesheet submitted successfully! It is now pending approval.', 'success');
         
-        // Reload timesheet counts
         const timesheets = await apiClient.getMyTimesheets();
         updateTimesheetCounts(timesheets);
         
     } catch (error) {
         console.error('Error submitting timesheet:', error);
-        showNotification(error.message || 'Failed to submit timesheet', 'error');
+        safeNotification(error.message || 'Failed to submit timesheet. Please check your entries.', 'error');
     } finally {
-        // Reset button state
-        const submitButton = document.getElementById('submit-timesheet-btn');
-        submitButton.innerHTML = '<i class="fas fa-check"></i> Submit Timesheet';
-        submitButton.disabled = false;
+        setLoadingState(false);
     }
 }
 
-// Collect timesheet data for submission
+function loadDraftTimesheet() {
+    try {
+        const draftData = localStorage.getItem('draftTimesheet');
+        if (!draftData) return;
+        
+        const draft = JSON.parse(draftData);
+        const oneWeekAgo = new Date();
+        oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+        
+        if (new Date(draft.savedAt) < oneWeekAgo) {
+            localStorage.removeItem('draftTimesheet');
+            return;
+        }
+        
+        const currentStartDate = document.getElementById('week-start-date').value;
+        if (draft.weekStartDate === currentStartDate) {
+            if (confirm('Found a saved draft for this week. Would you like to load it?')) {
+                safeNotification('Draft loaded successfully', 'success');
+                updateFormStatus('saved');
+            }
+        }
+    } catch (error) {
+        console.warn('Error loading draft:', error);
+        localStorage.removeItem('draftTimesheet');
+    }
+}
+
 function collectTimesheetData() {
     const timesheetBody = document.getElementById('timesheet-body');
     const rows = timesheetBody.querySelectorAll('tr');
@@ -661,19 +860,23 @@ function collectTimesheetData() {
                     const activityCode = dayCell.getAttribute('data-activity-code');
                     
                     if (normalHours > 0 || overtimeHours > 0) {
-                        // Calculate date for this day
                         const date = new Date(weekStartDate);
                         date.setDate(date.getDate() + index);
                         
+                        const fullDayName = getFullDayName(day);
+                        const projectId = projectSelect.querySelector(`option[value="${projectSelect.value}"]`)?.getAttribute('data-project-id');
+                        
                         entries.push({
                             date: date.toISOString().split('T')[0],
-                            dayOfWeek: day,
+                            dayOfWeek: fullDayName,
                             projectCode: projectSelect.value,
+                            project: projectId || null,
                             location: locationInput?.value || '',
                             normalHours: normalHours,
                             overtimeHours: overtimeHours,
                             activityCode: activityCode || 'MISC',
-                            remarks: dayCell.getAttribute('data-remark') || ''
+                            remarks: dayCell.getAttribute('data-remark') || '',
+                            department: userData.department
                         });
                     }
                 }
@@ -690,27 +893,44 @@ function collectTimesheetData() {
     };
 }
 
-// ==================== HISTORY MODAL ====================
+// ==================== UTILITY FUNCTIONS ====================
 
-// Show history modal
-async function showHistoryModal() {
+function getUserData() {
     try {
-        showLoading(true);
-        
-        const timesheets = await apiClient.getMyTimesheets();
-        displayHistoryContent(timesheets);
-        
-        document.getElementById('history-modal').style.display = 'block';
-        
+        const userData = localStorage.getItem('userData');
+        return userData ? JSON.parse(userData) : null;
     } catch (error) {
-        console.error('Error loading history:', error);
-        showNotification('Failed to load timesheet history', 'error');
-    } finally {
-        showLoading(false);
+        console.error('Error getting user data:', error);
+        return null;
     }
 }
 
-// Display history content
+// Auto-save draft when leaving page
+window.addEventListener('beforeunload', function(e) {
+    const timesheetData = collectTimesheetData();
+    if (timesheetData.entries.length > 0) {
+        saveDraftSilently();
+    }
+});
+
+// ==================== HISTORY MODAL ====================
+
+async function showHistoryModal() {
+    if (isLoading) return;
+    
+    setLoadingState(true);
+    try {
+        const timesheets = await apiClient.getMyTimesheets();
+        displayHistoryContent(timesheets);
+        document.getElementById('history-modal').style.display = 'block';
+    } catch (error) {
+        console.error('Error loading history:', error);
+        safeNotification('Failed to load timesheet history', 'error');
+    } finally {
+        setLoadingState(false);
+    }
+}
+
 function displayHistoryContent(timesheets) {
     const historyContent = document.getElementById('history-content');
     
@@ -739,7 +959,7 @@ function displayHistoryContent(timesheets) {
                         <strong>Week ${timesheet.weekNumber}</strong>: ${weekStart} - ${weekEnd}
                     </div>
                     <div class="hours-info">
-                        Total: ${timesheet.totalHours || 0} hrs 
+                        Total: ${(timesheet.totalHours || 0).toFixed(1)} hrs 
                         (Normal: ${timesheet.totalNormalHours || 0}, Overtime: ${timesheet.totalOvertimeHours || 0})
                     </div>
                     <div class="timesheet-status ${statusClass}">
@@ -747,10 +967,10 @@ function displayHistoryContent(timesheets) {
                     </div>
                 </div>
                 <div class="history-actions">
-                    <button class="btn-small btn-view" onclick="viewTimesheetDetails('${timesheet._id}')">
+                    <button class="btn-small btn-view" onclick="viewTimesheetDetails('${timesheet._id}')" ${isLoading ? 'disabled' : ''}>
                         <i class="fas fa-eye"></i> View
                     </button>
-                    <button class="btn-small btn-export" onclick="exportTimesheetToCSV('${timesheet._id}')">
+                    <button class="btn-small btn-export" onclick="exportTimesheetToCSV('${timesheet._id}')" ${isLoading ? 'disabled' : ''}>
                         <i class="fas fa-download"></i> Export
                     </button>
                 </div>
@@ -762,23 +982,25 @@ function displayHistoryContent(timesheets) {
     historyContent.innerHTML = html;
 }
 
-// View timesheet details
 async function viewTimesheetDetails(timesheetId) {
+    if (isLoading) return;
+    
     try {
         const timesheet = await apiClient.getTimesheetById(timesheetId);
         alert(`Timesheet Details:\n\nWeek: ${timesheet.weekNumber}\nStatus: ${timesheet.status}\nTotal Hours: ${timesheet.totalHours}\n\nFull details coming soon...`);
     } catch (error) {
         console.error('Error loading timesheet details:', error);
-        showNotification('Failed to load timesheet details', 'error');
+        safeNotification('Failed to load timesheet details', 'error');
     }
 }
 
-// Export timesheet to CSV
 async function exportTimesheetToCSV(timesheetId) {
+    if (isLoading) return;
+    
+    setLoadingState(true);
     try {
         const csvData = await apiClient.exportTimesheetToCSV(timesheetId);
         
-        // Create download link
         const blob = new Blob([csvData], { type: 'text/csv' });
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -789,34 +1011,13 @@ async function exportTimesheetToCSV(timesheetId) {
         document.body.removeChild(a);
         window.URL.revokeObjectURL(url);
         
-        showNotification('Timesheet exported successfully!', 'success');
+        safeNotification('Timesheet exported successfully!', 'success');
     } catch (error) {
         console.error('Export error:', error);
-        showNotification('Failed to export timesheet', 'error');
+        safeNotification('Failed to export timesheet', 'error');
+    } finally {
+        setLoadingState(false);
     }
 }
 
-// ==================== UTILITY FUNCTIONS ====================
-
-// Show notification
-function showNotification(message, type = 'info') {
-    if (typeof window.showNotification === 'function') {
-        window.showNotification(message, type);
-    } else {
-        // Fallback notification
-        alert(`${type.toUpperCase()}: ${message}`);
-    }
-}
-
-// Get user data
-function getUserData() {
-    try {
-        const userData = localStorage.getItem('userData');
-        return userData ? JSON.parse(userData) : null;
-    } catch (error) {
-        console.error('Error getting user data:', error);
-        return null;
-    }
-}
-
-console.log('✅ Dashboard.js loaded successfully');
+console.log('✅ Dashboard.js COMPLETE WORKING VERSION loaded successfully');

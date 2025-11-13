@@ -3,20 +3,26 @@ import {
   submitTimesheet,
   getMyTimesheets,
   getAllTimesheets,
+  getTimesheetById,
   approveTimesheet,
   rejectTimesheet,
   exportTimesheetToCSV,
   exportMultipleTimesheetsToCSV,
-  archiveOldTimesheets
+  archiveOldTimesheets,
+  healthCheck
 } from '../controllers/timesheetController.js';
 import { authenticate, authorizeAdmin, authorizeManager } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
+// Health check endpoint (public)
+router.get('/health', healthCheck);
+
 // Employee routes
 router.post('/submit', authenticate, submitTimesheet);
 router.get('/my-timesheets', authenticate, getMyTimesheets);
 router.get('/export/:id', authenticate, exportTimesheetToCSV);
+router.get('/:id', authenticate, getTimesheetById);
 
 // Admin/Manager routes
 router.get('/', authenticate, authorizeManager, getAllTimesheets);

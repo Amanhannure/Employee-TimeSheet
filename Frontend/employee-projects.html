@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Employee Timesheet - My Projects</title>
+    <link rel="stylesheet" href="css/dashboard.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        .projects-container {
+            padding: 20px;
+        }
+
+        .projects-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+        }
+
+        .projects-header h2 {
+            color: #2c3e50;
+            margin: 0;
+        }
+
+        .projects-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .project-card {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            border-left: 4px solid #3498db;
+            transition: transform 0.2s ease;
+        }
+
+        .project-card:hover {
+            transform: translateY(-2px);
+        }
+
+        .project-card.hold {
+            border-left-color: #e74c3c;
+        }
+
+        .project-card.completed {
+            border-left-color: #27ae60;
+        }
+
+        .project-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 15px;
+        }
+
+        .project-code {
+            font-weight: bold;
+            color: #2c3e50;
+            font-size: 1.1em;
+        }
+
+        .project-status {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.8em;
+            font-weight: bold;
+        }
+
+        .status-active {
+            background: #e8f5e8;
+            color: #27ae60;
+        }
+
+        .status-hold {
+            background: #fde8e8;
+            color: #e74c3c;
+        }
+
+        .status-completed {
+            background: #e8f4fd;
+            color: #3498db;
+        }
+
+        .project-name {
+            font-size: 1.2em;
+            font-weight: bold;
+            color: #2c3e50;
+            margin-bottom: 10px;
+        }
+
+        .project-description {
+            color: #7f8c8d;
+            margin-bottom: 15px;
+            line-height: 1.4;
+        }
+
+        .project-progress {
+            margin-bottom: 15px;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #ecf0f1;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-bottom: 5px;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: #3498db;
+            transition: width 0.3s ease;
+        }
+
+        .progress-fill.warning {
+            background: #f39c12;
+        }
+
+        .progress-fill.danger {
+            background: #e74c3c;
+        }
+
+        .progress-text {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.9em;
+            color: #7f8c8d;
+        }
+
+        .project-details {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+        }
+
+        .detail-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 0.9em;
+        }
+
+        .detail-row:last-child {
+            margin-bottom: 0;
+        }
+
+        .detail-label {
+            color: #7f8c8d;
+        }
+
+        .detail-value {
+            color: #2c3e50;
+            font-weight: 500;
+        }
+
+        .department-hours {
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid #e9ecef;
+        }
+
+        .department-hour-item {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.85em;
+            margin-bottom: 4px;
+        }
+
+        .no-projects {
+            text-align: center;
+            padding: 60px 20px;
+            color: #7f8c8d;
+        }
+
+        .no-projects i {
+            font-size: 3em;
+            margin-bottom: 20px;
+            color: #bdc3c7;
+        }
+
+        .loading-projects {
+            text-align: center;
+            padding: 40px 20px;
+        }
+
+        .project-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .btn-view-details {
+            background: #3498db;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.9em;
+            flex: 1;
+        }
+
+        .btn-view-details:hover {
+            background: #2980b9;
+        }
+
+        .refresh-btn {
+            background: #27ae60;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .refresh-btn:hover {
+            background: #219a52;
+        }
+
+        .projects-filters {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .filter-select {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            background: white;
+            min-width: 150px;
+        }
+
+        .project-detail-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 15px;
+        }
+
+        .project-detail-code {
+            font-weight: bold;
+            color: #2c3e50;
+            font-size: 1.2em;
+        }
+
+        .project-detail-status {
+            padding: 6px 16px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            font-weight: bold;
+        }
+
+        .project-detail-name {
+            font-size: 1.4em;
+            font-weight: bold;
+            color: #2c3e50;
+            margin-bottom: 20px;
+        }
+
+        .project-detail-description,
+        .project-detail-progress,
+        .project-detail-departments,
+        .project-detail-timeline {
+            margin-bottom: 25px;
+        }
+
+        .project-detail-description h4,
+        .project-detail-progress h4,
+        .project-detail-departments h4,
+        .project-detail-timeline h4 {
+            color: #2c3e50;
+            margin-bottom: 10px;
+            border-bottom: 1px solid #ecf0f1;
+            padding-bottom: 5px;
+        }
+
+        .progress-details {
+            margin-top: 15px;
+        }
+
+        .error-message {
+            text-align: center;
+            padding: 20px;
+            color: #e74c3c;
+        }
+
+        @media (max-width: 768px) {
+            .projects-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .projects-header {
+                flex-direction: column;
+                gap: 15px;
+                align-items: flex-start;
+            }
+            
+            .projects-filters {
+                flex-direction: column;
+            }
+            
+            .filter-select {
+                min-width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard-container">
+        <!-- Sidebar Navigation -->
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <div class="logo">
+                    <i class="fas fa-clock"></i>
+                    <h2>Timesheet</h2>
+                </div>
+            </div>
+            <div class="sidebar-menu">
+                <ul>
+                    <li>
+                        <a href="dashboard.html">
+                            <i class="fas fa-home"></i>
+                            <span>Dashboard</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="#" id="history-btn">
+                            <i class="fas fa-history"></i>
+                            <span>History</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="#" id="admin-btn">
+                            <i class="fas fa-shield-alt"></i>
+                            <span>Admin</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="#" id="projects-btn">
+                            <i class="fas fa-folder"></i>
+                            <span>Projects</span>
+                        </a>
+                    </li>
+                    <li class="active">
+                        <a href="employee-projects.html">
+                            <i class="fas fa-tasks"></i>
+                            <span>My Projects</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="leave.html">
+                            <i class="fas fa-calendar-alt"></i>
+                            <span>Leave Application</span>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+            <div class="sidebar-footer">
+                <button id="logout-btn" class="logout-btn">
+                    <i class="fas fa-sign-out-alt"></i>
+                    Logout
+                </button>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Top Navigation -->
+            <div class="top-nav">
+                <div class="nav-left">
+                    <button id="toggle-sidebar">
+                        <i class="fas fa-bars"></i>
+                    </button>
+                    <h2>My Projects</h2>
+                </div>
+                <div class="nav-right">
+                    <div class="user-info">
+                        <span id="employee-name">Loading...</span>
+                        <i class="fas fa-user-circle"></i>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Main Content Area -->
+            <div class="projects-container">
+                <div class="projects-header">
+                    <h2>My Assigned Projects</h2>
+                    <button id="refresh-projects" class="refresh-btn">
+                        <i class="fas fa-sync-alt"></i>
+                        Refresh
+                    </button>
+                </div>
+
+                <!-- Filters -->
+                <div class="projects-filters">
+                    <select id="status-filter" class="filter-select">
+                        <option value="">All Status</option>
+                        <option value="active">Active</option>
+                        <option value="hold">On Hold</option>
+                        <option value="completed">Completed</option>
+                    </select>
+                    
+                    <select id="department-filter" class="filter-select">
+                        <option value="">All Departments</option>
+                        <option value="IT">IT</option>
+                        <option value="HR">HR</option>
+                        <option value="Finance">Finance</option>
+                        <option value="Operations">Operations</option>
+                        <option value="Marketing">Marketing</option>
+                    </select>
+                </div>
+
+                <!-- Projects Grid -->
+                <div id="projects-grid" class="projects-grid">
+                    <div class="loading-projects">
+                        <i class="fas fa-spinner fa-spin"></i>
+                        <p>Loading your projects...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Project Details Modal -->
+    <div id="project-details-modal" class="modal">
+        <div class="modal-content large-modal">
+            <span class="close-modal">&times;</span>
+            <h2>Project Details</h2>
+            <div id="project-details-content">
+                <!-- Project details will be loaded here by JavaScript -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Access Denied Modal -->
+    <div id="access-denied-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal">&times;</span>
+            <h2>Access Denied</h2>
+            <p>You don't have permission to access this section.</p>
+            <div class="modal-actions">
+                <button class="btn btn-primary close-modal">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Spinner -->
+    <div id="loading-spinner" class="loading-spinner" style="display: none;">
+        <div class="spinner-content">
+            <i class="fas fa-spinner fa-spin fa-3x"></i>
+            <p>Loading...</p>
+        </div>
+    </div>
+
+    <script src="js/integration/api-client.js"></script>
+    <script src="js/integration/utils.js"></script>
+    <script src="js/employee-projects.js"></script>
+</body>
+</html>

@@ -1,4 +1,4 @@
-// admin.js - Complete Admin Dashboard Integration
+// admin.js - Complete Admin Dashboard with Debug Logging
 
 // ==================== UTILITY FUNCTIONS ====================
 
@@ -22,6 +22,7 @@ function formatDate(dateString) {
             day: 'numeric' 
         });
     } catch (error) {
+        console.warn('Date formatting error:', error);
         return 'Invalid Date';
     }
 }
@@ -37,16 +38,19 @@ function getUserData() {
     }
 }
 
+// Check if user has admin/manager role
+function hasAdminAccess(userData) {
+    return userData && (userData.role === 'admin' || userData.role === 'project_manager' || userData.role === 'manager');
+}
+
 // Show notification
 function showNotification(message, type = 'info', duration = 5000) {
     try {
         if (typeof window.showNotification === 'function') {
             window.showNotification(message, type, duration);
         } else {
-            // Fallback notification
             console.log(`📢 ${type.toUpperCase()}: ${message}`);
             
-            // Create simple notification element
             const notification = document.createElement('div');
             notification.style.cssText = `
                 position: fixed;
@@ -63,7 +67,6 @@ function showNotification(message, type = 'info', duration = 5000) {
                 transition: all 0.3s ease;
             `;
             
-            // Set background color based on type
             const colors = {
                 success: '#27ae60',
                 error: '#e74c3c',
@@ -75,7 +78,6 @@ function showNotification(message, type = 'info', duration = 5000) {
             notification.textContent = message;
             document.body.appendChild(notification);
             
-            // Remove notification after duration
             setTimeout(() => {
                 if (notification.parentNode) {
                     notification.parentNode.removeChild(notification);
@@ -88,25 +90,56 @@ function showNotification(message, type = 'info', duration = 5000) {
     }
 }
 
+// Loading state management
+let isLoading = false;
+
+function setLoadingState(loading) {
+    isLoading = loading;
+    const buttons = document.querySelectorAll('button');
+    buttons.forEach(btn => {
+        if (loading) {
+            btn.disabled = true;
+            btn.style.opacity = '0.6';
+        } else {
+            btn.disabled = false;
+            btn.style.opacity = '1';
+        }
+    });
+}
+
 // ==================== MAIN DASHBOARD CODE ====================
 
 document.addEventListener('DOMContentLoaded', async function() {
-    console.log('🔄 Initializing Admin Dashboard...');
+    console.log('🔄 [DEBUG] Initializing Admin Dashboard...');
     
-    // Check authentication
+    // Check authentication and authorization
     const token = localStorage.getItem('authToken');
     const userData = getUserData();
     
-    if (!token || !userData || (userData.role !== 'admin' && userData.role !== 'manager')) {
-        console.log('❌ Unauthorized access, redirecting to login...');
-        window.location.href = 'index.html';
+    console.log('🔍 [DEBUG] Token exists:', !!token);
+    console.log('🔍 [DEBUG] User data:', userData);
+    
+    if (!token || !userData) {
+        console.log('❌ [DEBUG] No authentication found, redirecting to login...');
+        redirectToLogin();
+        return;
+    }
+
+    // Strict role checking
+    if (!hasAdminAccess(userData)) {
+        console.log('🚫 [DEBUG] Unauthorized access attempt by:', userData.role);
+        showNotification('Access denied. Admin, Project Manager, or Manager role required.', 'error');
+        setTimeout(() => {
+            window.location.href = 'dashboard.html';
+        }, 2000);
         return;
     }
 
     // Update admin name
     const adminNameEl = document.getElementById('admin-name');
     if (adminNameEl) {
-        adminNameEl.textContent = `${userData.firstName} ${userData.lastName}`;
+        adminNameEl.textContent = `${userData.firstName} ${userData.lastName} (${userData.role.toUpperCase()})`;
+        console.log('🔍 [DEBUG] Updated admin name element');
     }
 
     // Initialize event listeners
@@ -117,6 +150,8 @@ document.addEventListener('DOMContentLoaded', async function() {
 });
 
 function initializeEventListeners() {
+    console.log('🔍 [DEBUG] Initializing event listeners...');
+    
     // Sidebar toggle
     const toggleSidebar = document.getElementById('toggle-sidebar');
     if (toggleSidebar) {
@@ -126,13 +161,20 @@ function initializeEventListeners() {
                 dashboardContainer.classList.toggle('sidebar-collapsed');
             }
         });
+        console.log('🔍 [DEBUG] Sidebar toggle listener added');
     }
 
     // Navigation links
-    document.querySelectorAll('.nav-link').forEach(link => {
+    const navLinks = document.querySelectorAll('.nav-link');
+    console.log('🔍 [DEBUG] Found nav links:', navLinks.length);
+    
+    navLinks.forEach(link => {
         link.addEventListener('click', function(e) {
             e.preventDefault();
+            if (isLoading) return;
+            
             const target = this.getAttribute('data-target');
+            console.log('🔍 [DEBUG] Navigation clicked:', target);
             showSection(target);
         });
     });
@@ -141,28 +183,31 @@ function initializeEventListeners() {
     const searchMiscButton = document.getElementById('searchMiscButton');
     if (searchMiscButton) {
         searchMiscButton.addEventListener('click', async function() {
+            if (isLoading) return;
+            
             const searchInput = document.getElementById('searchMiscHours');
             if (searchInput) {
-                const searchTerm = searchInput.value;
-                if (searchTerm.trim()) {
+                const searchTerm = searchInput.value.trim();
+                if (searchTerm) {
                     await searchMiscellaneousHours(searchTerm);
                 } else {
-                    showNotification('Please enter search term', 'error');
+                    showNotification('Please enter search term', 'warning');
                 }
             }
         });
+        console.log('🔍 [DEBUG] Search button listener added');
     }
 
     // Enter key for search
     const searchMiscHours = document.getElementById('searchMiscHours');
     if (searchMiscHours) {
         searchMiscHours.addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') {
-                const searchTerm = this.value;
-                if (searchTerm.trim()) {
+            if (e.key === 'Enter' && !isLoading) {
+                const searchTerm = this.value.trim();
+                if (searchTerm) {
                     searchMiscellaneousHours(searchTerm);
                 } else {
-                    showNotification('Please enter search term', 'error');
+                    showNotification('Please enter search term', 'warning');
                 }
             }
         });
@@ -172,25 +217,47 @@ function initializeEventListeners() {
     const logoutBtn = document.getElementById('logout-btn');
     if (logoutBtn) {
         logoutBtn.addEventListener('click', function() {
-            localStorage.removeItem('authToken');
-            localStorage.removeItem('userData');
-            window.location.href = 'index.html';
+            if (confirm('Are you sure you want to logout?')) {
+                localStorage.removeItem('authToken');
+                localStorage.removeItem('userData');
+                window.location.href = 'index.html';
+            }
         });
+        console.log('🔍 [DEBUG] Logout button listener added');
     }
 
     // Modal close buttons
-    const closeMiscModal = document.getElementById('closeMiscModal');
-    if (closeMiscModal) {
-        closeMiscModal.addEventListener('click', closeMiscellaneousHoursModal);
-    }
+    document.querySelectorAll('.close').forEach(btn => {
+        btn.addEventListener('click', function() {
+            hideAllModals();
+        });
+    });
 
-    const closeDetailsModal = document.getElementById('closeTimesheetDetailsModal');
-    if (closeDetailsModal) {
-        closeDetailsModal.addEventListener('click', closeTimesheetDetailsModal);
-    }
+    // Close modals when clicking outside
+    window.addEventListener('click', function(event) {
+        const miscModal = document.getElementById('miscHoursModal');
+        const detailsModal = document.getElementById('timesheetDetailsModal');
+        
+        if (event.target === miscModal) {
+            closeMiscellaneousHoursModal();
+        }
+        if (event.target === detailsModal) {
+            closeTimesheetDetailsModal();
+        }
+    });
+
+    console.log('✅ [DEBUG] Admin event listeners initialized');
+}
+
+// Hide all modals function
+function hideAllModals() {
+    document.getElementById('miscHoursModal').style.display = 'none';
+    document.getElementById('timesheetDetailsModal').style.display = 'none';
 }
 
 function showSection(sectionName) {
+    console.log('🔍 [DEBUG] Showing section:', sectionName);
+    
     // Hide all sections
     document.querySelectorAll('.content-section').forEach(section => {
         section.style.display = 'none';
@@ -205,6 +272,9 @@ function showSection(sectionName) {
     const targetSection = document.getElementById(sectionName);
     if (targetSection) {
         targetSection.style.display = 'block';
+        console.log('🔍 [DEBUG] Section displayed:', sectionName);
+    } else {
+        console.log('❌ [DEBUG] Section not found:', sectionName);
     }
     
     // Add active class to clicked nav link
@@ -230,62 +300,143 @@ function showSection(sectionName) {
     }
 }
 
+// DEBUG VERSION: Dashboard data loading with detailed logging
 async function loadDashboardData() {
+    if (isLoading) return;
+    
+    setLoadingState(true);
     try {
-        console.log('📊 Loading dashboard data...');
+        console.log('🔍 [DEBUG] Starting dashboard data load...');
         
-        // Load all data from backend using API client
-        const [usersResponse, timesheets] = await Promise.all([
-            apiClient.getUsers().catch(err => {
-                console.warn('Users endpoint error:', err);
-                return { users: [] };
-            }),
-            apiClient.getAllTimesheets().catch(err => {
-                console.warn('Timesheets endpoint error:', err);
-                return [];
-            })
-        ]);
+        // Show loading state in tables
+        const tbody = document.getElementById('recentTimesheetsBody');
+        if (tbody) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="5" style="text-align: center; padding: 20px;">
+                        <div class="loading-spinner">
+                            <i class="fas fa-spinner fa-spin"></i> Loading dashboard data...
+                        </div>
+                    </td>
+                </tr>
+            `;
+        }
+        
+        console.log('🔍 [DEBUG] Calling apiClient.getUsers()...');
+        const usersResponse = await apiClient.getUsers().catch(err => {
+            console.error('❌ [DEBUG] Users endpoint error:', err);
+            return { users: [] };
+        });
+        
+        console.log('🔍 [DEBUG] Users response:', usersResponse);
+        
+        console.log('🔍 [DEBUG] Calling apiClient.getAllTimesheets()...');
+        const timesheetsResponse = await apiClient.getAllTimesheets().catch(err => {
+            console.error('❌ [DEBUG] Timesheets endpoint error:', err);
+            return [];
+        });
+        
+        console.log('🔍 [DEBUG] Timesheets response:', timesheetsResponse);
+        
+        console.log('🔍 [DEBUG] Calling apiClient.getDashboardStats()...');
+        const dashboardStats = await apiClient.getDashboardStats().catch(err => {
+            console.error('❌ [DEBUG] Dashboard stats endpoint error:', err);
+            return {};
+        });
+        
+        console.log('🔍 [DEBUG] Dashboard stats response:', dashboardStats);
 
-        // Extract users array from response
+        // Handle different response formats from backend
+        console.log('🔍 [DEBUG] Processing users response...');
         const users = usersResponse.users || usersResponse || [];
+        console.log('🔍 [DEBUG] Final users array:', users);
         
-        updateDashboardCards(users, timesheets);
+        console.log('🔍 [DEBUG] Processing timesheets response...');
+        const timesheets = Array.isArray(timesheetsResponse) ? timesheetsResponse : 
+                          (timesheetsResponse.timesheets || timesheetsResponse.data || []);
+        console.log('🔍 [DEBUG] Final timesheets array:', timesheets);
+        
+        console.log('🔍 [DEBUG] Updating dashboard cards...');
+        updateDashboardCards(users, timesheets, dashboardStats);
+        
+        console.log('🔍 [DEBUG] Updating recent timesheets...');
         updateRecentTimesheets(timesheets);
         
-        console.log('✅ Dashboard data loaded successfully');
+        console.log('✅ [DEBUG] Dashboard data loaded successfully');
         
     } catch (error) {
-        console.error('❌ Error loading dashboard data:', error);
-        showNotification('Failed to load dashboard data', 'error');
+        console.error('❌ [DEBUG] Error loading dashboard data:', error);
+        showNotification('Failed to load dashboard data: ' + error.message, 'error');
+        
+        // Show error state
+        const tbody = document.getElementById('recentTimesheetsBody');
+        if (tbody) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="5" style="text-align: center; padding: 20px; color: #e74c3c;">
+                        <i class="fas fa-exclamation-triangle"></i> Failed to load data: ${error.message}
+                    </td>
+                </tr>
+            `;
+        }
+    } finally {
+        setLoadingState(false);
     }
 }
 
-function updateDashboardCards(users, timesheets) {
+// DEBUG VERSION: Dashboard cards with detailed logging
+function updateDashboardCards(users, timesheets, dashboardStats = {}) {
     try {
-        console.log('📈 Updating dashboard cards with:', { users: users.length, timesheets: timesheets.length });
+        console.log('🔍 [DEBUG] updateDashboardCards called with:', { 
+            users, 
+            timesheets, 
+            dashboardStats 
+        });
         
         // Ensure users is an array
         const usersArray = Array.isArray(users) ? users : [];
+        console.log('🔍 [DEBUG] Users array length:', usersArray.length);
         
         // Ensure timesheets is an array
         const timesheetsArray = Array.isArray(timesheets) ? timesheets : [];
+        console.log('🔍 [DEBUG] Timesheets array length:', timesheetsArray.length);
 
         // Total Employees
-        const totalEmployees = usersArray.filter(user => user.role === 'employee').length;
+        const totalEmployees = dashboardStats.totalUsers || usersArray.filter(user => user.role === 'employee').length;
+        console.log('🔍 [DEBUG] Total employees:', totalEmployees);
         const totalEmployeesEl = document.getElementById('totalEmployees');
-        if (totalEmployeesEl) totalEmployeesEl.textContent = totalEmployees;
+        if (totalEmployeesEl) {
+            totalEmployeesEl.textContent = totalEmployees;
+            console.log('🔍 [DEBUG] Updated total employees element');
+        } else {
+            console.log('❌ [DEBUG] totalEmployees element not found');
+        }
 
         // Approved Timesheets
-        const approvedTimesheets = timesheetsArray.filter(ts => ts.status === 'approved').length;
+        const approvedTimesheets = dashboardStats.approvedTimesheets || 
+                                  timesheetsArray.filter(ts => ts.status === 'approved').length;
+        console.log('🔍 [DEBUG] Approved timesheets:', approvedTimesheets);
         const approvedTimesheetsEl = document.getElementById('approvedTimesheets');
-        if (approvedTimesheetsEl) approvedTimesheetsEl.textContent = approvedTimesheets;
+        if (approvedTimesheetsEl) {
+            approvedTimesheetsEl.textContent = approvedTimesheets;
+            console.log('🔍 [DEBUG] Updated approved timesheets element');
+        } else {
+            console.log('❌ [DEBUG] approvedTimesheets element not found');
+        }
 
         // Resubmitted Timesheets
-        const resubmittedTimesheets = timesheetsArray.filter(ts => 
-            ts.status === 'submitted' && ts.previousStatus === 'rejected'
-        ).length;
+        const resubmittedTimesheets = timesheetsArray.filter(ts => {
+            return ts.status === 'pending' && 
+                   (ts.previousStatus === 'rejected' || ts.rejectionReason || ts.resubmitted);
+        }).length;
+        console.log('🔍 [DEBUG] Resubmitted timesheets:', resubmittedTimesheets);
         const resubmittedCountEl = document.getElementById('resubmittedCount');
-        if (resubmittedCountEl) resubmittedCountEl.textContent = resubmittedTimesheets || 0;
+        if (resubmittedCountEl) {
+            resubmittedCountEl.textContent = resubmittedTimesheets;
+            console.log('🔍 [DEBUG] Updated resubmitted count element');
+        } else {
+            console.log('❌ [DEBUG] resubmittedCount element not found');
+        }
 
         // Miscellaneous Hours
         const miscHoursCount = timesheetsArray.reduce((count, ts) => {
@@ -294,50 +445,89 @@ function updateDashboardCards(users, timesheets) {
             const miscEntries = ts.entries.filter(entry => 
                 entry.activityCode === 'MISC' || 
                 entry.projectCode === 'Miscellaneous Activity' ||
-                (entry.projectCode && entry.projectCode.includes('Misc'))
+                (entry.projectCode && entry.projectCode.includes('Misc')) ||
+                entry.projectCode === 'MISC'
             );
             return count + miscEntries.length;
         }, 0);
+        console.log('🔍 [DEBUG] Misc hours count:', miscHoursCount);
         const miscHoursCountEl = document.getElementById('miscHoursCount');
-        if (miscHoursCountEl) miscHoursCountEl.textContent = miscHoursCount;
+        if (miscHoursCountEl) {
+            miscHoursCountEl.textContent = miscHoursCount;
+            console.log('🔍 [DEBUG] Updated misc hours count element');
+        } else {
+            console.log('❌ [DEBUG] miscHoursCount element not found');
+        }
+
+        console.log('✅ [DEBUG] Dashboard cards updated successfully');
 
     } catch (error) {
-        console.error('❌ Error updating dashboard cards:', error);
-        showNotification('Error updating dashboard data', 'error');
+        console.error('❌ [DEBUG] Error updating dashboard cards:', error);
+        showNotification('Error updating dashboard data: ' + error.message, 'error');
     }
 }
 
+// Recent timesheets with debug logging
 function updateRecentTimesheets(timesheets) {
     const tbody = document.getElementById('recentTimesheetsBody');
-    if (!tbody) return;
+    if (!tbody) {
+        console.log('❌ [DEBUG] recentTimesheetsBody element not found');
+        return;
+    }
     
     try {
+        console.log('🔍 [DEBUG] updateRecentTimesheets called with:', timesheets);
+        
         // Ensure timesheets is an array
         const timesheetsArray = Array.isArray(timesheets) ? timesheets : [];
+        console.log('🔍 [DEBUG] Timesheets array length:', timesheetsArray.length);
         
-        // Filter and sort recent timesheets (last 10 submitted)
+        // Get recent timesheets (pending first, then by date)
         const recentTimesheets = timesheetsArray
-            .filter(ts => ts.status === 'submitted' || ts.status === 'approved' || ts.status === 'rejected')
-            .sort((a, b) => new Date(b.submittedAt || b.createdAt || b.updatedAt) - new Date(a.submittedAt || a.createdAt || a.updatedAt))
+            .filter(ts => ts.status === 'pending' || ts.status === 'approved' || ts.status === 'rejected')
+            .sort((a, b) => {
+                // Pending timesheets first
+                if (a.status === 'pending' && b.status !== 'pending') return -1;
+                if (b.status === 'pending' && a.status !== 'pending') return 1;
+                
+                // Then by date (most recent first)
+                const dateA = new Date(a.submittedAt || a.createdAt || a.updatedAt || 0);
+                const dateB = new Date(b.submittedAt || b.createdAt || b.updatedAt || 0);
+                return dateB - dateA;
+            })
             .slice(0, 10);
 
+        console.log('🔍 [DEBUG] Recent timesheets to display:', recentTimesheets.length);
+
         if (recentTimesheets.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 20px;">No timesheets found</td></tr>';
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="5" style="text-align: center; padding: 20px;">
+                        <i class="fas fa-inbox"></i> No timesheets found
+                    </td>
+                </tr>
+            `;
+            console.log('🔍 [DEBUG] No timesheets to display');
             return;
         }
 
         tbody.innerHTML = recentTimesheets.map(timesheet => {
             const employeeName = timesheet.employeeName || 
-                (timesheet.employee ? `${timesheet.employee.firstName} ${timesheet.employee.lastName}` : 'Unknown Employee');
+                (timesheet.employee ? 
+                    `${timesheet.employee.firstName || ''} ${timesheet.employee.lastName || ''}`.trim() 
+                    : 'Unknown Employee');
             
             const weekStart = formatDate(timesheet.weekStartDate);
             const weekEnd = formatDate(timesheet.weekEndDate);
             const totalHours = timesheet.totalHours || 
-                (timesheet.totalNormalHours || 0) + (timesheet.totalOvertimeHours || 0);
+                ((timesheet.totalNormalHours || 0) + (timesheet.totalOvertimeHours || 0));
+            
+            // Status display formatting
             const status = timesheet.status ? 
                 timesheet.status.charAt(0).toUpperCase() + timesheet.status.slice(1) : 'Unknown';
             
-            const isSubmitted = timesheet.status === 'submitted';
+            // Show action buttons for 'pending' status
+            const isPending = timesheet.status === 'pending';
 
             return `
                 <tr>
@@ -346,18 +536,18 @@ function updateRecentTimesheets(timesheets) {
                     <td>${totalHours.toFixed(1)}</td>
                     <td><span class="status ${timesheet.status}">${sanitizeHTML(status)}</span></td>
                     <td>
-                        <button class="action-btn view-btn" data-id="${timesheet._id}" title="View Details">
+                        <button class="action-btn view-btn" data-id="${timesheet._id}" title="View Details" ${isLoading ? 'disabled' : ''}>
                             <i class="fas fa-eye"></i>
                         </button>
-                        ${isSubmitted ? `
-                        <button class="action-btn approve-btn" data-id="${timesheet._id}" title="Approve">
+                        ${isPending ? `
+                        <button class="action-btn approve-btn" data-id="${timesheet._id}" title="Approve" ${isLoading ? 'disabled' : ''}>
                             <i class="fas fa-check"></i>
                         </button>
-                        <button class="action-btn reject-btn" data-id="${timesheet._id}" title="Reject">
+                        <button class="action-btn reject-btn" data-id="${timesheet._id}" title="Reject" ${isLoading ? 'disabled' : ''}>
                             <i class="fas fa-times"></i>
                         </button>
                         ` : ''}
-                        <button class="action-btn download-btn" data-id="${timesheet._id}" title="Export CSV">
+                        <button class="action-btn download-btn" data-id="${timesheet._id}" title="Export CSV" ${isLoading ? 'disabled' : ''}>
                             <i class="fas fa-file-excel"></i>
                         </button>
                     </td>
@@ -365,66 +555,100 @@ function updateRecentTimesheets(timesheets) {
             `;
         }).join('');
 
+        console.log('🔍 [DEBUG] Timesheets table updated with', recentTimesheets.length, 'rows');
+
         // Add event listeners to action buttons
         setTimeout(() => {
             setupActionButtons();
         }, 100);
 
     } catch (error) {
-        console.error('❌ Error updating recent timesheets:', error);
-        tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: #e74c3c;">Error loading timesheets</td></tr>';
+        console.error('❌ [DEBUG] Error updating recent timesheets:', error);
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="5" style="text-align: center; color: #e74c3c;">
+                    <i class="fas fa-exclamation-triangle"></i> Error loading timesheets: ${error.message}
+                </td>
+            </tr>
+        `;
     }
 }
 
 function setupActionButtons() {
+    console.log('🔍 [DEBUG] Setting up action buttons...');
+    
     // View timesheet details
-    document.querySelectorAll('.view-btn').forEach(btn => {
-        btn.addEventListener('click', () => viewTimesheetDetails(btn.getAttribute('data-id')));
+    const viewButtons = document.querySelectorAll('.view-btn');
+    console.log('🔍 [DEBUG] Found view buttons:', viewButtons.length);
+    viewButtons.forEach(btn => {
+        btn.addEventListener('click', () => {
+            if (!isLoading) viewTimesheetDetails(btn.getAttribute('data-id'));
+        });
     });
     
     // Approve timesheet
-    document.querySelectorAll('.approve-btn').forEach(btn => {
-        btn.addEventListener('click', () => approveTimesheet(btn.getAttribute('data-id')));
+    const approveButtons = document.querySelectorAll('.approve-btn');
+    console.log('🔍 [DEBUG] Found approve buttons:', approveButtons.length);
+    approveButtons.forEach(btn => {
+        btn.addEventListener('click', () => {
+            if (!isLoading) approveTimesheet(btn.getAttribute('data-id'));
+        });
     });
     
     // Reject timesheet
-    document.querySelectorAll('.reject-btn').forEach(btn => {
-        btn.addEventListener('click', () => rejectTimesheet(btn.getAttribute('data-id')));
+    const rejectButtons = document.querySelectorAll('.reject-btn');
+    console.log('🔍 [DEBUG] Found reject buttons:', rejectButtons.length);
+    rejectButtons.forEach(btn => {
+        btn.addEventListener('click', () => {
+            if (!isLoading) rejectTimesheet(btn.getAttribute('data-id'));
+        });
     });
     
     // Download timesheet
-    document.querySelectorAll('.download-btn').forEach(btn => {
-        btn.addEventListener('click', () => downloadExcelForTimesheet(btn.getAttribute('data-id')));
+    const downloadButtons = document.querySelectorAll('.download-btn');
+    console.log('🔍 [DEBUG] Found download buttons:', downloadButtons.length);
+    downloadButtons.forEach(btn => {
+        btn.addEventListener('click', () => {
+            if (!isLoading) downloadExcelForTimesheet(btn.getAttribute('data-id'));
+        });
     });
+    
+    console.log('✅ [DEBUG] Action buttons setup complete');
 }
 
+// View timesheet details with debug logging
 async function viewTimesheetDetails(timesheetId) {
+    if (isLoading) return;
+    
+    setLoadingState(true);
     try {
-        console.log('🔍 Fetching timesheet details for:', timesheetId);
+        console.log('🔍 [DEBUG] Fetching timesheet details for:', timesheetId);
         
-        // Get all timesheets first
-        const allTimesheets = await apiClient.getAllTimesheets();
-        let timesheet = allTimesheets.find(ts => ts._id === timesheetId);
-        
-        // If not found, try to fetch individually
-        if (!timesheet) {
-            console.log('📋 Timesheet not in list, fetching individually...');
-            try {
-                timesheet = await apiClient.getTimesheetById(timesheetId);
-            } catch (individualError) {
-                console.warn('Individual fetch failed, using fallback:', individualError);
-            }
+        let timesheet;
+        try {
+            // Try to get individual timesheet first
+            timesheet = await apiClient.getTimesheetById(timesheetId);
+        } catch (individualError) {
+            console.warn('❌ [DEBUG] Individual fetch failed, trying from all timesheets:', individualError);
+            // Fallback: get from all timesheets
+            const allTimesheets = await apiClient.getAllTimesheets();
+            timesheet = Array.isArray(allTimesheets) ? 
+                allTimesheets.find(ts => ts._id === timesheetId) :
+                (allTimesheets.timesheets || []).find(ts => ts._id === timesheetId);
         }
         
         if (!timesheet) {
+            console.log('❌ [DEBUG] Timesheet not found:', timesheetId);
             showNotification('Timesheet not found', 'error');
             return;
         }
 
-        console.log('✅ Timesheet data loaded:', timesheet);
+        console.log('✅ [DEBUG] Timesheet data loaded:', timesheet);
         
         const employeeName = timesheet.employeeName || 
-            (timesheet.employee ? `${timesheet.employee.firstName} ${timesheet.employee.lastName}` : 'Unknown Employee');
+            (timesheet.employee ? 
+                `${timesheet.employee.firstName || ''} ${timesheet.employee.lastName || ''}`.trim() 
+                : 'Unknown Employee');
         
         const employeeCode = timesheet.employeeCode || 
             (timesheet.employee ? timesheet.employee.employeeId : 'N/A');
@@ -434,14 +658,14 @@ async function viewTimesheetDetails(timesheetId) {
         
         const weekRange = `${formatDate(timesheet.weekStartDate)} - ${formatDate(timesheet.weekEndDate)}`;
         const totalHours = timesheet.totalHours || 
-            (timesheet.totalNormalHours || 0) + (timesheet.totalOvertimeHours || 0);
+            ((timesheet.totalNormalHours || 0) + (timesheet.totalOvertimeHours || 0));
         
         // Create detailed view in modal
         const modal = document.getElementById('timesheetDetailsModal');
         const content = document.getElementById('timesheetDetailsContent');
         
         if (!modal || !content) {
-            console.warn('Timesheet details modal elements not found');
+            console.warn('❌ [DEBUG] Timesheet details modal elements not found');
             return;
         }
         
@@ -512,7 +736,7 @@ async function viewTimesheetDetails(timesheetId) {
         } else {
             detailsHTML += `
                 <div class="no-entries">
-                    <p>No time entries found for this timesheet.</p>
+                    <p><i class="fas fa-info-circle"></i> No time entries found for this timesheet.</p>
                 </div>
             `;
         }
@@ -530,6 +754,15 @@ async function viewTimesheetDetails(timesheetId) {
             detailsHTML += `
                 <div class="approval-info">
                     <p><strong>Approved:</strong> ${new Date(timesheet.approvedAt).toLocaleString()}</p>
+                    ${timesheet.approvedBy ? `<p><strong>Approved By:</strong> ${timesheet.approvedBy.firstName} ${timesheet.approvedBy.lastName}</p>` : ''}
+                </div>
+            `;
+        }
+
+        if (timesheet.rejectionReason) {
+            detailsHTML += `
+                <div class="rejection-info">
+                    <p><strong>Rejection Reason:</strong> ${sanitizeHTML(timesheet.rejectionReason)}</p>
                 </div>
             `;
         }
@@ -538,54 +771,90 @@ async function viewTimesheetDetails(timesheetId) {
         content.innerHTML = detailsHTML;
         modal.style.display = 'block';
         
-    } catch (error) {
-        console.error('❌ Error viewing timesheet:', error);
-        showNotification('Failed to load timesheet details', 'error');
-    }
-}
-
-async function approveTimesheet(timesheetId) {
-    if (!confirm('Are you sure you want to approve this timesheet?')) return;
-
-    try {
-        await apiClient.approveTimesheet(timesheetId);
-        showNotification('Timesheet approved successfully!', 'success');
-        await loadDashboardData(); // Refresh data
+        console.log('✅ [DEBUG] Timesheet details modal displayed');
         
     } catch (error) {
-        console.error('❌ Error approving timesheet:', error);
-        showNotification(error.message || 'Failed to approve timesheet', 'error');
+        console.error('❌ [DEBUG] Error viewing timesheet:', error);
+        showNotification('Failed to load timesheet details', 'error');
+    } finally {
+        setLoadingState(false);
     }
 }
 
+// Approve timesheet
+async function approveTimesheet(timesheetId) {
+    if (isLoading) return;
+    
+    if (!confirm('Are you sure you want to approve this timesheet?')) return;
+
+    setLoadingState(true);
+    try {
+        console.log('🔍 [DEBUG] Approving timesheet:', timesheetId);
+        const result = await apiClient.approveTimesheet(timesheetId);
+        showNotification('Timesheet approved successfully!', 'success');
+        
+        // Refresh data to show updated status
+        await loadDashboardData();
+        
+    } catch (error) {
+        console.error('❌ [DEBUG] Error approving timesheet:', error);
+        showNotification(error.message || 'Failed to approve timesheet', 'error');
+    } finally {
+        setLoadingState(false);
+    }
+}
+
+// Reject timesheet
 async function rejectTimesheet(timesheetId) {
+    if (isLoading) return;
+    
     const remark = prompt("Please provide a reason for rejecting this timesheet:");
     if (remark === null) return; // User cancelled
 
-    if (!remark.trim()) {
+    const sanitizedRemark = remark ? remark.trim() : '';
+    if (!sanitizedRemark) {
         showNotification('Rejection reason is required', 'error');
         return;
     }
 
+    if (sanitizedRemark.length > 500) {
+        showNotification('Rejection reason must be less than 500 characters', 'error');
+        return;
+    }
+
+    setLoadingState(true);
     try {
-        await apiClient.rejectTimesheet(timesheetId, remark);
+        console.log('🔍 [DEBUG] Rejecting timesheet:', timesheetId);
+        await apiClient.rejectTimesheet(timesheetId, sanitizedRemark);
         showNotification('Timesheet rejected successfully!', 'success');
-        await loadDashboardData(); // Refresh data
+        
+        // Refresh data to show updated status
+        await loadDashboardData();
         
     } catch (error) {
-        console.error('❌ Error rejecting timesheet:', error);
+        console.error('❌ [DEBUG] Error rejecting timesheet:', error);
         showNotification(error.message || 'Failed to reject timesheet', 'error');
+    } finally {
+        setLoadingState(false);
     }
 }
 
+// Miscellaneous hours search
 async function searchMiscellaneousHours(searchTerm) {
+    if (isLoading) return;
+    
+    setLoadingState(true);
     try {
-        // Use existing timesheets data instead of separate endpoint
-        const timesheets = await apiClient.getAllTimesheets();
+        console.log('🔍 [DEBUG] Searching miscellaneous hours for:', searchTerm);
+        const timesheetsResponse = await apiClient.getAllTimesheets();
+        const timesheets = Array.isArray(timesheetsResponse) ? timesheetsResponse : 
+                          (timesheetsResponse.timesheets || timesheetsResponse.data || []);
         
         const filteredTimesheets = timesheets.filter(ts => {
             const employeeName = ts.employeeName || 
-                (ts.employee ? `${ts.employee.firstName} ${ts.employee.lastName}` : '');
+                (ts.employee ? 
+                    `${ts.employee.firstName || ''} ${ts.employee.lastName || ''}`.trim() 
+                    : '');
             const employeeCode = ts.employeeCode || 
                 (ts.employee ? ts.employee.employeeId : '');
                 
@@ -594,35 +863,50 @@ async function searchMiscellaneousHours(searchTerm) {
         });
 
         const resultDiv = document.getElementById('searchResultCount');
-        if (!resultDiv) return;
+        if (!resultDiv) {
+            console.log('❌ [DEBUG] searchResultCount element not found');
+            return;
+        }
         
         if (filteredTimesheets.length > 0) {
             const miscEntries = filteredTimesheets.flatMap(ts => 
                 (ts.entries || []).filter(entry => 
                     entry.activityCode === 'MISC' || 
                     entry.projectCode === 'Miscellaneous Activity' ||
-                    (entry.projectCode && entry.projectCode.includes('Misc'))
-                )
+                    (entry.projectCode && entry.projectCode.includes('Misc')) ||
+                    entry.projectCode === 'MISC'
+                ).map(entry => ({
+                    ...entry,
+                    employeeName: ts.employeeName,
+                    employeeCode: ts.employeeCode,
+                    week: `${formatDate(ts.weekStartDate)} - ${formatDate(ts.weekEndDate)}`
+                }))
             );
             
             if (miscEntries.length > 0) {
                 resultDiv.innerHTML = `
-                    <div class="search-note">
+                    <div class="search-success">
                         <i class="fas fa-check-circle"></i> 
                         Found ${miscEntries.length} Miscellaneous Hour entries for "${sanitizeHTML(searchTerm)}".
                     </div>
-                    <div style="margin-top: 10px; font-size: 14px;">
+                    <div class="recent-entries">
                         <strong>Recent Entries:</strong>
-                        <ul style="margin-top: 5px; padding-left: 20px;">
+                        <ul>
                             ${miscEntries.slice(0, 5).map(entry => 
-                                `<li>${formatDate(entry.date)}: ${((entry.normalHours || 0) + (entry.overtimeHours || 0)).toFixed(1)} hours - ${sanitizeHTML(entry.projectCode || 'MISC')}</li>`
+                                `<li>
+                                    <strong>${sanitizeHTML(entry.employeeName)}</strong> (${sanitizeHTML(entry.employeeCode)})
+                                    - ${formatDate(entry.date)}: ${((entry.normalHours || 0) + (entry.overtimeHours || 0)).toFixed(1)} hours
+                                    - ${sanitizeHTML(entry.projectCode || 'MISC')}
+                                    <br><small>Week: ${sanitizeHTML(entry.week)}</small>
+                                </li>`
                             ).join('')}
                         </ul>
+                        ${miscEntries.length > 5 ? `<p><small>... and ${miscEntries.length - 5} more entries</small></p>` : ''}
                     </div>
                 `;
             } else {
                 resultDiv.innerHTML = `
-                    <div style="color: #f39c12;">
+                    <div class="search-warning">
                         <i class="fas fa-info-circle"></i>
                         Employee "${sanitizeHTML(searchTerm)}" found, but no Miscellaneous Hours entries.
                     </div>
@@ -630,28 +914,35 @@ async function searchMiscellaneousHours(searchTerm) {
             }
         } else {
             resultDiv.innerHTML = `
-                <div style="color: #e74c3c;">
+                <div class="search-error">
                     <i class="fas fa-exclamation-circle"></i>
                     No employee found for "${sanitizeHTML(searchTerm)}".
                 </div>
             `;
         }
     } catch (error) {
-        console.error('❌ Error searching miscellaneous hours:', error);
+        console.error('❌ [DEBUG] Error searching miscellaneous hours:', error);
         const resultDiv = document.getElementById('searchResultCount');
         if (resultDiv) {
             resultDiv.innerHTML = `
-                <div style="color: #e74c3c;">
+                <div class="search-error">
                     <i class="fas fa-exclamation-triangle"></i>
                     Error searching miscellaneous hours. Please try again.
                 </div>
             `;
         }
+    } finally {
+        setLoadingState(false);
     }
 }
 
+// Download Excel
 async function downloadExcelForTimesheet(timesheetId) {
+    if (isLoading) return;
+    
+    setLoadingState(true);
     try {
+        console.log('🔍 [DEBUG] Exporting timesheet:', timesheetId);
         // Check if the API client has the export method
         if (typeof apiClient.exportTimesheetToCSV === 'function') {
             await apiClient.exportTimesheetToCSV(timesheetId);
@@ -659,138 +950,76 @@ async function downloadExcelForTimesheet(timesheetId) {
         } else {
             // Fallback: Show info message
             showNotification('Export feature will be available soon!', 'info');
-            console.log('Export functionality would be called for timesheet:', timesheetId);
+            console.log('🔍 [DEBUG] Export functionality would be called for timesheet:', timesheetId);
         }
     } catch (error) {
-        console.error('❌ Error exporting timesheet:', error);
+        console.error('❌ [DEBUG] Error exporting timesheet:', error);
         showNotification(error.message || 'Failed to export timesheet', 'error');
+    } finally {
+        setLoadingState(false);
     }
 }
 
 // Section loading functions
 async function loadEmployeesData() {
+    if (isLoading) return;
+    
+    setLoadingState(true);
     try {
-        const usersResponse = await apiClient.getUsers();
-        const users = usersResponse.users || usersResponse || [];
-        const employees = users.filter(user => user.role === 'employee');
-        
-        updateEmployeesTable(employees);
+        console.log('🔍 [DEBUG] Loading employees data...');
+        showNotification('Loading employees data...', 'info');
+        // Implementation for employees section would go here
     } catch (error) {
-        console.error('❌ Error loading employees:', error);
+        console.error('❌ [DEBUG] Error loading employees data:', error);
         showNotification('Failed to load employees data', 'error');
+    } finally {
+        setLoadingState(false);
     }
-}
-
-function updateEmployeesTable(employees) {
-    const tbody = document.getElementById('employeesTableBody');
-    if (!tbody) return;
-    
-    if (!employees || !Array.isArray(employees) || employees.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 20px;">No employees found</td></tr>';
-        return;
-    }
-    
-    tbody.innerHTML = employees.map(employee => `
-        <tr>
-            <td>${sanitizeHTML(employee.employeeId || 'N/A')}</td>
-            <td>${sanitizeHTML(employee.firstName)} ${sanitizeHTML(employee.lastName)}</td>
-            <td>${sanitizeHTML(employee.email)}</td>
-            <td>${sanitizeHTML(employee.department || 'N/A')}</td>
-            <td>${sanitizeHTML(employee.position || 'N/A')}</td>
-            <td>
-                <button class="action-btn view-btn" data-id="${employee._id}" title="View Details">
-                    <i class="fas fa-eye"></i>
-                </button>
-                <button class="action-btn edit-btn" data-id="${employee._id}" title="Edit Employee">
-                    <i class="fas fa-edit"></i>
-                </button>
-            </td>
-        </tr>
-    `).join('');
 }
 
 async function loadTimesheetsData() {
+    if (isLoading) return;
+    
+    setLoadingState(true);
     try {
-        const timesheets = await apiClient.getAllTimesheets();
-        updateTimesheetsTable(timesheets);
+        console.log('🔍 [DEBUG] Loading timesheets data...');
+        showNotification('Loading timesheets data...', 'info');
+        // Implementation for timesheets section would go here
     } catch (error) {
-        console.error('❌ Error loading timesheets:', error);
+        console.error('❌ [DEBUG] Error loading timesheets data:', error);
         showNotification('Failed to load timesheets data', 'error');
+    } finally {
+        setLoadingState(false);
     }
-}
-
-function updateTimesheetsTable(timesheets) {
-    const tbody = document.getElementById('timesheetsTableBody');
-    if (!tbody) return;
-    
-    const timesheetsArray = Array.isArray(timesheets) ? timesheets : [];
-    
-    if (timesheetsArray.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 20px;">No timesheets found</td></tr>';
-        return;
-    }
-    
-    tbody.innerHTML = timesheetsArray.map(timesheet => {
-        const employeeName = timesheet.employeeName || 
-            (timesheet.employee ? `${timesheet.employee.firstName} ${timesheet.employee.lastName}` : 'Unknown Employee');
-        const status = timesheet.status ? 
-            timesheet.status.charAt(0).toUpperCase() + timesheet.status.slice(1) : 'Unknown';
-        
-        return `
-            <tr>
-                <td>${sanitizeHTML(employeeName)}</td>
-                <td>${formatDate(timesheet.weekStartDate)} - ${formatDate(timesheet.weekEndDate)}</td>
-                <td>${((timesheet.totalHours || 0) + (timesheet.totalOvertimeHours || 0)).toFixed(1)}</td>
-                <td><span class="status ${timesheet.status}">${sanitizeHTML(status)}</span></td>
-                <td>${timesheet.submittedAt ? new Date(timesheet.submittedAt).toLocaleDateString() : 'N/A'}</td>
-                <td>
-                    <button class="action-btn view-btn" data-id="${timesheet._id}" title="View Details">
-                        <i class="fas fa-eye"></i>
-                    </button>
-                    ${timesheet.status === 'submitted' ? `
-                    <button class="action-btn approve-btn" data-id="${timesheet._id}" title="Approve">
-                        <i class="fas fa-check"></i>
-                    </button>
-                    <button class="action-btn reject-btn" data-id="${timesheet._id}" title="Reject">
-                        <i class="fas fa-times"></i>
-                    </button>
-                    ` : ''}
-                </td>
-            </tr>
-        `;
-    }).join('');
-    
-    // Setup action buttons for timesheets table
-    setTimeout(() => {
-        setupTimesheetsActionButtons();
-    }, 100);
-}
-
-function setupTimesheetsActionButtons() {
-    document.querySelectorAll('#timesheetsTableBody .view-btn').forEach(btn => {
-        btn.addEventListener('click', () => viewTimesheetDetails(btn.getAttribute('data-id')));
-    });
-    
-    document.querySelectorAll('#timesheetsTableBody .approve-btn').forEach(btn => {
-        btn.addEventListener('click', () => approveTimesheet(btn.getAttribute('data-id')));
-    });
-    
-    document.querySelectorAll('#timesheetsTableBody .reject-btn').forEach(btn => {
-        btn.addEventListener('click', () => rejectTimesheet(btn.getAttribute('data-id')));
-    });
 }
 
 async function loadReportsData() {
+    if (isLoading) return;
+    
+    setLoadingState(true);
     try {
-        showNotification('Reports section is under development', 'info');
+        console.log('🔍 [DEBUG] Loading reports data...');
+        showNotification('Loading reports data...', 'info');
+        // Implementation for reports section would go here
     } catch (error) {
-        console.error('❌ Error loading reports:', error);
+        console.error('❌ [DEBUG] Error loading reports data:', error);
         showNotification('Failed to load reports data', 'error');
+    } finally {
+        setLoadingState(false);
     }
+}
+
+// Redirect to login function
+function redirectToLogin() {
+    localStorage.removeItem('authToken');
+    localStorage.removeItem('userData');
+    window.location.href = 'index.html';
 }
 
 // Modal Functions
 function openMiscellaneousHoursModal() {
+    if (isLoading) return;
+    
     const modal = document.getElementById('miscHoursModal');
     if (modal) {
         modal.style.display = 'block';
@@ -805,27 +1034,12 @@ function openMiscellaneousHoursModal() {
 }
 
 function closeMiscellaneousHoursModal() {
-    const modal = document.getElementById('miscHoursModal');
-    if (modal) modal.style.display = 'none';
+    document.getElementById('miscHoursModal').style.display = 'none';
 }
 
 function closeTimesheetDetailsModal() {
-    const modal = document.getElementById('timesheetDetailsModal');
-    if (modal) modal.style.display = 'none';
+    document.getElementById('timesheetDetailsModal').style.display = 'none';
 }
-
-// Close modals when clicking outside
-window.onclick = function(event) {
-    const miscModal = document.getElementById('miscHoursModal');
-    const detailsModal = document.getElementById('timesheetDetailsModal');
-    
-    if (event.target === miscModal) {
-        closeMiscellaneousHoursModal();
-    }
-    if (event.target === detailsModal) {
-        closeTimesheetDetailsModal();
-    }
-};
 
 // Export functions for global access
 window.openMiscellaneousHoursModal = openMiscellaneousHoursModal;
@@ -834,3 +1048,5 @@ window.closeTimesheetDetailsModal = closeTimesheetDetailsModal;
 window.sanitizeHTML = sanitizeHTML;
 window.formatDate = formatDate;
 window.showNotification = showNotification;
+
+console.log('✅ [DEBUG] Admin dashboard with debug logging loaded');

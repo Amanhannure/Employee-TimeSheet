@@ -162,6 +162,8 @@
                 <!-- Variation Hours Display (only shown when editing) -->
                 <div id="variationDisplay" class="variation-display" style="display: none;"></div>
                 
+                <!-- ✅ REMOVED: Junior/Senior Hours Section -->
+                <!-- 
                 <div class="form-row">
                     <div class="form-group">
                         <label for="juniorHours">Junior Hours Allotted</label>
@@ -185,6 +187,7 @@
                         <input type="number" id="seniorCompleted" name="seniorCompleted" min="0" value="0">
                     </div>
                 </div>
+                -->
 
                 <div class="form-group">
                     <label for="departments">Select Departments *</label>
@@ -202,11 +205,13 @@
                     <small style="color: var(--text-secondary);">Hold Ctrl (Cmd on Mac) to select multiple departments</small>
                 </div>
 
+                <!-- ✅ UPDATED: Department Hours Allocation -->
                 <div class="form-group" id="departmentHoursContainer" style="display:none;">
-                    <label>Department-wise Hours Allotment</label>
+                    <label>Department Hours Allocation *</label>
                     <div id="departmentHoursInputs">
-                        <!-- Dynamic inputs for department hours allotment will be added here -->
+                        <!-- Dynamic inputs for department hours allocation will be added here -->
                     </div>
+                    <small style="color: var(--text-secondary);">Total allocated hours cannot exceed project total hours</small>
                 </div>
 
                 <div class="form-group">
@@ -229,7 +234,3 @@
     <script src="js/projects.js"></script>
 </body>
 </html>
-
-<read_file>
-<path>../OneDrive/Desktop/Techniche Engg/js/projects.js</path>
-</read_file>
