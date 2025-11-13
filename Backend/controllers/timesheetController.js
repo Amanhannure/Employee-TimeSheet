@@ -1,5 +1,6 @@
 import Timesheet from '../models/TimeSheet.js';
 import User from '../models/User.js';
+import Project from '../models/Project.js'; // ✅ ADDED Project import
 import { Parser } from 'json2csv';
 
 export const submitTimesheet = async (req, res) => {
@@ -98,6 +99,129 @@ export const submitTimesheet = async (req, res) => {
   }
 };
 
+// ✅ ADDED: Function to count project hours after approval
+const countProjectHours = async (timesheet) => {
+  try {
+    console.log('📊 Counting project hours for approved timesheet:', timesheet._id);
+    
+    const projectHours = {};
+    
+    // Group hours by project
+    timesheet.entries.forEach(entry => {
+      if (entry.projectCode) {
+        const projectId = entry.projectCode.toString();
+        const totalHours = (entry.normalHours || 0) + (entry.overtimeHours || 0);
+        
+        if (!projectHours[projectId]) {
+          projectHours[projectId] = 0;
+        }
+        projectHours[projectId] += totalHours;
+      }
+    });
+
+    // Update project hours
+    for (const [projectId, hours] of Object.entries(projectHours)) {
+      const project = await Project.findById(projectId);
+      if (project) {
+        // Update consumed hours
+        project.consumedHours += hours;
+        
+        // Check if project should be put on hold
+        if (project.consumedHours >= project.totalHours) {
+          project.status = 'hold';
+          console.log(`🛑 Project ${project.projectCode} put on hold - hours consumed`);
+        }
+        
+        await project.save();
+        console.log(`✅ Added ${hours} hours to project ${project.projectCode}`);
+      }
+    }
+    
+    return projectHours;
+  } catch (error) {
+    console.error('❌ Error counting project hours:', error);
+    throw error;
+  }
+};
+
+// ✅ FIXED: Approve timesheet function - checks for 'pending' status
+export const approveTimesheet = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const timesheet = await Timesheet.findById(id);
+    if (!timesheet) {
+      return res.status(404).json({ message: 'Timesheet not found' });
+    }
+
+    if (timesheet.status !== 'pending') { // ✅ FIXED: Changed from 'submitted' to 'pending'
+      return res.status(400).json({ message: 'Timesheet is not in pending status' });
+    }
+
+    // ✅ ADDED: Count project hours before approval
+    const projectHours = await countProjectHours(timesheet);
+
+    timesheet.status = 'approved';
+    timesheet.approvedBy = req.user.id;
+    timesheet.approvedAt = new Date();
+    await timesheet.save();
+
+    const populatedTimesheet = await Timesheet.findById(id)
+      .populate('employee', 'firstName lastName employeeId department')
+      .populate('approvedBy', 'firstName lastName');
+
+    res.json({
+      message: 'Timesheet approved successfully',
+      timesheet: populatedTimesheet,
+      projectHours: projectHours // ✅ ADDED: Return project hours data
+    });
+
+  } catch (error) {
+    console.error('Approve timesheet error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// ✅ FIXED: Reject timesheet function - checks for 'pending' status
+export const rejectTimesheet = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { remarks } = req.body;
+
+    const timesheet = await Timesheet.findById(id);
+    if (!timesheet) {
+      return res.status(404).json({ message: 'Timesheet not found' });
+    }
+
+    if (timesheet.status !== 'pending') { // ✅ FIXED: Changed from 'submitted' to 'pending'
+      return res.status(400).json({ message: 'Timesheet is not in pending status' });
+    }
+
+    if (!remarks) {
+      return res.status(400).json({ message: 'Rejection remarks are required' });
+    }
+
+    timesheet.status = 'rejected';
+    timesheet.rejectionReason = remarks;
+    await timesheet.save();
+
+    const populatedTimesheet = await Timesheet.findById(id)
+      .populate('employee', 'firstName lastName employeeId department')
+      .populate('approvedBy', 'firstName lastName');
+
+    res.json({
+      message: 'Timesheet rejected successfully',
+      timesheet: populatedTimesheet
+    });
+
+  } catch (error) {
+    console.error('Reject timesheet error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// ... rest of the existing functions remain unchanged ...
+
 export const getMyTimesheets = async (req, res) => {
   try {
     const { year, month } = req.query;
@@ -152,78 +276,6 @@ export const getAllTimesheets = async (req, res) => {
     res.json(timesheets);
   } catch (error) {
     console.error('Get all timesheets error:', error);
-    res.status(500).json({ message: 'Server error' });
-  }
-};
-
-// ✅ FIXED: Approve timesheet function - checks for 'pending' status
-export const approveTimesheet = async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    const timesheet = await Timesheet.findById(id);
-    if (!timesheet) {
-      return res.status(404).json({ message: 'Timesheet not found' });
-    }
-
-    if (timesheet.status !== 'pending') { // ✅ FIXED: Changed from 'submitted' to 'pending'
-      return res.status(400).json({ message: 'Timesheet is not in pending status' });
-    }
-
-    timesheet.status = 'approved';
-    timesheet.approvedBy = req.user.id;
-    timesheet.approvedAt = new Date();
-    await timesheet.save();
-
-    const populatedTimesheet = await Timesheet.findById(id)
-      .populate('employee', 'firstName lastName employeeId department')
-      .populate('approvedBy', 'firstName lastName');
-
-    res.json({
-      message: 'Timesheet approved successfully',
-      timesheet: populatedTimesheet
-    });
-
-  } catch (error) {
-    console.error('Approve timesheet error:', error);
-    res.status(500).json({ message: 'Server error' });
-  }
-};
-
-// ✅ FIXED: Reject timesheet function - checks for 'pending' status
-export const rejectTimesheet = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { remarks } = req.body;
-
-    const timesheet = await Timesheet.findById(id);
-    if (!timesheet) {
-      return res.status(404).json({ message: 'Timesheet not found' });
-    }
-
-    if (timesheet.status !== 'pending') { // ✅ FIXED: Changed from 'submitted' to 'pending'
-      return res.status(400).json({ message: 'Timesheet is not in pending status' });
-    }
-
-    if (!remarks) {
-      return res.status(400).json({ message: 'Rejection remarks are required' });
-    }
-
-    timesheet.status = 'rejected';
-    timesheet.rejectionReason = remarks;
-    await timesheet.save();
-
-    const populatedTimesheet = await Timesheet.findById(id)
-      .populate('employee', 'firstName lastName employeeId department')
-      .populate('approvedBy', 'firstName lastName');
-
-    res.json({
-      message: 'Timesheet rejected successfully',
-      timesheet: populatedTimesheet
-    });
-
-  } catch (error) {
-    console.error('Reject timesheet error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 };

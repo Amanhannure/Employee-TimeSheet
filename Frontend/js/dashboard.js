@@ -3,6 +3,7 @@
 // Global variables
 let currentCell = null;
 let userData = null;
+let assignedProjects = []; // ✅ ADDED: Store assigned projects
 
 document.addEventListener('DOMContentLoaded', async function() {
     console.log('🚀 Starting dashboard initialization...');
@@ -217,12 +218,7 @@ function addTimesheetRow() {
         <td>
             <select class="project-select">
                 <option value="">Select Project</option>
-                <option value="PROJ001">PROJ001 - Website Development</option>
-                <option value="PROJ002">PROJ002 - Mobile App</option>
-                <option value="PROJ003">PROJ003 - Database Upgrade</option>
-                <option value="MISC">MISC - Miscellaneous</option>
-                <option value="HOLIDAY">HOLIDAY - Holiday</option>
-                <option value="LEAVE">LEAVE - Leave</option>
+                <!-- Projects will be populated dynamically -->
             </select>
         </td>
         <td>
@@ -239,6 +235,9 @@ function addTimesheetRow() {
     `;
     
     timesheetBody.appendChild(row);
+    
+    // ✅ UPDATED: Populate project dropdown for this row
+    updateProjectDropdown(row.querySelector('.project-select'));
     
     // Add event listeners to new cells
     row.querySelectorAll('.time-cell').forEach(cell => {
@@ -257,6 +256,70 @@ function addTimesheetRow() {
     });
     
     updateRowNumbers();
+}
+
+// ✅ ADDED: Update project dropdown with assigned projects
+function updateProjectDropdown(projectSelect) {
+    console.log('🔄 Updating project dropdown with assigned projects');
+    
+    if (!projectSelect) return;
+    
+    // Clear existing options except the first one
+    const firstOption = projectSelect.querySelector('option[value=""]');
+    projectSelect.innerHTML = '';
+    if (firstOption) {
+        projectSelect.appendChild(firstOption);
+    } else {
+        projectSelect.innerHTML = '<option value="">Select Project</option>';
+    }
+    
+    // Add assigned projects
+    if (assignedProjects && assignedProjects.length > 0) {
+        console.log(`📋 Adding ${assignedProjects.length} assigned projects to dropdown`);
+        
+        assignedProjects.forEach(project => {
+            // Only show active projects
+            if (project.status === 'active') {
+                const option = document.createElement('option');
+                option.value = project.plNo; // Use PL No as identifier
+                option.textContent = `${project.plNo} - ${project.name}`;
+                option.setAttribute('data-project-id', project._id); // Store project ID
+                projectSelect.appendChild(option);
+            }
+        });
+        
+        // Add standard options (MISC, HOLIDAY, LEAVE) - these are always available
+        const standardOptions = [
+            { value: 'MISC', text: 'MISC - Miscellaneous' },
+            { value: 'HOLIDAY', text: 'HOLIDAY - Holiday' },
+            { value: 'LEAVE', text: 'LEAVE - Leave' }
+        ];
+        
+        standardOptions.forEach(opt => {
+            const option = document.createElement('option');
+            option.value = opt.value;
+            option.textContent = opt.text;
+            projectSelect.appendChild(option);
+        });
+        
+        console.log('✅ Project dropdown updated successfully');
+    } else {
+        console.log('⚠️ No assigned projects found, showing only standard options');
+        
+        // Show only standard options if no assigned projects
+        const standardOptions = [
+            { value: 'MISC', text: 'MISC - Miscellaneous' },
+            { value: 'HOLIDAY', text: 'HOLIDAY - Holiday' },
+            { value: 'LEAVE', text: 'LEAVE - Leave' }
+        ];
+        
+        standardOptions.forEach(opt => {
+            const option = document.createElement('option');
+            option.value = opt.value;
+            option.textContent = opt.text;
+            projectSelect.appendChild(option);
+        });
+    }
 }
 
 // Update row numbers after changes
@@ -530,9 +593,13 @@ async function loadBackendData() {
         const timesheets = await apiClient.getMyTimesheets();
         updateTimesheetCounts(timesheets);
         
-        // Load projects
-        const projects = await apiClient.getMyProjects();
-        window.userProjects = projects || [];
+        // ✅ UPDATED: Load assigned projects for this employee
+        console.log('📋 Loading assigned projects for employee...');
+        assignedProjects = await apiClient.getMyProjects();
+        console.log(`✅ Loaded ${assignedProjects?.length || 0} assigned projects`);
+        
+        // Update all project dropdowns in existing rows
+        updateAllProjectDropdowns();
         
         // Load activity codes
         const activityCodes = await apiClient.getActivityCodes(userData.department);
@@ -545,9 +612,18 @@ async function loadBackendData() {
         showNotification('Using offline mode - some features limited', 'warning');
         
         // Set default data
-        window.userProjects = [];
+        assignedProjects = [];
         window.activityCodes = [];
     }
+}
+
+// ✅ ADDED: Update all project dropdowns in the timesheet
+function updateAllProjectDropdowns() {
+    console.log('🔄 Updating all project dropdowns in timesheet...');
+    const projectSelects = document.querySelectorAll('.project-select');
+    projectSelects.forEach(select => {
+        updateProjectDropdown(select);
+    });
 }
 
 // Update timesheet counts in summary cards
@@ -665,15 +741,20 @@ function collectTimesheetData() {
                         const date = new Date(weekStartDate);
                         date.setDate(date.getDate() + index);
                         
+                        // ✅ UPDATED: Include project ID if it's an assigned project
+                        const projectId = projectSelect.querySelector(`option[value="${projectSelect.value}"]`)?.getAttribute('data-project-id');
+                        
                         entries.push({
                             date: date.toISOString().split('T')[0],
                             dayOfWeek: day,
                             projectCode: projectSelect.value,
+                            project: projectId || null, // Include project reference for hours tracking
                             location: locationInput?.value || '',
                             normalHours: normalHours,
                             overtimeHours: overtimeHours,
                             activityCode: activityCode || 'MISC',
-                            remarks: dayCell.getAttribute('data-remark') || ''
+                            remarks: dayCell.getAttribute('data-remark') || '',
+                            department: userData.department // Include department for project hours allocation
                         });
                     }
                 }

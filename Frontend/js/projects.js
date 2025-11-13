@@ -1,19 +1,25 @@
 document.addEventListener('DOMContentLoaded', async function() {
+    console.log('🚀 Projects.js: Starting initialization...');
+    
     try {
         await loadProjects();
         updateOverviewCards();
         populateEmployeeSelect();
+        console.log('✅ Projects.js initialized successfully');
     } catch (error) {
-        console.error('Failed to load projects:', error);
+        console.error('❌ Failed to load projects:', error);
         showNotification('Failed to load projects data', 'error');
     }
 
     document.getElementById('addProjectForm').addEventListener('submit', function(e) {
         e.preventDefault();
+        console.log('📝 Project form submitted');
         const editId = this.dataset.editId;
         if (editId) {
-            updateProject(parseInt(editId));
+            console.log('✏️ Updating project:', editId);
+            updateProject(editId);
         } else {
+            console.log('🆕 Adding new project');
             addProject();
         }
     });
@@ -26,9 +32,10 @@ document.addEventListener('DOMContentLoaded', async function() {
 
 async function loadProjects() {
     try {
+        console.log('📋 Loading projects from API...');
         const projects = await apiClient.getProjects();
         window.projects = projects;
-        console.log('Loaded projects:', projects);
+        console.log(`✅ Loaded ${projects.length} projects:`, projects);
         
         const grid = document.getElementById('projectsGrid');
         grid.innerHTML = '';
@@ -38,18 +45,23 @@ async function loadProjects() {
             grid.appendChild(card);
         });
     } catch (error) {
-        console.error('Error loading projects:', error);
+        console.error('❌ Error loading projects:', error);
         throw error;
     }
 }
 
 function createProjectCard(project) {
+    console.log(`🃏 Creating project card for: ${project.name}`);
+    
     const card = document.createElement('div');
     card.className = 'project-card';
 
-    const juniorProgress = project.juniorHours > 0 ? (project.juniorCompleted / project.juniorHours * 100).toFixed(1) : 0;
-    const seniorProgress = project.seniorHours > 0 ? (project.seniorCompleted / project.seniorHours * 100).toFixed(1) : 0;
-    const totalProgress = project.totalHours > 0 ? ((project.juniorCompleted + project.seniorCompleted) / project.totalHours * 100).toFixed(1) : 0;
+    // ✅ UPDATED: Calculate progress using department hours
+    const totalConsumed = project.departmentHours?.reduce((sum, dept) => sum + (dept.consumedHours || 0), 0) || 0;
+    const totalAllocated = project.departmentHours?.reduce((sum, dept) => sum + (dept.allocatedHours || 0), 0) || project.totalHours || 1;
+    const totalProgress = totalAllocated > 0 ? (totalConsumed / totalAllocated * 100).toFixed(1) : 0;
+
+    console.log(`📊 Project ${project.name} progress: ${totalConsumed}/${totalAllocated} = ${totalProgress}%`);
 
     card.innerHTML = `
         <div class="project-header">
@@ -64,15 +76,15 @@ function createProjectCard(project) {
             <div class="stat-row">
                 <div class="stat-item">
                     <div class="stat-label">Total Hours</div>
-                    <div class="stat-value">${project.totalHours}</div>
+                    <div class="stat-value">${totalAllocated}</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-label">Consumed Hours</div>
+                    <div class="stat-value">${totalConsumed}</div>
                 </div>
                 <div class="stat-item">
                     <div class="stat-label">Balance Hours</div>
-                    <div class="stat-value">${project.totalHours - (project.juniorCompleted + project.seniorCompleted)}</div>
-                </div>
-                <div class="stat-item">
-                    <div class="stat-label">Consumed</div>
-                    <div class="stat-value">${project.juniorCompleted + project.seniorCompleted}</div>
+                    <div class="stat-value">${totalAllocated - totalConsumed}</div>
                 </div>
             </div>
         </div>
@@ -111,10 +123,12 @@ function createProjectCard(project) {
 
 async function showAssignedEmployees(projectId) {
     try {
+        console.log(`👥 Showing assigned employees for project: ${projectId}`);
         const project = await apiClient.getProject(projectId);
         if (!project) return;
 
         const assignedEmps = project.assignedEmployees || [];
+        console.log(`📋 Found ${assignedEmps.length} assigned employees`);
 
         let employeeList = '';
         if (assignedEmps.length === 0) {
@@ -145,21 +159,24 @@ async function showAssignedEmployees(projectId) {
         document.body.appendChild(modal);
         modal.style.display = 'block';
     } catch (error) {
-        console.error('Error showing assigned employees:', error);
+        console.error('❌ Error showing assigned employees:', error);
         showNotification('Failed to load assigned employees', 'error');
     }
 }
 
 async function populateEmployeeSelect() {
     try {
+        console.log('👤 Populating employee select...');
         const users = await apiClient.getUsers();
         window.employees = users;
+        console.log(`📋 Loaded ${users.length} employees`);
         
         const select = document.getElementById('assignedEmployees');
         if (!select) return;
 
         const departmentSelect = document.getElementById('departments');
         const selectedDepartments = departmentSelect ? Array.from(departmentSelect.selectedOptions).map(option => option.value) : [];
+        console.log('🏢 Selected departments for filtering:', selectedDepartments);
 
         select.innerHTML = '';
 
@@ -168,6 +185,7 @@ async function populateEmployeeSelect() {
         let filteredEmployees = [];
 
         if (editId) {
+            console.log(`✏️ Edit mode - filtering employees for project: ${editId}`);
             const project = window.projects.find(p => p._id === editId);
             if (project && project.assignedEmployees) {
                 const previouslyAssigned = users.filter(emp => project.assignedEmployees.includes(emp._id));
@@ -176,11 +194,13 @@ async function populateEmployeeSelect() {
                 filteredEmployees = combined.filter((emp, index, self) =>
                     index === self.findIndex(e => e._id === emp._id)
                 );
+                console.log(`👥 Edit mode: ${filteredEmployees.length} filtered employees`);
             } else {
                 filteredEmployees = users.filter(emp => selectedDepartments.includes(emp.department));
             }
         } else {
             filteredEmployees = users.filter(emp => selectedDepartments.includes(emp.department));
+            console.log(`👥 Create mode: ${filteredEmployees.length} employees from selected departments`);
         }
 
         filteredEmployees.forEach(employee => {
@@ -190,30 +210,47 @@ async function populateEmployeeSelect() {
             select.appendChild(option);
         });
     } catch (error) {
-        console.error('Error populating employee select:', error);
+        console.error('❌ Error populating employee select:', error);
     }
 }
 
 async function addProject() {
     try {
+        console.log('🆕 Starting project creation...');
         const form = document.getElementById('addProjectForm');
         const formData = new FormData(form);
 
         const selectedEmployees = Array.from(formData.getAll('assignedEmployees'));
         const selectedDepartments = Array.from(formData.getAll('departments'));
 
+        console.log('📊 Form data:', {
+            selectedEmployees: selectedEmployees.length,
+            selectedDepartments: selectedDepartments
+        });
+
+        // ✅ UPDATED: Build department hours array
+        const departmentHours = selectedDepartments.map(dept => {
+            const allocatedHours = parseInt(formData.get(`deptHours_${dept}`)) || 0;
+            console.log(`🏢 Department ${dept}: ${allocatedHours} hours`);
+            return {
+                department: dept,
+                allocatedHours: allocatedHours,
+                consumedHours: 0
+            };
+        });
+
+        // ✅ UPDATED: Project data with department hours (removed junior/senior)
         const projectData = {
             plNo: formData.get('plNo'),
             name: formData.get('projectName'),
             totalHours: parseInt(formData.get('totalHours')),
-            juniorHours: parseInt(formData.get('juniorHours')) || 0,
-            juniorCompleted: parseInt(formData.get('juniorCompleted')) || 0,
-            seniorHours: parseInt(formData.get('seniorHours')) || 0,
-            seniorCompleted: parseInt(formData.get('seniorCompleted')) || 0,
+            departmentHours: departmentHours,
             status: formData.get('projectStatus') || 'active',
             assignedEmployees: selectedEmployees,
             departments: selectedDepartments
         };
+
+        console.log('📦 Final project data to send:', projectData);
 
         const newProject = await apiClient.createProject(projectData);
         
@@ -223,25 +260,28 @@ async function addProject() {
         form.reset();
         toggleAddProjectModal();
         showNotification('Project added successfully!');
+        console.log('✅ Project created successfully');
     } catch (error) {
-        console.error('Error adding project:', error);
+        console.error('❌ Error adding project:', error);
         showNotification(error.message || 'Failed to add project', 'error');
     }
 }
 
 async function editProject(id) {
     try {
+        console.log(`✏️ Loading project for editing: ${id}`);
         const project = await apiClient.getProject(id);
         if (!project) return;
 
+        console.log('📋 Project data loaded for editing:', project);
+
+        // ✅ UPDATED: Set basic form values
         document.getElementById('projectName').value = project.name;
         document.getElementById('plNo').value = project.plNo;
         document.getElementById('totalHours').value = project.totalHours;
-        document.getElementById('juniorHours').value = project.juniorHours;
-        document.getElementById('juniorCompleted').value = project.juniorCompleted;
-        document.getElementById('seniorHours').value = project.seniorHours;
-        document.getElementById('seniorCompleted').value = project.seniorCompleted;
         document.getElementById('projectStatus').value = project.status;
+
+        // ✅ REMOVED: Junior/Senior hours fields
 
         const select = document.getElementById('assignedEmployees');
         if (select) {
@@ -250,6 +290,7 @@ async function editProject(id) {
             });
 
             const assignedIds = project.assignedEmployees || [];
+            console.log(`👥 Setting ${assignedIds.length} assigned employees`);
             assignedIds.forEach(employeeId => {
                 const option = select.querySelector(`option[value="${employeeId}"]`);
                 if (option) {
@@ -264,6 +305,7 @@ async function editProject(id) {
                 option.selected = false;
             });
 
+            console.log(`🏢 Setting ${project.departments.length} departments`);
             project.departments.forEach(dept => {
                 const option = departmentSelect.querySelector(`option[value="${dept}"]`);
                 if (option) {
@@ -271,39 +313,68 @@ async function editProject(id) {
                 }
             });
 
+            // Populate department hours for editing
             handleDepartmentSelection();
+            
+            // Set department hours values
+            if (project.departmentHours) {
+                project.departmentHours.forEach(deptHours => {
+                    const input = document.getElementById(`deptHours_${deptHours.department}`);
+                    if (input) {
+                        input.value = deptHours.allocatedHours;
+                    }
+                });
+            }
         }
 
         document.querySelector('#addProjectModal .modal-header h2').textContent = 'Edit Project';
         document.querySelector('#addProjectModal .btn-primary').textContent = 'Save Changes';
         document.getElementById('addProjectForm').dataset.editId = id;
         toggleAddProjectModal();
+        console.log('✅ Edit form populated successfully');
     } catch (error) {
-        console.error('Error editing project:', error);
+        console.error('❌ Error editing project:', error);
         showNotification('Failed to load project data', 'error');
     }
 }
 
 async function updateProject(id) {
     try {
+        console.log(`💾 Updating project: ${id}`);
         const form = document.getElementById('addProjectForm');
         const formData = new FormData(form);
 
         const selectedEmployees = Array.from(formData.getAll('assignedEmployees'));
         const selectedDepartments = Array.from(formData.getAll('departments'));
 
+        console.log('📊 Update form data:', {
+            selectedEmployees: selectedEmployees.length,
+            selectedDepartments: selectedDepartments
+        });
+
+        // ✅ UPDATED: Build department hours array for update
+        const departmentHours = selectedDepartments.map(dept => {
+            const allocatedHours = parseInt(formData.get(`deptHours_${dept}`)) || 0;
+            console.log(`🏢 Department ${dept}: ${allocatedHours} hours`);
+            return {
+                department: dept,
+                allocatedHours: allocatedHours,
+                consumedHours: 0 // Reset consumed hours when updating allocation
+            };
+        });
+
+        // ✅ UPDATED: Project data with department hours (removed junior/senior)
         const projectData = {
             plNo: formData.get('plNo'),
             name: formData.get('projectName'),
             totalHours: parseInt(formData.get('totalHours')),
-            juniorHours: parseInt(formData.get('juniorHours')) || 0,
-            juniorCompleted: parseInt(formData.get('juniorCompleted')) || 0,
-            seniorHours: parseInt(formData.get('seniorHours')) || 0,
-            seniorCompleted: parseInt(formData.get('seniorCompleted')) || 0,
+            departmentHours: departmentHours,
             status: formData.get('projectStatus') || 'active',
             assignedEmployees: selectedEmployees,
             departments: selectedDepartments
         };
+
+        console.log('📦 Final update data:', projectData);
 
         await apiClient.updateProject(id, projectData);
         
@@ -316,8 +387,9 @@ async function updateProject(id) {
         document.querySelector('#addProjectModal .btn-primary').textContent = 'Add Project';
         document.getElementById('addProjectForm').dataset.editId = '';
         showNotification('Project updated successfully!');
+        console.log('✅ Project updated successfully');
     } catch (error) {
-        console.error('Error updating project:', error);
+        console.error('❌ Error updating project:', error);
         showNotification(error.message || 'Failed to update project', 'error');
     }
 }
@@ -332,17 +404,21 @@ function updateOverviewCards() {
     document.getElementById('activeProjects').textContent = activeProjects;
     document.getElementById('completedProjects').textContent = completedProjects;
     document.getElementById('onHoldProjects').textContent = onHoldProjects;
+
+    console.log(`📊 Overview updated - Total: ${totalProjects}, Active: ${activeProjects}, Completed: ${completedProjects}, On Hold: ${onHoldProjects}`);
 }
 
 async function deleteProject(id) {
     if (confirm('Are you sure you want to delete this project?')) {
         try {
+            console.log(`🗑️ Deleting project: ${id}`);
             await apiClient.deleteProject(id);
             await loadProjects();
             updateOverviewCards();
             showNotification('Project deleted successfully!');
+            console.log('✅ Project deleted successfully');
         } catch (error) {
-            console.error('Error deleting project:', error);
+            console.error('❌ Error deleting project:', error);
             showNotification(error.message || 'Failed to delete project', 'error');
         }
     }
@@ -353,12 +429,16 @@ function filterProjects() {
     const searchPLNoTerm = document.getElementById('searchPLNo').value.toLowerCase();
     const statusFilter = document.getElementById('filterStatus').value;
 
+    console.log(`🔍 Filtering projects - Search: "${searchTerm}", PL No: "${searchPLNoTerm}", Status: "${statusFilter}"`);
+
     const filteredProjects = (window.projects || []).filter(project => {
         const matchesSearch = project.name.toLowerCase().includes(searchTerm);
         const matchesPLNo = project.plNo.toLowerCase().includes(searchPLNoTerm);
         const matchesStatus = statusFilter === 'all' || project.status === statusFilter;
         return matchesSearch && matchesPLNo && matchesStatus;
     });
+
+    console.log(`📋 Filter results: ${filteredProjects.length} projects match criteria`);
 
     const grid = document.getElementById('projectsGrid');
     grid.innerHTML = '';
@@ -372,16 +452,19 @@ function filterProjects() {
 function toggleAddProjectModal() {
     const modal = document.getElementById('addProjectModal');
     modal.style.display = modal.style.display === 'block' ? 'none' : 'block';
+    console.log(`🪟 Add project modal: ${modal.style.display}`);
 }
 
 function closeAssignedEmployeesModal() {
     const modal = document.getElementById('assignedEmployeesModal');
     if (modal) {
         modal.remove();
+        console.log('❌ Assigned employees modal closed');
     }
 }
 
 function handleDepartmentSelection() {
+    console.log('🏢 Handling department selection...');
     const departmentSelect = document.getElementById('departments');
     if (!departmentSelect) return;
 
@@ -391,6 +474,8 @@ function handleDepartmentSelection() {
 
     if (!container || !inputsContainer) return;
 
+    console.log(`🏢 Selected departments: ${selectedDepartments.length} departments`);
+
     if (selectedDepartments.length > 0) {
         container.style.display = 'block';
         inputsContainer.innerHTML = '';
@@ -398,35 +483,15 @@ function handleDepartmentSelection() {
         selectedDepartments.forEach((dept, index) => {
             const deptDiv = document.createElement('div');
             deptDiv.className = 'form-row';
+            // ✅ UPDATED: Simplified department hours input (only allocated hours)
             deptDiv.innerHTML = `
                 <div class="form-group">
-                    <label for="deptHours_${dept}">${dept} Total Hours *</label>
-                    <input type="number" id="deptHours_${dept}" name="deptHours_${dept}" min="0" required>
-                </div>
-                <div class="form-group">
-                    <label for="deptCompleted_${dept}">${dept} Consumed Hours</label>
-                    <input type="number" id="deptCompleted_${dept}" name="deptCompleted_${dept}" min="0" value="0">
-                </div>
-                <div class="form-group">
-                    <label for="deptBalance_${dept}">${dept} Balance Hours</label>
-                    <input type="number" id="deptBalance_${dept}" name="deptBalance_${dept}" min="0" value="0" readonly>
+                    <label for="deptHours_${dept}">${dept} Allocated Hours *</label>
+                    <input type="number" id="deptHours_${dept}" name="deptHours_${dept}" min="1" required>
                 </div>
             `;
             inputsContainer.appendChild(deptDiv);
-
-            const totalInput = deptDiv.querySelector(`#deptHours_${dept}`);
-            const consumedInput = deptDiv.querySelector(`#deptCompleted_${dept}`);
-            const balanceInput = deptDiv.querySelector(`#deptBalance_${dept}`);
-
-            function updateBalance() {
-                const total = parseInt(totalInput.value) || 0;
-                const consumed = parseInt(consumedInput.value) || 0;
-                const balance = total - consumed;
-                balanceInput.value = balance >= 0 ? balance : 0;
-            }
-
-            totalInput.addEventListener('input', updateBalance);
-            consumedInput.addEventListener('input', updateBalance);
+            console.log(`✅ Added department hours input for: ${dept}`);
         });
 
         populateEmployeeSelect();
@@ -437,10 +502,12 @@ function handleDepartmentSelection() {
         if (employeeSelect) {
             employeeSelect.innerHTML = '';
         }
+        console.log('❌ No departments selected, hiding department hours');
     }
 }
 
 function showNotification(message) {
+    console.log(`📢 Notification: ${message}`);
     const notification = document.createElement('div');
     notification.className = 'notification';
     notification.textContent = message;
@@ -465,6 +532,7 @@ function showNotification(message) {
 }
 
 document.getElementById('toggle-sidebar').addEventListener('click', function() {
+    console.log('🔘 Sidebar toggle clicked');
     document.querySelector('.dashboard-container').classList.toggle('sidebar-collapsed');
 });
 
@@ -472,9 +540,11 @@ window.onclick = function(event) {
     const addModal = document.getElementById('addProjectModal');
     const assignedModal = document.getElementById('assignedEmployeesModal');
     if (event.target === addModal) {
+        console.log('❌ Add project modal closed (outside click)');
         addModal.style.display = 'none';
     }
     if (event.target === assignedModal) {
+        console.log('❌ Assigned employees modal closed (outside click)');
         closeAssignedEmployeesModal();
     }
 };

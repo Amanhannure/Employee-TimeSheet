@@ -371,6 +371,11 @@ class ApiClient {
         }
     }
 
+    // ✅ ADDED: Get single project details
+    async getProject(projectId) {
+        return await this.request(`/projects/${projectId}`);
+    }
+
     async createProject(projectData) {
         return await this.request('/projects', {
             method: 'POST',
@@ -488,12 +493,68 @@ class ApiClient {
 
     getMockProjects() {
         return [
-            { _id: '1', projectCode: 'PROJ001', name: 'Website Development', status: 'active' },
-            { _id: '2', projectCode: 'PROJ002', name: 'Mobile App', status: 'active' },
-            { _id: '3', projectCode: 'PROJ003', name: 'Database Upgrade', status: 'active' },
-            { _id: '4', projectCode: 'MISC', name: 'Miscellaneous Activity', status: 'active' },
-            { _id: '5', projectCode: 'HOLIDAY', name: 'Holiday', status: 'active' },
-            { _id: '6', projectCode: 'LEAVE', name: 'Leave', status: 'active' }
+            { 
+                _id: '1', 
+                projectCode: 'PROJ001', 
+                name: 'Website Development', 
+                status: 'active',
+                totalHours: 200,
+                consumedHours: 50,
+                departmentHours: {
+                    IT: 150,
+                    Design: 50
+                }
+            },
+            { 
+                _id: '2', 
+                projectCode: 'PROJ002', 
+                name: 'Mobile App', 
+                status: 'active',
+                totalHours: 300,
+                consumedHours: 120,
+                departmentHours: {
+                    IT: 200,
+                    QA: 100
+                }
+            },
+            { 
+                _id: '3', 
+                projectCode: 'PROJ003', 
+                name: 'Database Upgrade', 
+                status: 'active',
+                totalHours: 100,
+                consumedHours: 75,
+                departmentHours: {
+                    IT: 100
+                }
+            },
+            { 
+                _id: '4', 
+                projectCode: 'MISC', 
+                name: 'Miscellaneous Activity', 
+                status: 'active',
+                totalHours: 0,
+                consumedHours: 0,
+                departmentHours: {}
+            },
+            { 
+                _id: '5', 
+                projectCode: 'HOLIDAY', 
+                name: 'Holiday', 
+                status: 'active',
+                totalHours: 0,
+                consumedHours: 0,
+                departmentHours: {}
+            },
+            { 
+                _id: '6', 
+                projectCode: 'LEAVE', 
+                name: 'Leave', 
+                status: 'active',
+                totalHours: 0,
+                consumedHours: 0,
+                departmentHours: {}
+            }
         ];
     }
 

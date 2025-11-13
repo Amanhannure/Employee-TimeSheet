@@ -80,14 +80,32 @@ export const authorizeAdmin = (req, res, next) => {
   next();
 };
 
-// Manager authorization middleware (includes admin)
+// ✅ ADDED: Project Manager authorization middleware (includes admin)
+export const authorizeProjectManager = (req, res, next) => {
+  if (!req.user) {
+    return res.status(401).json({ message: 'Authentication required' });
+  }
+  
+  const allowedRoles = ['admin', 'project_manager'];
+  if (!allowedRoles.includes(req.user.role)) {
+    return res.status(403).json({ 
+      message: 'Access denied. Project Manager or Admin privileges required.' 
+    });
+  }
+  next();
+};
+
+// Manager authorization middleware (includes admin and project_manager)
 export const authorizeManager = (req, res, next) => {
   if (!req.user) {
     return res.status(401).json({ message: 'Authentication required' });
   }
   
-  if (req.user.role !== 'admin' && req.user.role !== 'manager') {
-    return res.status(403).json({ message: 'Access denied. Manager or Admin privileges required.' });
+  const allowedRoles = ['admin', 'manager', 'project_manager'];
+  if (!allowedRoles.includes(req.user.role)) {
+    return res.status(403).json({ 
+      message: 'Access denied. Manager, Project Manager or Admin privileges required.' 
+    });
   }
   next();
 };
@@ -130,8 +148,8 @@ export const authorizeSelfOrHigher = (req, res, next) => {
     return next();
   }
   
-  // Managers can access any user data in their department
-  if (req.user.role === 'manager') {
+  // Managers and Project Managers can access any user data in their department
+  if (req.user.role === 'manager' || req.user.role === 'project_manager') {
     // This would require additional department checking logic
     return next();
   }
