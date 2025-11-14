@@ -552,6 +552,17 @@ class ApiClient {
 
     // ==================== PROJECT ENDPOINTS ====================
 
+    // ✅ ADDED: Missing getProjects method
+    async getProjects() {
+        try {
+            const projects = await this.request('/projects');
+            return Array.isArray(projects) ? projects : [];
+        } catch (error) {
+            console.warn('Could not load projects, returning mock data');
+            return this.getMockProjects();
+        }
+    }
+
     async getMyProjects() {
         try {
             const projects = await this.request('/projects/my-projects');

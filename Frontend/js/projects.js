@@ -1,10 +1,11 @@
+// projects.js - Complete Fixed Version
 document.addEventListener('DOMContentLoaded', async function() {
     console.log('🚀 Projects.js: Starting initialization...');
     
     try {
         await loadProjects();
         updateOverviewCards();
-        populateEmployeeSelect();
+        await populateEmployeeSelect();
         console.log('✅ Projects.js initialized successfully');
     } catch (error) {
         console.error('❌ Failed to load projects:', error);
@@ -33,7 +34,7 @@ document.addEventListener('DOMContentLoaded', async function() {
 async function loadProjects() {
     try {
         console.log('📋 Loading projects from API...');
-        const projects = await apiClient.getProjects();
+        const projects = await apiClient.getAllProjects();
         window.projects = projects;
         console.log(`✅ Loaded ${projects.length} projects:`, projects);
         
@@ -164,51 +165,67 @@ async function showAssignedEmployees(projectId) {
     }
 }
 
-async function populateEmployeeSelect() {
+// ✅ FIXED: Updated populateEmployeeSelect function
+async function populateEmployeeSelect(selectedDepartments = []) {
     try {
         console.log('👤 Populating employee select...');
-        const users = await apiClient.getUsers();
-        window.employees = users;
-        console.log(`📋 Loaded ${users.length} employees`);
         
-        const select = document.getElementById('assignedEmployees');
-        if (!select) return;
-
-        const departmentSelect = document.getElementById('departments');
-        const selectedDepartments = departmentSelect ? Array.from(departmentSelect.selectedOptions).map(option => option.value) : [];
-        console.log('🏢 Selected departments for filtering:', selectedDepartments);
-
-        select.innerHTML = '';
-
-        const form = document.getElementById('addProjectForm');
-        const editId = form ? form.dataset.editId : null;
-        let filteredEmployees = [];
-
-        if (editId) {
-            console.log(`✏️ Edit mode - filtering employees for project: ${editId}`);
-            const project = window.projects.find(p => p._id === editId);
-            if (project && project.assignedEmployees) {
-                const previouslyAssigned = users.filter(emp => project.assignedEmployees.includes(emp._id));
-                const deptEmployees = users.filter(emp => selectedDepartments.includes(emp.department));
-                const combined = [...previouslyAssigned, ...deptEmployees];
-                filteredEmployees = combined.filter((emp, index, self) =>
-                    index === self.findIndex(e => e._id === emp._id)
-                );
-                console.log(`👥 Edit mode: ${filteredEmployees.length} filtered employees`);
-            } else {
-                filteredEmployees = users.filter(emp => selectedDepartments.includes(emp.department));
+        const response = await apiClient.getUsers();
+        console.log('📋 API Response:', response);
+        
+        // FIX: Handle different API response structures
+        let users = [];
+        if (Array.isArray(response)) {
+            users = response;
+        } else if (response && Array.isArray(response.users)) {
+            users = response.users;
+        } else if (response && Array.isArray(response.data)) {
+            users = response.data;
+        } else if (response && typeof response === 'object') {
+            // If response is an object with array inside, try to find the array
+            for (const key in response) {
+                if (Array.isArray(response[key])) {
+                    users = response[key];
+                    break;
+                }
             }
-        } else {
-            filteredEmployees = users.filter(emp => selectedDepartments.includes(emp.department));
-            console.log(`👥 Create mode: ${filteredEmployees.length} employees from selected departments`);
+        }
+        
+        console.log('📋 Loaded users:', users.length);
+        
+        const employeeSelect = document.getElementById('assignedEmployees');
+        if (!employeeSelect) {
+            console.warn('❌ Employee select element not found');
+            return;
         }
 
-        filteredEmployees.forEach(employee => {
-            const option = document.createElement('option');
-            option.value = employee._id;
-            option.textContent = `${employee.firstName} ${employee.lastName} (${employee.employeeId}) - ${employee.role}`;
-            select.appendChild(option);
+        // Clear existing options except the first one
+        while (employeeSelect.options.length > 1) {
+            employeeSelect.remove(1);
+        }
+
+        console.log('🏢 Selected departments for filtering:', selectedDepartments);
+
+        // Filter users based on selected departments
+        const filteredUsers = users.filter(user => {
+            if (selectedDepartments.length === 0) return true;
+            return selectedDepartments.includes(user.department);
         });
+
+        console.log('👥 Filtered employees:', filteredUsers.length);
+
+        // Add filtered users to select
+        filteredUsers.forEach(user => {
+            if (user.status === 'active') {
+                const option = document.createElement('option');
+                option.value = user._id;
+                option.textContent = `${user.employeeId} - ${user.firstName} ${user.lastName} (${user.department})`;
+                employeeSelect.appendChild(option);
+            }
+        });
+
+        console.log('✅ Employee select populated successfully');
+
     } catch (error) {
         console.error('❌ Error populating employee select:', error);
     }
@@ -494,7 +511,7 @@ function handleDepartmentSelection() {
             console.log(`✅ Added department hours input for: ${dept}`);
         });
 
-        populateEmployeeSelect();
+        populateEmployeeSelect(selectedDepartments);
     } else {
         container.style.display = 'none';
         inputsContainer.innerHTML = '';
@@ -506,16 +523,25 @@ function handleDepartmentSelection() {
     }
 }
 
-function showNotification(message) {
+function showNotification(message, type = 'info') {
     console.log(`📢 Notification: ${message}`);
     const notification = document.createElement('div');
     notification.className = 'notification';
     notification.textContent = message;
+    
+    // Set background color based on type
+    const colors = {
+        success: '#10b981',
+        error: '#ef4444',
+        warning: '#f59e0b',
+        info: '#3b82f6'
+    };
+    
     notification.style.cssText = `
         position: fixed;
         top: 20px;
         right: 20px;
-        background: #10b981;
+        background: ${colors[type] || colors.info};
         color: white;
         padding: 1rem 1.5rem;
         border-radius: 0.5rem;
@@ -548,3 +574,9 @@ window.onclick = function(event) {
         closeAssignedEmployeesModal();
     }
 };
+
+// Add download function (placeholder)
+function downloadProjectExcel(projectId) {
+    console.log(`📥 Downloading project excel for: ${projectId}`);
+    showNotification('Excel download feature coming soon!', 'info');
+}
