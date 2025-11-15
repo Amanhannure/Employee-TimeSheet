@@ -1,0 +1,1025 @@
+/* ==================== ENHANCED DASHBOARD STYLES ==================== */
+
+/* Global Styles */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+body {
+    background-color: #f5f7fa;
+    height: 100vh;
+    overflow: hidden;
+}
+
+.dashboard-container {
+    display: flex;
+    height: 100vh;
+}
+
+/* Sidebar Styles */
+.sidebar {
+    width: 250px;
+    background-color: #2c3e50;
+    color: #fff;
+    display: flex;
+    flex-direction: column;
+    transition: all 0.3s ease;
+}
+
+.sidebar-header {
+    padding: 20px;
+    border-bottom: 1px solid #34495e;
+}
+
+.logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.logo i {
+    font-size: 24px;
+    color: #3498db;
+}
+
+.logo h2 {
+    font-size: 20px;
+    font-weight: 600;
+}
+
+.company-logo-img {
+    width: 100px;
+    height: 100px;
+    object-fit: contain;
+}
+
+.sidebar-menu {
+    flex: 1;
+    padding: 20px 0;
+}
+
+.sidebar-menu ul {
+    list-style: none;
+}
+
+.sidebar-menu li {
+    margin-bottom: 5px;
+}
+
+.sidebar-menu a {
+    display: flex;
+    align-items: center;
+    padding: 12px 20px;
+    color: #ecf0f1;
+    text-decoration: none;
+    transition: all 0.3s ease;
+    gap: 10px;
+}
+
+.sidebar-menu a:hover {
+    background-color: #34495e;
+}
+
+.sidebar-menu li.active a {
+    background-color: #3498db;
+    color: #fff;
+}
+
+.sidebar-footer {
+    padding: 20px;
+    border-top: 1px solid #34495e;
+}
+
+.logout-btn {
+    display: flex;
+    align-items: center;
+    color: #ecf0f1;
+    text-decoration: none;
+    gap: 10px;
+}
+
+.logout-btn:hover {
+    color: #3498db;
+}
+
+/* Main Content Styles */
+.main-content {
+    flex: 1;
+    overflow-y: auto;
+    background-color: #f5f7fa;
+}
+
+/* Top Navigation */
+.top-nav {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px 20px;
+    background-color: #fff;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+.nav-left {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+#toggle-sidebar {
+    background: none;
+    border: none;
+    font-size: 20px;
+    cursor: pointer;
+    color: #2c3e50;
+}
+
+.nav-right .user-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.user-info i {
+    font-size: 24px;
+    color: #2c3e50;
+}
+
+/* HSE Banner */
+.header-content {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 20px;
+    background-color: #f8fafc;
+    color: black;
+}
+
+/* Timesheet Form */
+.timesheet-form {
+    padding: 20px;
+}
+
+/* ✅ NEW: Pending Rejected Warning Banner */
+#pending-rejected-warning {
+    background: #fff3cd;
+    border: 1px solid #ffeaa7;
+    color: #856404;
+    padding: 12px 20px;
+    margin: 10px 0;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+#pending-rejected-warning .btn-warning {
+    background: #ffc107;
+    color: #856404;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: 600;
+}
+
+#pending-rejected-warning .btn-warning:hover {
+    background: #e0a800;
+}
+
+/* Timesheet Summary */
+.timesheet-summary {
+    display: flex;
+    justify-content: space-around;
+    margin: 20px 0;
+    background-color: #f0f4f8;
+    padding: 15px;
+    border-radius: 8px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+}
+
+.summary-item {
+    text-align: center;
+    flex: 1;
+    margin: 0 10px;
+    padding: 10px;
+    border-radius: 6px;
+    background-color: #ffffff;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    cursor: pointer;
+    transition: transform 0.2s ease;
+}
+
+.summary-item:hover {
+    transform: translateY(-2px);
+}
+
+.summary-item h4 {
+    margin-bottom: 10px;
+    color: #2c3e50;
+}
+
+.summary-item p {
+    font-size: 24px;
+    font-weight: bold;
+}
+
+.summary-item.approved p {
+    color: #2ecc71;
+}
+
+.summary-item.pending p {
+    color: #f39c12;
+}
+
+.summary-item.rejected p {
+    color: #e74c3c;
+}
+
+.summary-item.history p {
+    color: #3498db;
+}
+
+.form-header {
+    margin-bottom: 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.form-content {
+    background-color: #fff;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    padding: 20px;
+}
+
+.employee-info {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 20px;
+    margin-bottom: 30px;
+}
+
+.info-group {
+    display: flex;
+    flex-direction: column;
+}
+
+label {
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: #2c3e50;
+}
+
+input[type="text"],
+input[type="date"],
+select {
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    font-size: 14px;
+    background-color: #f8f9fa;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+input[readonly] {
+    background-color: #f8f9fa;
+    color: #555;
+}
+
+select:disabled, select[readonly] {
+    background-color: #f8f9fa;
+    color: #555;
+}
+
+/* ✅ NEW: Department Display Field */
+#department-display {
+    background-color: #f8f9fa;
+    border: 1px solid #ced4da;
+    padding: 10px;
+    border-radius: 5px;
+    font-weight: 600;
+    color: #2c3e50;
+}
+
+/* Timesheet Table */
+.timesheet-table-container {
+    overflow-x: auto;
+    margin-bottom: 20px;
+}
+
+.timesheet-table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 800px;
+}
+
+.timesheet-table th,
+.timesheet-table td {
+    padding: 12px 15px;
+    text-align: center;
+    border: 1px solid #ddd;
+}
+
+.timesheet-table th {
+    background-color: #3498db;
+    color: #fff;
+    font-weight: 600;
+}
+
+.day-date {
+    font-size: 12px;
+    color: #ecf0f1;
+    display: block;
+    margin-top: 5px;
+}
+
+.timesheet-table th.weekend {
+    background-color: #e74c3c;
+}
+
+.timesheet-table td[data-day="sat"],
+.timesheet-table td[data-day="sun"] {
+    background-color: #fadbd8;
+}
+
+.timesheet-table tbody tr:nth-child(even) {
+    background-color: #f8f9fa;
+}
+
+.timesheet-table tfoot td {
+    font-weight: 600;
+    background-color: #ecf0f1;
+}
+
+.text-right {
+    text-align: right;
+}
+
+/* ✅ NEW: Future Date Cell Styles */
+.time-cell.future-date {
+    background-color: #f8f9fa !important;
+    color: #adb5bd;
+    cursor: not-allowed !important;
+    opacity: 0.5;
+    position: relative;
+}
+
+.time-cell.future-date::after {
+    content: "🔒";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 16px;
+    opacity: 0.7;
+}
+
+.time-cell.future-date:hover::before {
+    content: "Cannot enter hours for future dates";
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #333;
+    color: white;
+    padding: 5px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    white-space: nowrap;
+    z-index: 1000;
+}
+
+/* Time Cell Styles */
+.time-cell {
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+    position: relative;
+}
+
+.time-cell:hover {
+    background-color: #e3f2fd;
+}
+
+.time-cell.has-hours {
+    background-color: #d4edda;
+    font-weight: 600;
+}
+
+.normal-hours {
+    color: #27ae60;
+}
+
+.overtime-hours {
+    color: #e74c3c;
+}
+
+.delete-row-btn {
+    color: #e74c3c;
+    cursor: pointer;
+    font-size: 16px;
+    background: none;
+    border: none;
+    padding: 5px;
+}
+
+.delete-row-btn:hover {
+    color: #c0392b;
+}
+
+.delete-row-btn:disabled {
+    color: #adb5bd;
+    cursor: not-allowed;
+}
+
+/* Form Status Styles */
+.form-status {
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.status-draft {
+    color: #f39c12;
+    background: #fff3cd;
+    padding: 4px 12px;
+    border-radius: 16px;
+}
+
+.status-saved {
+    color: #3498db;
+    background: #d1ecf1;
+    padding: 4px 12px;
+    border-radius: 16px;
+}
+
+.status-submitted {
+    color: #2ecc71;
+    background: #d4edda;
+    padding: 4px 12px;
+    border-radius: 16px;
+}
+
+.status-empty {
+    color: #6c757d;
+    background: #f8f9fa;
+    padding: 4px 12px;
+    border-radius: 16px;
+}
+
+/* Form Actions */
+.form-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-start;
+    margin-top: 20px;
+}
+
+.btn {
+    padding: 10px 15px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.3s ease;
+    font-size: 14px;
+}
+
+.btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none !important;
+}
+
+.btn-primary {
+    background-color: #3498db;
+    color: #fff;
+}
+
+.btn-primary:hover:not(:disabled) {
+    background-color: #2980b9;
+    transform: translateY(-1px);
+}
+
+.btn-success {
+    background-color: #2ecc71;
+    color: #fff;
+}
+
+.btn-success:hover:not(:disabled) {
+    background-color: #27ae60;
+    transform: translateY(-1px);
+}
+
+.btn-info {
+    background-color: #ffff57; 
+    color: #2c3e50;
+    border: none;
+}
+
+.btn-info:hover:not(:disabled) {
+    background-color: #e6e65c; 
+    transform: translateY(-1px);
+}
+
+.btn-warning {
+    background-color: #ffc107;
+    color: #212529;
+    border: none;
+}
+
+.btn-warning:hover:not(:disabled) {
+    background-color: #e0a800;
+    transform: translateY(-1px);
+}
+
+.btn-danger {
+    background-color: #e74c3c;
+    color: #fff;
+}
+
+.btn-danger:hover:not(:disabled) {
+    background-color: #c0392b;
+    transform: translateY(-1px);
+}
+
+.btn-secondary {
+    background-color: #6c757d;
+    color: #fff;
+}
+
+.btn-secondary:hover:not(:disabled) {
+    background-color: #545b62;
+    transform: translateY(-1px);
+}
+
+.btn-sm {
+    padding: 6px 12px;
+    font-size: 12px;
+}
+
+/* Hours Entry Modal */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    background-color: rgba(0, 0, 0, 0.5);
+}
+
+.modal-content {
+    background-color: #fff;
+    margin: 10% auto;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+    width: 90%;
+    max-width: 500px;
+    position: relative;
+}
+
+.large-modal {
+    max-width: 800px;
+}
+
+.close-modal {
+    position: absolute;
+    right: 20px;
+    top: 15px;
+    font-size: 28px;
+    font-weight: bold;
+    cursor: pointer;
+    color: #7f8c8d;
+}
+
+.close-modal:hover {
+    color: #34495e;
+}
+
+.modal h2 {
+    margin-bottom: 20px;
+    color: #2c3e50;
+    border-bottom: 2px solid #3498db;
+    padding-bottom: 10px;
+}
+
+.modal .form-group {
+    margin-bottom: 20px;
+}
+
+.modal label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: 600;
+    color: #2c3e50;
+}
+
+.modal input,
+.modal select {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    font-size: 14px;
+    background-color: #fff;
+}
+
+.modal input:focus,
+.modal select:focus {
+    outline: none;
+    border-color: #3498db;
+    box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
+}
+
+/* ✅ NEW: Available Hours Info */
+.available-hours-info {
+    margin-bottom: 20px;
+    padding: 12px;
+    border-radius: 6px;
+    font-size: 14px;
+}
+
+.warning-info {
+    background: #fff3cd;
+    border: 1px solid #ffeaa7;
+    color: #856404;
+    padding: 10px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.info-message {
+    background: #d1ecf1;
+    border: 1px solid #bee5eb;
+    color: #0c5460;
+    padding: 10px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* Timesheet History Styles */
+.timesheet-history {
+    max-height: 60vh;
+    overflow-y: auto;
+}
+
+.history-filters {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+}
+
+.history-filters select {
+    flex: 1;
+    min-width: 120px;
+}
+
+.history-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.history-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.5rem;
+    margin-bottom: 0.5rem;
+    background: #fff;
+    transition: box-shadow 0.2s ease;
+}
+
+.history-item:hover {
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.history-info {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.week-range {
+    font-weight: 600;
+    color: #2c3e50;
+}
+
+.hours-info {
+    color: #64748b;
+    font-size: 14px;
+}
+
+.timesheet-status {
+    padding: 0.25rem 0.75rem;
+    border-radius: 1rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.status-approved { 
+    background: #dcfce7; 
+    color: #166534; 
+}
+
+.status-pending { 
+    background: #fef3c7; 
+    color: #92400e; 
+}
+
+.status-rejected { 
+    background: #fee2e2; 
+    color: #991b1b; 
+}
+
+.status-draft { 
+    background: #f1f5f9; 
+    color: #475569; 
+}
+
+.status-resubmitted {
+    background: #e0f2fe;
+    color: #0369a1;
+}
+
+.status-expired {
+    background: #f5f5f5;
+    color: #757575;
+    text-decoration: line-through;
+}
+
+.history-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.no-history {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: #64748b;
+}
+
+.no-history i {
+    margin-bottom: 1rem;
+    color: #cbd5e1;
+}
+
+/* Loading Spinner */
+.loading-spinner {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 9999;
+    justify-content: center;
+    align-items: center;
+}
+
+.spinner-content {
+    background: white;
+    padding: 2rem;
+    border-radius: 8px;
+    text-align: center;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.spinner-content i {
+    margin-bottom: 1rem;
+    color: #3498db;
+}
+
+/* Access Denied Modal */
+#access-denied-modal .modal-content {
+    text-align: center;
+}
+
+.modal-actions {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    margin-top: 20px;
+}
+
+/* Summary Modal Styling */
+#summary-content {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 15px;
+}
+
+.summary-card-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    border-radius: 8px;
+    background: #ffffff;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+}
+
+.summary-date {
+    font-weight: 500;
+    color: #333;
+}
+
+.summary-status {
+    font-weight: bold;
+    padding: 4px 12px;
+    border-radius: 16px;
+    font-size: 0.9rem;
+    text-transform: uppercase;
+}
+
+/* Status colors */
+.status-approved {
+    background: #e6f7e9;
+    color: #2e7d32;
+}
+
+.status-pending {
+    background: #fff3e0;
+    color: #e65100;
+}
+
+.status-rejected {
+    background: #ffebee;
+    color: #c62828;
+}
+
+.status-no-entry {
+    background: #f0f0f0;
+    color: #999999;
+    font-style: italic;
+}
+
+/* Summary calendar grid styles */
+.summary-calendar {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.summary-calendar-header {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    font-weight: 600;
+    color: #2c3e50;
+    border-bottom: 2px solid #3498db;
+    padding-bottom: 6px;
+}
+
+.summary-calendar-dayname {
+    text-align: center;
+    padding: 6px 0;
+}
+
+.summary-calendar-body {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 8px;
+}
+
+.summary-calendar-cell {
+    background: #ffffff;
+    border-radius: 8px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+    padding: 12px 8px;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.summary-calendar-cell .summary-date {
+    font-weight: 600;
+    color: #333;
+}
+
+.summary-calendar-cell .summary-status {
+    font-weight: bold;
+    padding: 6px 12px;
+    border-radius: 16px;
+    font-size: 0.9rem;
+    text-transform: uppercase;
+    margin: 0 auto;
+    width: fit-content;
+}
+
+/* Responsive Styles */
+@media (max-width: 768px) {
+    .sidebar {
+        position: fixed;
+        left: -250px;
+        height: 100%;
+        z-index: 999;
+    }
+
+    .sidebar.active {
+        left: 0;
+    }
+
+    .employee-info {
+        grid-template-columns: 1fr;
+    }
+
+    .form-actions {
+        flex-direction: column;
+    }
+
+    .timesheet-summary {
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .summary-item {
+        margin: 0;
+    }
+
+    .history-info {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.5rem;
+    }
+
+    .history-item {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1rem;
+    }
+
+    .history-actions {
+        width: 100%;
+        justify-content: flex-end;
+    }
+
+    #pending-rejected-warning {
+        flex-direction: column;
+        gap: 10px;
+        text-align: center;
+    }
+
+    .modal-content {
+        margin: 5% auto;
+        width: 95%;
+    }
+}
+
+/* Collapsed Sidebar */
+.sidebar-collapsed .sidebar {
+    width: 70px;
+}
+
+.sidebar-collapsed .logo h2,
+.sidebar-collapsed .sidebar-menu span,
+.sidebar-collapsed .logout-btn span {
+    display: none;
+}
+
+.sidebar-collapsed .main-content {
+    margin-left: 70px;
+}
+
+/* Print Styles */
+@media print {
+    .sidebar,
+    .top-nav,
+    .form-actions,
+    .history-actions {
+        display: none !important;
+    }
+
+    .main-content {
+        margin: 0 !important;
+        overflow: visible !important;
+    }
+
+    .timesheet-table {
+        box-shadow: none !important;
+        border: 1px solid #000 !important;
+    }
+}

@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Activity Code - Employee Timesheet</title>
+    <link rel="stylesheet" href="css/dashboard.css" />
+    <link rel="stylesheet" href="css/admin.css" />
+    <link rel="stylesheet" href="css/activity-code.css" />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+    />
+</head>
+<body>
+    <div class="dashboard-container">
+        <!-- Sidebar Navigation -->
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <div class="logo">
+                    <i class="fas fa-clock"></i>
+                    <h2>Timesheet</h2>
+                </div>
+            </div>
+            <div class="sidebar-menu">
+                <ul>
+                    <li>
+                        <a href="admin-dashboard.html">
+                            <i class="fas fa-home"></i>
+                            <span>Dashboard</span>
+                        </a>
+                    </li>
+                    <li class="active">
+                        <a href="activity-code.html">
+                            <i class="fas fa-code"></i>
+                            <span>Activity Code</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="user-management.html">
+                            <i class="fas fa-users-cog"></i>
+                            <span>User Management</span>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+            <div class="sidebar-footer">
+                <a href="index.html" class="logout-btn">
+                    <i class="fas fa-sign-out-alt"></i>
+                    <span>Logout</span>
+                </a>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Top Navigation -->
+            <div class="top-nav">
+                <div class="nav-left">
+                    <button id="toggle-sidebar">
+                        <i class="fas fa-bars"></i>
+                    </button>
+                    <h2>Activity Code Management</h2>
+                </div>
+                <div class="nav-right">
+                    <div class="user-info">
+                        <span id="admin-name">Admin</span>
+                        <i class="fas fa-user-circle"></i>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Activity Code Content -->    
+            <div class="admin-content">
+                <div class="section-header">
+                    <h3>Manage Activity Codes</h3>
+                    <button class="btn-add-user" onclick="openAddActivityModal()">
+                        <i class="fas fa-plus"></i> Add New Activity Code
+                    </button>
+                </div>
+
+                <!-- Department Selection -->
+                <div class="users-section">
+                    <div class="section-header">
+                        <h2>Select Department</h2>
+                        <select id="departmentSelect">
+                            <option value="">-- Select Department --</option>
+                            <option value="Process">Process Department</option>
+                            <option value="Loss and Prevention">Loss and Prevention Department</option>
+                            <option value="Project">Project Department</option>
+                            <option value="QRA">QRA Department</option>
+                            <option value="IT">IT Department</option>
+                            <option value="HR">HR Department</option>
+                            <option value="BD">BD Department</option>
+                            <option value="Electrical">Electrical Department</option>
+                            <option value="Admin/Accounts">Admin/Accounts Department</option>
+                        </select>
+                    </div>
+
+                    <div class="section-header" id="activityCodesHeader" style="display:none;">
+                        <h2>Activity Codes</h2>
+                        <div class="search-filter">
+                            <input type="text" id="searchActivity" placeholder="Search activity codes..." />
+                        </div>
+                    </div>
+
+                    <div class="users-grid" id="activityGrid" style="display:none;">
+                        <!-- Activity codes will be dynamically added here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Activity Code Modal -->
+    <div id="addActivityModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Add New Activity Code</h2>
+                <span class="close" onclick="closeAddActivityModal()">&times;</span>
+            </div>
+            <form id="addActivityForm">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="activityCode">Activity Code *</label>
+                        <input type="text" id="activityCode" name="activityCode" required />
+                    </div>
+                    <div class="form-group">
+                        <label for="activityName">Activity Name *</label>
+                        <input type="text" id="activityName" name="activityName" required />
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <!-- Description field removed as per request -->
+                    </div>
+                    <div class="form-group">
+                        <label for="activityCategory">Department *</label>
+                        <select id="activityCategory" name="activityCategory" required>
+                            <option value="">Select Department</option>
+                            <option value="Process">Process Department</option>
+                            <option value="Loss and Prevention">Loss and Prevention Department</option>
+                            <option value="Project">Project Department</option>
+                            <option value="QRA">QRA Department</option>
+                            <option value="IT">IT Department</option>
+                            <option value="HR">HR Department</option>
+                            <option value="BD">BD Department</option>
+                            <option value="Electrical">Electrical Department</option>
+                            <option value="Admin/Accounts">Admin/Accounts Department</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-actions">
+                    <button type="submit" class="btn-primary">Add Activity Code</button>
+                    <button type="button" class="btn-secondary" onclick="closeAddActivityModal()">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <script src="js/integration/api-client.js"></script>
+    <script src="js/integration/utils.js"></script>
+    <script src="js/activity-code.js"></script>
+</body>
+</html>
