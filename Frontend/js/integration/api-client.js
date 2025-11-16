@@ -1450,4 +1450,4 @@ if (typeof window !== 'undefined') {
     }, 1000);
 }
 
-console.log('✅ Complete 900+ Line API Client initialized with all features');
+console.log('✅ Complete API Client initialized with all features');
