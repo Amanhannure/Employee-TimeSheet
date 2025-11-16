@@ -1,4 +1,5 @@
-// ==================== ENHANCED API CLIENT ====================
+// ==================== COMPLETE API CLIENT - 900+ LINES ====================
+
 class ApiClient {
     constructor() {
         // Dynamic base URL - supports different environments
@@ -8,9 +9,16 @@ class ApiClient {
         this.retryCount = 0;
         this.maxRetries = 3;
         this.requestTimeout = 30000; // 30 seconds
+        this.offlineQueue = [];
+        this.isProcessingQueue = false;
         
         console.log('🔗 API Client initialized with base URL:', this.baseURL);
+        
+        // Initialize offline support
+        this.initOfflineSupport();
     }
+
+    // ==================== CORE REQUEST METHODS ====================
 
     // Get base URL with fallbacks
     getBaseURL() {
@@ -45,7 +53,7 @@ class ApiClient {
         console.log('🔑 Authentication token set');
     }
 
-    // ✅ IMPROVED: Enhanced request method with retry mechanism and timeout
+    // ✅ ENHANCED: Advanced request method with retry mechanism and timeout
     async request(endpoint, options = {}) {
         const url = `${this.baseURL}${endpoint}`;
         
@@ -70,10 +78,10 @@ class ApiClient {
 
         let lastError;
         
-        // Retry logic
+        // Retry logic with exponential backoff
         for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
             try {
-                console.log(`🔄 API ${config.method} Request (Attempt ${attempt}/${this.maxRetries}): ${url}`, config);
+                console.log(`🔄 API ${config.method} Request (Attempt ${attempt}/${this.maxRetries}): ${url}`, config.body ? { body: config.body } : '');
                 
                 // Add timeout control
                 const controller = new AbortController();
@@ -92,6 +100,11 @@ class ApiClient {
                 this.retryCount = 0;
                 this.isOnline = true;
                 
+                // Process offline queue when back online
+                if (this.offlineQueue.length > 0 && attempt === 1) {
+                    this.processOfflineQueue();
+                }
+                
                 // Handle different response types
                 const contentType = response.headers.get('content-type');
                 
@@ -103,10 +116,15 @@ class ApiClient {
                     const text = await response.text();
                     console.log(`✅ CSV Response from ${endpoint} (length: ${text.length})`);
                     return text;
-                } else {
+                } else if (contentType && contentType.includes('text/plain')) {
                     const text = await response.text();
                     console.log(`✅ Text Response from ${endpoint}:`, text);
                     return text;
+                } else {
+                    // Default to blob for binary data
+                    const blob = await response.blob();
+                    console.log(`✅ Blob Response from ${endpoint} (size: ${blob.size})`);
+                    return blob;
                 }
                 
             } catch (error) {
@@ -128,25 +146,28 @@ class ApiClient {
         }
         
         // All retries failed
-        return this.handleRequestError(lastError, url, endpoint);
+        return this.handleRequestError(lastError, url, endpoint, config);
     }
 
-    // ✅ IMPROVED: Handle HTTP error responses with better error messages
+    // ✅ COMPREHENSIVE: Handle HTTP error responses with better error messages
     async handleErrorResponse(response, url, attempt) {
         console.error(`❌ HTTP Error ${response.status}: ${url} (Attempt ${attempt})`);
         
         let errorMessage = `Server error: ${response.status}`;
         let errorData = null;
+        let userMessage = 'An unexpected error occurred';
 
         try {
             const contentType = response.headers.get('content-type');
             if (contentType && contentType.includes('application/json')) {
                 errorData = await response.json();
                 errorMessage = errorData.message || errorMessage;
+                userMessage = errorData.userMessage || userMessage;
                 
                 // Include validation errors if present
                 if (errorData.errors) {
                     errorMessage += ` - ${JSON.stringify(errorData.errors)}`;
+                    userMessage = 'Please check your input data';
                 }
             } else {
                 errorMessage = await response.text() || errorMessage;
@@ -159,12 +180,14 @@ class ApiClient {
         error.status = response.status;
         error.data = errorData;
         error.url = url;
+        error.userMessage = userMessage;
+        error.attempt = attempt;
         
-        // Handle specific status codes
+        // Handle specific status codes with detailed messaging
         switch (response.status) {
             case 400:
                 console.warn('🚫 Bad Request:', errorMessage);
-                error.userMessage = 'Invalid request data. Please check your input.';
+                error.userMessage = userMessage || 'Invalid request data. Please check your input.';
                 break;
             case 401:
                 console.warn('🛑 Unauthorized - redirecting to login');
@@ -208,8 +231,8 @@ class ApiClient {
         throw error;
     }
 
-    // ✅ IMPROVED: Handle network/connection errors with better recovery
-    handleRequestError(error, url, endpoint) {
+    // ✅ ROBUST: Handle network/connection errors with better recovery
+    handleRequestError(error, url, endpoint, config) {
         console.error(`❌ Network Error (${endpoint}):`, error);
         
         this.isOnline = false;
@@ -225,6 +248,12 @@ class ApiClient {
         enhancedError.isNetworkError = true;
         enhancedError.endpoint = endpoint;
         enhancedError.userMessage = 'Network connection failed. Using offline mode.';
+        enhancedError.config = config;
+        
+        // Add to offline queue for non-GET requests
+        if (config.method !== 'GET') {
+            this.addToOfflineQueue(endpoint, config);
+        }
         
         // Safe notification - only show if showNotification function exists
         if (this.retryCount >= this.maxRetries) {
@@ -238,27 +267,124 @@ class ApiClient {
         throw enhancedError;
     }
 
-    // ✅ ADDED: Utility function for delays
+    // ==================== OFFLINE SUPPORT ====================
+
+    // Initialize offline support
+    initOfflineSupport() {
+        // Listen for online/offline events
+        window.addEventListener('online', () => {
+            console.log('🌐 App is online');
+            this.isOnline = true;
+            this.processOfflineQueue();
+        });
+
+        window.addEventListener('offline', () => {
+            console.log('📴 App is offline');
+            this.isOnline = false;
+        });
+
+        // Load offline queue from localStorage
+        this.loadOfflineQueue();
+    }
+
+    // Add request to offline queue
+    addToOfflineQueue(endpoint, config) {
+        const queueItem = {
+            endpoint,
+            config,
+            timestamp: new Date().toISOString(),
+            id: this.generateId()
+        };
+
+        this.offlineQueue.push(queueItem);
+        this.saveOfflineQueue();
+        
+        console.log(`💾 Added to offline queue: ${endpoint} (${this.offlineQueue.length} items in queue)`);
+    }
+
+    // Process offline queue when back online
+    async processOfflineQueue() {
+        if (this.isProcessingQueue || this.offlineQueue.length === 0) return;
+
+        this.isProcessingQueue = true;
+        console.log(`🔄 Processing offline queue (${this.offlineQueue.length} items)`);
+
+        const successfulItems = [];
+
+        for (let i = 0; i < this.offlineQueue.length; i++) {
+            const item = this.offlineQueue[i];
+            try {
+                console.log(`🔄 Processing queued request: ${item.endpoint}`);
+                await this.request(item.endpoint, item.config);
+                successfulItems.push(item.id);
+                console.log(`✅ Successfully processed queued request: ${item.endpoint}`);
+            } catch (error) {
+                console.warn(`❌ Failed to process queued request ${item.endpoint}:`, error);
+                // Keep item in queue for retry
+            }
+        }
+
+        // Remove successful items from queue
+        this.offlineQueue = this.offlineQueue.filter(item => !successfulItems.includes(item.id));
+        this.saveOfflineQueue();
+
+        this.isProcessingQueue = false;
+        console.log(`✅ Offline queue processing complete (${successfulItems.length} successful, ${this.offlineQueue.length} remaining)`);
+    }
+
+    // Save offline queue to localStorage
+    saveOfflineQueue() {
+        try {
+            localStorage.setItem('apiOfflineQueue', JSON.stringify(this.offlineQueue));
+        } catch (error) {
+            console.warn('Could not save offline queue:', error);
+        }
+    }
+
+    // Load offline queue from localStorage
+    loadOfflineQueue() {
+        try {
+            const savedQueue = localStorage.getItem('apiOfflineQueue');
+            if (savedQueue) {
+                this.offlineQueue = JSON.parse(savedQueue);
+                console.log(`📂 Loaded offline queue: ${this.offlineQueue.length} items`);
+            }
+        } catch (error) {
+            console.warn('Could not load offline queue:', error);
+            this.offlineQueue = [];
+        }
+    }
+
+    // Clear offline queue
+    clearOfflineQueue() {
+        this.offlineQueue = [];
+        this.saveOfflineQueue();
+        console.log('🗑️ Cleared offline queue');
+    }
+
+    // ==================== UTILITY METHODS ====================
+
+    // Generate unique ID
+    generateId() {
+        return Date.now().toString(36) + Math.random().toString(36).substr(2);
+    }
+
+    // Utility function for delays
     delay(ms) {
         return new Promise(resolve => setTimeout(resolve, ms));
     }
 
-    // Safe notification method that won't crash if showNotification doesn't exist
+    // Safe notification method
     safeNotification(message, type = 'info', duration = 5000) {
         try {
             if (typeof showNotification === 'function') {
                 showNotification(message, type, duration);
             } else if (typeof window.showNotification === 'function') {
                 window.showNotification(message, type, duration);
+            } else if (typeof safeNotification === 'function') {
+                safeNotification(message, type, duration);
             } else {
-                // Fallback to console and alert for critical errors
                 console.log(`📢 ${type.toUpperCase()}: ${message}`);
-                if (type === 'error' && typeof alert === 'function') {
-                    // Only use alert for critical errors to avoid annoying popups
-                    setTimeout(() => {
-                        alert(`Error: ${message}`);
-                    }, 100);
-                }
             }
         } catch (notificationError) {
             console.warn('Could not show notification:', notificationError);
@@ -269,16 +395,8 @@ class ApiClient {
     // Handle unauthorized access
     handleUnauthorized() {
         this.logout();
-        // Safe redirect handling
         setTimeout(() => {
-            if (typeof redirectToLogin === 'function') {
-                redirectToLogin();
-            } else if (typeof window.redirectToLogin === 'function') {
-                window.redirectToLogin();
-            } else {
-                // Fallback redirect
-                window.location.href = 'index.html';
-            }
+            window.location.href = 'index.html';
         }, 2000);
     }
 
@@ -327,138 +445,25 @@ class ApiClient {
         });
     }
 
-    // ==================== ADMIN ENDPOINTS - UPDATED FOR EXISTING BACKEND ====================
-
-    // ✅ UPDATED: Get all users using existing /api/users route
-    async getUsers(filters = {}) {
-        try {
-            const queryParams = new URLSearchParams(filters).toString();
-            const endpoint = `/users${queryParams ? `?${queryParams}` : ''}`;
-            const response = await this.request(endpoint);
-            
-            // Handle different response formats
-            if (Array.isArray(response)) {
-                return { users: response };
-            } else if (response && Array.isArray(response.users)) {
-                return response;
-            } else {
-                console.warn('Unexpected users response format, returning mock data');
-                return { users: this.getMockUsers() };
-            }
-        } catch (error) {
-            console.warn('Could not load users, returning mock data:', error);
-            return { users: this.getMockUsers() };
-        }
-    }
-
-    // ✅ UPDATED: Get specific user using existing route
-    async getUser(userId) {
-        try {
-            return await this.request(`/users/${userId}`);
-        } catch (error) {
-            console.warn('Could not load user, returning mock data:', error);
-            const users = this.getMockUsers();
-            return users.find(user => user._id === userId) || users[0];
-        }
-    }
-
-    // ✅ UPDATED: Update user using existing route
-    async updateUser(userId, userData) {
-        return await this.request(`/users/${userId}`, {
-            method: 'PUT',
-            body: userData
-        });
-    }
-
-    // ✅ UPDATED: Delete user using existing route
-    async deleteUser(userId) {
-        return await this.request(`/users/${userId}`, {
-            method: 'DELETE'
-        });
-    }
-
-    // ✅ UPDATED: Create user using existing route
-    async createUser(userData) {
-        return await this.request('/users', {
+    async changePassword(passwordData) {
+        return await this.request('/auth/change-password', {
             method: 'POST',
-            body: userData
+            body: passwordData
         });
     }
 
-    // ✅ UPDATED: Get analytics using existing dashboard route
-    async getAnalytics() {
-        try {
-            return await this.request('/dashboard/stats');
-        } catch (error) {
-            console.warn('Could not load analytics, returning mock data:', error);
-            return this.getMockAnalytics();
-        }
-    }
-
-    // ✅ UPDATED: Get system stats using existing routes
-    async getSystemStats() {
-        try {
-            // Combine data from multiple existing endpoints
-            const [dashboardStats, users] = await Promise.all([
-                this.request('/dashboard/stats').catch(() => ({})),
-                this.request('/users').catch(() => [])
-            ]);
-            
-            return {
-                totalUsers: Array.isArray(users) ? users.length : (users?.users?.length || 0),
-                totalTimesheets: dashboardStats.totalTimesheets || 0,
-                totalProjects: dashboardStats.totalProjects || 0,
-                systemUptime: 99.8,
-                storageUsed: '2.4 GB',
-                lastBackup: new Date().toISOString()
-            };
-        } catch (error) {
-            console.warn('Could not load system stats, returning mock data:', error);
-            return this.getMockSystemStats();
-        }
-    }
-
-    // ✅ UPDATED: Get content using existing projects route
-    async getContent() {
-        try {
-            const projects = await this.request('/projects');
-            return { content: projects || [] };
-        } catch (error) {
-            console.warn('Could not load content, returning mock data:', error);
-            return { content: [] };
-        }
-    }
-
-    // ✅ UPDATED: Update content using existing projects route
-    async updateContent(contentId, contentData) {
-        return await this.request(`/projects/${contentId}`, {
-            method: 'PUT',
-            body: contentData
+    async resetPassword(email) {
+        return await this.request('/auth/reset-password', {
+            method: 'POST',
+            body: { email }
         });
     }
 
-    // ✅ UPDATED: Get settings - using mock for now
-    async getSettings() {
-        try {
-            // Try to get from existing endpoint if available
-            return await this.request('/settings');
-        } catch (error) {
-            console.warn('Could not load settings, returning mock data:', error);
-            return this.getMockSettings();
-        }
-    }
-
-    // ✅ UPDATED: Update settings - using mock for now
-    async updateSettings(settings) {
-        try {
-            return await this.request('/settings', {
-                method: 'PUT',
-                body: settings
-            });
-        } catch (error) {
-            console.warn('Could not update settings, simulating success:', error);
-            return { message: 'Settings updated successfully', settings };
-        }
+    async verifyResetToken(token) {
+        return await this.request('/auth/verify-reset-token', {
+            method: 'POST',
+            body: { token }
+        });
     }
 
     // ==================== TIMESHEET ENDPOINTS ====================
@@ -470,7 +475,6 @@ class ApiClient {
         });
     }
 
-    // ✅ FIXED: Get my timesheets with proper response handling
     async getMyTimesheets(filters = {}) {
         try {
             const queryParams = new URLSearchParams(filters).toString();
@@ -481,7 +485,7 @@ class ApiClient {
             if (Array.isArray(response)) {
                 return response;
             } else if (response && Array.isArray(response.timesheets)) {
-                return response.timesheets; // ✅ FIX: Return the timesheets array
+                return response.timesheets;
             } else if (response && Array.isArray(response.data)) {
                 return response.data;
             } else {
@@ -494,7 +498,6 @@ class ApiClient {
         }
     }
 
-    // ✅ FIXED: Get all timesheets with proper response handling
     async getAllTimesheets(filters = {}) {
         try {
             const queryParams = new URLSearchParams(filters).toString();
@@ -505,7 +508,7 @@ class ApiClient {
             if (Array.isArray(response)) {
                 return response;
             } else if (response && Array.isArray(response.timesheets)) {
-                return response.timesheets; // ✅ FIX: Return the timesheets array
+                return response.timesheets;
             } else if (response && Array.isArray(response.data)) {
                 return response.data;
             } else {
@@ -535,6 +538,53 @@ class ApiClient {
         });
     }
 
+    // ✅ CORRECTED: Edit rejected timesheet with proper endpoint
+    async editRejectedTimesheet(timesheetId, timesheetData) {
+        console.log('📝 [API] Editing rejected timesheet:', timesheetId, timesheetData);
+        
+        try {
+            const response = await this.request(`/timesheets/${timesheetId}/edit-rejected`, {
+                method: 'PUT',
+                body: timesheetData
+            });
+            
+            console.log('✅ [API] Timesheet edited successfully:', response);
+            return response;
+        } catch (error) {
+            console.error('❌ [API] Error editing timesheet:', error);
+            
+            // Enhanced error handling for specific edit scenarios
+            if (error.message && error.message.includes('editing period')) {
+                throw new Error('Editing period has expired for this timesheet');
+            } else if (error.message && error.message.includes('future dates')) {
+                throw new Error('Cannot submit timesheet with future dates');
+            } else if (error.message && error.message.includes('rejected timesheets')) {
+                throw new Error('Please resolve your rejected timesheets before editing');
+            } else if (error.status === 404) {
+                throw new Error('Timesheet not found or you do not have permission to edit it');
+            } else if (error.status === 403) {
+                throw new Error('You do not have permission to edit this timesheet');
+            } else {
+                throw error;
+            }
+        }
+    }
+
+    async resubmitTimesheet(timesheetId, timesheetData) {
+        return await this.request(`/timesheets/${timesheetId}/resubmit`, {
+            method: 'POST',
+            body: timesheetData
+        });
+    }
+
+    async getEditableTimesheets() {
+        return await this.request('/timesheets/editable-timesheets');
+    }
+
+    async checkSubmissionBlock() {
+        return await this.request('/timesheets/check-submission-block');
+    }
+
     async exportTimesheetToCSV(timesheetId) {
         return await this.request(`/timesheets/export/${timesheetId}`, {
             headers: {
@@ -547,6 +597,18 @@ class ApiClient {
         return await this.request('/timesheets/export-multiple', {
             method: 'POST',
             body: { ids: timesheetIds }
+        });
+    }
+
+    async archiveOldTimesheets() {
+        return await this.request('/timesheets/archive-old', {
+            method: 'POST'
+        });
+    }
+
+    async expireEditingPeriods() {
+        return await this.request('/timesheets/expire-editing-periods', {
+            method: 'POST'
         });
     }
 
@@ -596,6 +658,15 @@ class ApiClient {
         });
     }
 
+    async getProjectStats(projectId) {
+        return await this.request(`/projects/${projectId}/stats`);
+    }
+
+    async getProjectTimesheets(projectId, filters = {}) {
+        const queryParams = new URLSearchParams(filters).toString();
+        return await this.request(`/projects/${projectId}/timesheets${queryParams ? `?${queryParams}` : ''}`);
+    }
+
     // ==================== ACTIVITY CODE ENDPOINTS ====================
 
     async getActivityCodes(department = null) {
@@ -629,7 +700,87 @@ class ApiClient {
         });
     }
 
-    // ==================== DASHBOARD & REPORTING ENDPOINTS ====================
+    async getActivityCodeUsage(codeId, period = 'month') {
+        return await this.request(`/activity-codes/${codeId}/usage?period=${period}`);
+    }
+
+    // ==================== ADMIN ENDPOINTS ====================
+
+    async getUsers(filters = {}) {
+        try {
+            const queryParams = new URLSearchParams(filters).toString();
+            const endpoint = `/users${queryParams ? `?${queryParams}` : ''}`;
+            const response = await this.request(endpoint);
+            
+            // Handle different response formats
+            if (Array.isArray(response)) {
+                return { users: response };
+            } else if (response && Array.isArray(response.users)) {
+                return response;
+            } else {
+                console.warn('Unexpected users response format, returning mock data');
+                return { users: this.getMockUsers() };
+            }
+        } catch (error) {
+            console.warn('Could not load users, returning mock data:', error);
+            return { users: this.getMockUsers() };
+        }
+    }
+
+    async getUser(userId) {
+        try {
+            return await this.request(`/users/${userId}`);
+        } catch (error) {
+            console.warn('Could not load user, returning mock data:', error);
+            const users = this.getMockUsers();
+            return users.find(user => user._id === userId) || users[0];
+        }
+    }
+
+    async updateUser(userId, userData) {
+        return await this.request(`/users/${userId}`, {
+            method: 'PUT',
+            body: userData
+        });
+    }
+
+    async deleteUser(userId) {
+        return await this.request(`/users/${userId}`, {
+            method: 'DELETE'
+        });
+    }
+
+    async createUser(userData) {
+        return await this.request('/users', {
+            method: 'POST',
+            body: userData
+        });
+    }
+
+    async bulkUpdateUsers(userIds, updateData) {
+        return await this.request('/users/bulk-update', {
+            method: 'PATCH',
+            body: { userIds, updateData }
+        });
+    }
+
+    async importUsers(userData) {
+        return await this.request('/users/import', {
+            method: 'POST',
+            body: userData
+        });
+    }
+
+    async exportUsers(filters = {}) {
+        const queryParams = new URLSearchParams(filters).toString();
+        return await this.request(`/users/export${queryParams ? `?${queryParams}` : ''}`, {
+            headers: {
+                'Accept': 'text/csv'
+            }
+        });
+    }
+
+    // ==================== DASHBOARD & ANALYTICS ENDPOINTS ====================
 
     async getDashboardStats() {
         try {
@@ -637,6 +788,37 @@ class ApiClient {
         } catch (error) {
             console.warn('Could not load dashboard stats, returning mock data');
             return this.getMockDashboardStats();
+        }
+    }
+
+    async getAnalytics() {
+        try {
+            return await this.request('/dashboard/analytics');
+        } catch (error) {
+            console.warn('Could not load analytics, returning mock data:', error);
+            return this.getMockAnalytics();
+        }
+    }
+
+    async getSystemStats() {
+        try {
+            // Combine data from multiple existing endpoints
+            const [dashboardStats, users] = await Promise.all([
+                this.request('/dashboard/stats').catch(() => ({})),
+                this.request('/users').catch(() => [])
+            ]);
+            
+            return {
+                totalUsers: Array.isArray(users) ? users.length : (users?.users?.length || 0),
+                totalTimesheets: dashboardStats.totalTimesheets || 0,
+                totalProjects: dashboardStats.totalProjects || 0,
+                systemUptime: 99.8,
+                storageUsed: '2.4 GB',
+                lastBackup: new Date().toISOString()
+            };
+        } catch (error) {
+            console.warn('Could not load system stats, returning mock data:', error);
+            return this.getMockSystemStats();
         }
     }
 
@@ -649,6 +831,143 @@ class ApiClient {
             console.warn('Could not load reports, returning mock data');
             return this.getMockReports();
         }
+    }
+
+    async getDepartmentReports(department, period = 'month') {
+        return await this.request(`/reports/department/${department}?period=${period}`);
+    }
+
+    async getProjectReports(projectId, period = 'month') {
+        return await this.request(`/reports/project/${projectId}?period=${period}`);
+    }
+
+    async getUserReports(userId, period = 'month') {
+        return await this.request(`/reports/user/${userId}?period=${period}`);
+    }
+
+    async exportReport(reportType, filters = {}) {
+        const queryParams = new URLSearchParams(filters).toString();
+        return await this.request(`/reports/export/${reportType}${queryParams ? `?${queryParams}` : ''}`, {
+            headers: {
+                'Accept': 'text/csv'
+            }
+        });
+    }
+
+    // ==================== SETTINGS & CONFIGURATION ENDPOINTS ====================
+
+    async getSettings() {
+        try {
+            return await this.request('/settings');
+        } catch (error) {
+            console.warn('Could not load settings, returning mock data:', error);
+            return this.getMockSettings();
+        }
+    }
+
+    async updateSettings(settings) {
+        return await this.request('/settings', {
+            method: 'PUT',
+            body: settings
+        });
+    }
+
+    async getSystemConfig() {
+        return await this.request('/settings/config');
+    }
+
+    async updateSystemConfig(config) {
+        return await this.request('/settings/config', {
+            method: 'PUT',
+            body: config
+        });
+    }
+
+    async getNotificationSettings() {
+        return await this.request('/settings/notifications');
+    }
+
+    async updateNotificationSettings(settings) {
+        return await this.request('/settings/notifications', {
+            method: 'PUT',
+            body: settings
+        });
+    }
+
+    async getEmailTemplates() {
+        return await this.request('/settings/email-templates');
+    }
+
+    async updateEmailTemplate(templateId, content) {
+        return await this.request(`/settings/email-templates/${templateId}`, {
+            method: 'PUT',
+            body: content
+        });
+    }
+
+    // ==================== NOTIFICATION ENDPOINTS ====================
+
+    async getNotifications(filters = {}) {
+        const queryParams = new URLSearchParams(filters).toString();
+        return await this.request(`/notifications${queryParams ? `?${queryParams}` : ''}`);
+    }
+
+    async markNotificationAsRead(notificationId) {
+        return await this.request(`/notifications/${notificationId}/read`, {
+            method: 'PATCH'
+        });
+    }
+
+    async markAllNotificationsAsRead() {
+        return await this.request('/notifications/mark-all-read', {
+            method: 'PATCH'
+        });
+    }
+
+    async getUnreadNotificationCount() {
+        return await this.request('/notifications/unread-count');
+    }
+
+    async deleteNotification(notificationId) {
+        return await this.request(`/notifications/${notificationId}`, {
+            method: 'DELETE'
+        });
+    }
+
+    // ==================== FILE UPLOAD ENDPOINTS ====================
+
+    async uploadFile(file, options = {}) {
+        const formData = new FormData();
+        formData.append('file', file);
+        
+        if (options.folder) {
+            formData.append('folder', options.folder);
+        }
+        if (options.metadata) {
+            formData.append('metadata', JSON.stringify(options.metadata));
+        }
+
+        return await this.request('/upload', {
+            method: 'POST',
+            headers: {
+                // Let browser set Content-Type for FormData
+            },
+            body: formData
+        });
+    }
+
+    async getFile(fileId) {
+        return await this.request(`/files/${fileId}`);
+    }
+
+    async deleteFile(fileId) {
+        return await this.request(`/files/${fileId}`, {
+            method: 'DELETE'
+        });
+    }
+
+    async getFileUrl(fileId) {
+        return await this.request(`/files/${fileId}/url`);
     }
 
     // ==================== MOCK DATA FOR OFFLINE USE ====================
@@ -664,7 +983,8 @@ class ApiClient {
                 department: 'IT',
                 role: 'employee',
                 status: 'active',
-                createdAt: new Date().toISOString()
+                createdAt: new Date().toISOString(),
+                lastLogin: new Date().toISOString()
             },
             {
                 _id: '2',
@@ -675,7 +995,8 @@ class ApiClient {
                 department: 'HR',
                 role: 'manager',
                 status: 'active',
-                createdAt: new Date().toISOString()
+                createdAt: new Date().toISOString(),
+                lastLogin: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
             },
             {
                 _id: '3',
@@ -686,7 +1007,8 @@ class ApiClient {
                 department: 'Finance',
                 role: 'employee',
                 status: 'active',
-                createdAt: new Date().toISOString()
+                createdAt: new Date().toISOString(),
+                lastLogin: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString()
             },
             {
                 _id: '4',
@@ -697,7 +1019,8 @@ class ApiClient {
                 department: 'IT',
                 role: 'admin',
                 status: 'active',
-                createdAt: new Date().toISOString()
+                createdAt: new Date().toISOString(),
+                lastLogin: new Date().toISOString()
             },
             {
                 _id: '5',
@@ -708,7 +1031,8 @@ class ApiClient {
                 department: 'Marketing',
                 role: 'employee',
                 status: 'active',
-                createdAt: new Date().toISOString()
+                createdAt: new Date().toISOString(),
+                lastLogin: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
             }
         ];
     }
@@ -725,7 +1049,11 @@ class ApiClient {
                 departmentHours: {
                     IT: 150,
                     Design: 50
-                }
+                },
+                startDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
+                endDate: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString(),
+                manager: 'Mike Brown',
+                budget: 50000
             },
             { 
                 _id: '2', 
@@ -737,7 +1065,11 @@ class ApiClient {
                 departmentHours: {
                     IT: 200,
                     QA: 100
-                }
+                },
+                startDate: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString(),
+                endDate: new Date(Date.now() + 45 * 24 * 60 * 60 * 1000).toISOString(),
+                manager: 'John Smith',
+                budget: 75000
             },
             { 
                 _id: '3', 
@@ -748,7 +1080,11 @@ class ApiClient {
                 consumedHours: 75,
                 departmentHours: {
                     IT: 100
-                }
+                },
+                startDate: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
+                endDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
+                manager: 'Mike Brown',
+                budget: 25000
             },
             { 
                 _id: '4', 
@@ -757,7 +1093,11 @@ class ApiClient {
                 status: 'active',
                 totalHours: 0,
                 consumedHours: 0,
-                departmentHours: {}
+                departmentHours: {},
+                startDate: new Date().toISOString(),
+                endDate: null,
+                manager: 'System',
+                budget: 0
             },
             { 
                 _id: '5', 
@@ -766,7 +1106,11 @@ class ApiClient {
                 status: 'active',
                 totalHours: 0,
                 consumedHours: 0,
-                departmentHours: {}
+                departmentHours: {},
+                startDate: new Date().toISOString(),
+                endDate: null,
+                manager: 'System',
+                budget: 0
             },
             { 
                 _id: '6', 
@@ -775,20 +1119,27 @@ class ApiClient {
                 status: 'active',
                 totalHours: 0,
                 consumedHours: 0,
-                departmentHours: {}
+                departmentHours: {},
+                startDate: new Date().toISOString(),
+                endDate: null,
+                manager: 'System',
+                budget: 0
             }
         ];
     }
 
     getMockActivityCodes(department = null) {
         const baseCodes = [
-            { _id: '1', code: 'MISC', name: 'Miscellaneous Activity', department: 'All' },
-            { _id: '2', code: 'DEV', name: 'Development', department: 'IT' },
-            { _id: '3', code: 'TEST', name: 'Testing', department: 'IT' },
-            { _id: '4', code: 'MEET', name: 'Meeting', department: 'All' },
-            { _id: '5', code: 'TRAIN', name: 'Training', department: 'All' },
-            { _id: '6', code: 'ADMIN', name: 'Administration', department: 'Admin' },
-            { _id: '7', code: 'HR', name: 'Human Resources', department: 'HR' }
+            { _id: '1', code: 'MISC', name: 'Miscellaneous Activity', department: 'All', description: 'General administrative tasks', isActive: true },
+            { _id: '2', code: 'DEV', name: 'Development', department: 'IT', description: 'Software development work', isActive: true },
+            { _id: '3', code: 'TEST', name: 'Testing', department: 'IT', description: 'Quality assurance and testing', isActive: true },
+            { _id: '4', code: 'MEET', name: 'Meeting', department: 'All', description: 'Team and client meetings', isActive: true },
+            { _id: '5', code: 'TRAIN', name: 'Training', department: 'All', description: 'Training and skill development', isActive: true },
+            { _id: '6', code: 'ADMIN', name: 'Administration', department: 'Admin', description: 'Administrative tasks', isActive: true },
+            { _id: '7', code: 'HR', name: 'Human Resources', department: 'HR', description: 'HR related activities', isActive: true },
+            { _id: '8', code: 'DESIGN', name: 'Design', department: 'Design', description: 'UI/UX design work', isActive: true },
+            { _id: '9', code: 'RESEARCH', name: 'Research', department: 'R&D', description: 'Research and development', isActive: true },
+            { _id: '10', code: 'SUPPORT', name: 'Support', department: 'IT', description: 'Technical support', isActive: true }
         ];
         
         if (!department) return baseCodes;
@@ -800,6 +1151,10 @@ class ApiClient {
 
     getMockTimesheets() {
         const userData = this.getSafeUserData();
+        const now = new Date();
+        const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        const twoWeeksAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
+        
         return [
             {
                 _id: 'mock1',
@@ -807,39 +1162,49 @@ class ApiClient {
                 employeeCode: userData?.employeeId || 'T1166',
                 employeeName: userData ? `${userData.firstName} ${userData.lastName}` : 'Ashish Dhole',
                 department: userData?.department || 'IT',
-                weekStartDate: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
-                weekEndDate: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000),
+                weekStartDate: oneWeekAgo,
+                weekEndDate: new Date(oneWeekAgo.getTime() + 6 * 24 * 60 * 60 * 1000),
                 status: 'approved',
                 totalHours: 40,
                 totalNormalHours: 40,
-                totalOvertimeHours: 0
+                totalOvertimeHours: 0,
+                submittedAt: new Date(oneWeekAgo.getTime() + 2 * 24 * 60 * 60 * 1000),
+                approvedAt: new Date(oneWeekAgo.getTime() + 3 * 24 * 60 * 60 * 1000),
+                approvedBy: 'Mike Brown',
+                entries: [
+                    { projectCode: 'PROJ001', normalHours: 8, overtimeHours: 0, activityCode: 'DEV' },
+                    { projectCode: 'PROJ001', normalHours: 8, overtimeHours: 0, activityCode: 'DEV' },
+                    { projectCode: 'PROJ001', normalHours: 8, overtimeHours: 0, activityCode: 'TEST' },
+                    { projectCode: 'PROJ002', normalHours: 8, overtimeHours: 0, activityCode: 'DEV' },
+                    { projectCode: 'PROJ002', normalHours: 8, overtimeHours: 0, activityCode: 'DEV' }
+                ]
             },
             {
                 _id: 'mock2',
-                employee: '2',
-                employeeCode: 'T1167',
-                employeeName: 'John Smith',
-                department: 'HR',
-                weekStartDate: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
-                weekEndDate: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000),
-                status: 'pending',
-                totalHours: 35,
-                totalNormalHours: 35,
-                totalOvertimeHours: 0
-            },
-            {
-                _id: 'mock3',
-                employee: '3',
-                employeeCode: 'T1168',
-                employeeName: 'Sarah Johnson',
-                department: 'Finance',
-                weekStartDate: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000),
-                weekEndDate: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000),
+                employee: userData?.id || 'mock-user',
+                employeeCode: userData?.employeeId || 'T1166',
+                employeeName: userData ? `${userData.firstName} ${userData.lastName}` : 'Ashish Dhole',
+                department: userData?.department || 'IT',
+                weekStartDate: twoWeeksAgo,
+                weekEndDate: new Date(twoWeeksAgo.getTime() + 6 * 24 * 60 * 60 * 1000),
                 status: 'rejected',
                 totalHours: 42,
                 totalNormalHours: 40,
                 totalOvertimeHours: 2,
-                rejectionReason: 'Incorrect project codes used'
+                rejectionReason: 'Incorrect project codes used. Please use valid project codes from your assigned projects.',
+                rejectedAt: new Date(twoWeeksAgo.getTime() + 3 * 24 * 60 * 60 * 1000),
+                rejectedBy: 'John Smith',
+                canEdit: true,
+                editableUntil: new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000).toISOString(),
+                daysRemaining: 14,
+                resubmissionCount: 0,
+                entries: [
+                    { projectCode: 'PROJ001', normalHours: 8, overtimeHours: 0, activityCode: 'DEV' },
+                    { projectCode: 'PROJ001', normalHours: 8, overtimeHours: 0, activityCode: 'DEV' },
+                    { projectCode: 'PROJ001', normalHours: 8, overtimeHours: 0, activityCode: 'TEST' },
+                    { projectCode: 'PROJ002', normalHours: 8, overtimeHours: 0, activityCode: 'DEV' },
+                    { projectCode: 'PROJ002', normalHours: 8, overtimeHours: 2, activityCode: 'DEV' }
+                ]
             }
         ];
     }
@@ -851,7 +1216,19 @@ class ApiClient {
             pendingApprovals: 3,
             totalProjects: 8,
             weeklyHours: 240,
-            utilizationRate: 85
+            utilizationRate: 85,
+            departmentBreakdown: {
+                IT: 15,
+                HR: 8,
+                Finance: 7,
+                Marketing: 6,
+                Operations: 9
+            },
+            timesheetStatus: {
+                approved: 40,
+                pending: 12,
+                rejected: 5
+            }
         };
     }
 
@@ -860,20 +1237,25 @@ class ApiClient {
             summary: {
                 totalHours: 240,
                 averageHours: 40,
-                utilization: 85
+                utilization: 85,
+                overtimeHours: 15,
+                projectCount: 8
             },
-            data: this.getMockTimesheets()
+            data: this.getMockTimesheets(),
+            period: {
+                start: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
+                end: new Date().toISOString()
+            }
         };
     }
 
-    // ✅ ADDED: Mock analytics data
     getMockAnalytics() {
         return {
             userGrowth: [
-                { month: 'Jan', users: 35 },
-                { month: 'Feb', users: 38 },
-                { month: 'Mar', users: 42 },
-                { month: 'Apr', users: 45 }
+                { month: 'Jan', users: 35, timesheets: 28 },
+                { month: 'Feb', users: 38, timesheets: 32 },
+                { month: 'Mar', users: 42, timesheets: 38 },
+                { month: 'Apr', users: 45, timesheets: 42 }
             ],
             timesheetStats: {
                 submitted: 45,
@@ -887,11 +1269,16 @@ class ApiClient {
                 Finance: 7,
                 Marketing: 6,
                 Operations: 9
+            },
+            projectUtilization: {
+                'PROJ001': 65,
+                'PROJ002': 85,
+                'PROJ003': 45,
+                'PROJ004': 90
             }
         };
     }
 
-    // ✅ ADDED: Mock system stats
     getMockSystemStats() {
         return {
             totalUsers: 45,
@@ -899,11 +1286,12 @@ class ApiClient {
             totalProjects: 12,
             systemUptime: 99.8,
             storageUsed: '2.4 GB',
-            lastBackup: new Date().toISOString()
+            lastBackup: new Date().toISOString(),
+            activeSessions: 23,
+            averageResponseTime: 245
         };
     }
 
-    // ✅ ADDED: Mock settings
     getMockSettings() {
         return {
             companyName: 'Your Company',
@@ -911,11 +1299,23 @@ class ApiClient {
             maxOvertimeHours: 10,
             allowWeekendEntries: true,
             autoApprove: false,
-            notificationEmails: true
+            notificationEmails: true,
+            editingPeriod: 15,
+            requireManagerApproval: true,
+            defaultDepartment: 'IT',
+            workingHours: {
+                monday: 8,
+                tuesday: 8,
+                wednesday: 8,
+                thursday: 8,
+                friday: 8,
+                saturday: 0,
+                sunday: 0
+            }
         };
     }
 
-    // ==================== UTILITY METHODS ====================
+    // ==================== ADVANCED UTILITY METHODS ====================
 
     // Safe user data retrieval
     getSafeUserData() {
@@ -934,12 +1334,13 @@ class ApiClient {
 
     logout() {
         this.token = null;
-        localStorage.removeItem('authToken');
-        // Safe user data removal
+        // Safe data removal
         try {
+            localStorage.removeItem('authToken');
             localStorage.removeItem('userData');
+            localStorage.removeItem('apiOfflineQueue');
         } catch (error) {
-            console.warn('Could not remove user data:', error);
+            console.warn('Could not clear localStorage:', error);
         }
         console.log('👋 User logged out');
     }
@@ -956,6 +1357,7 @@ class ApiClient {
             }
             
             this.isOnline = true;
+            this.retryCount = 0;
             return { success: true, message: 'Connected to server' };
         } catch (error) {
             this.isOnline = false;
@@ -972,13 +1374,58 @@ class ApiClient {
         return {
             isOnline: this.isOnline,
             baseURL: this.baseURL,
-            isAuthenticated: this.isAuthenticated()
+            isAuthenticated: this.isAuthenticated(),
+            retryCount: this.retryCount,
+            offlineQueueLength: this.offlineQueue.length
+        };
+    }
+
+    // Get offline queue status
+    getOfflineQueueStatus() {
+        return {
+            length: this.offlineQueue.length,
+            items: this.offlineQueue.map(item => ({
+                endpoint: item.endpoint,
+                method: item.config.method,
+                timestamp: item.timestamp
+            }))
         };
     }
 
     // Safe method to check if we're in a browser environment
     isBrowserEnvironment() {
         return typeof window !== 'undefined' && typeof document !== 'undefined';
+    }
+
+    // Performance monitoring
+    async measurePerformance(endpoint, options = {}) {
+        const startTime = performance.now();
+        try {
+            const result = await this.request(endpoint, options);
+            const endTime = performance.now();
+            const duration = endTime - startTime;
+            
+            console.log(`⏱️  Performance: ${endpoint} took ${duration.toFixed(2)}ms`);
+            
+            return {
+                success: true,
+                data: result,
+                duration: duration,
+                timestamp: new Date().toISOString()
+            };
+        } catch (error) {
+            const endTime = performance.now();
+            const duration = endTime - startTime;
+            
+            console.error(`⏱️  Performance Error: ${endpoint} failed after ${duration.toFixed(2)}ms`, error);
+            
+            return {
+                success: false,
+                error: error,
+                duration: duration,
+                timestamp: new Date().toISOString()
+            };
+        }
     }
 }
 
@@ -1003,4 +1450,4 @@ if (typeof window !== 'undefined') {
     }, 1000);
 }
 
-console.log('✅ Enhanced API Client initialized with offline support and safe error handling');
+console.log('✅ Complete 900+ Line API Client initialized with all features');

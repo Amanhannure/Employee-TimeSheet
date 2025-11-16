@@ -1,4 +1,4 @@
-/* ==================== ENHANCED DASHBOARD STYLES ==================== */
+/* ==================== ENHANCED DASHBOARD STYLES WITH 15-DAY EDITING WINDOW ==================== */
 
 /* Global Styles */
 * {
@@ -162,18 +162,24 @@ body {
     padding: 20px;
 }
 
-/* ✅ NEW: Pending Rejected Warning Banner */
+/* ✅ ENHANCED: Pending Rejected Warning Banner */
 #pending-rejected-warning {
-    background: #fff3cd;
-    border: 1px solid #ffeaa7;
+    background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%);
+    border: 2px solid #ffc107;
     color: #856404;
-    padding: 12px 20px;
+    padding: 15px 20px;
     margin: 10px 0;
     border-radius: 8px;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    box-shadow: 0 4px 12px rgba(255, 193, 7, 0.3);
+    animation: pulse-warning 2s infinite;
+}
+
+@keyframes pulse-warning {
+    0%, 100% { box-shadow: 0 4px 12px rgba(255, 193, 7, 0.3); }
+    50% { box-shadow: 0 4px 20px rgba(255, 193, 7, 0.5); }
 }
 
 #pending-rejected-warning .btn-warning {
@@ -184,10 +190,12 @@ body {
     border-radius: 4px;
     cursor: pointer;
     font-weight: 600;
+    transition: all 0.3s ease;
 }
 
 #pending-rejected-warning .btn-warning:hover {
     background: #e0a800;
+    transform: translateY(-1px);
 }
 
 /* Timesheet Summary */
@@ -297,7 +305,7 @@ select:disabled, select[readonly] {
     color: #555;
 }
 
-/* ✅ NEW: Department Display Field */
+/* ✅ ENHANCED: Department Display Field */
 #department-display {
     background-color: #f8f9fa;
     border: 1px solid #ced4da;
@@ -361,7 +369,7 @@ select:disabled, select[readonly] {
     text-align: right;
 }
 
-/* ✅ NEW: Future Date Cell Styles */
+/* ✅ ENHANCED: Future Date Cell Styles */
 .time-cell.future-date {
     background-color: #f8f9fa !important;
     color: #adb5bd;
@@ -565,6 +573,19 @@ select:disabled, select[readonly] {
     font-size: 12px;
 }
 
+/* ✅ NEW: Expired Button Style */
+.btn-expired {
+    background-color: #6c757d;
+    color: #fff;
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+.btn-expired:hover {
+    background-color: #6c757d;
+    transform: none;
+}
+
 /* Hours Entry Modal */
 .modal {
     display: none;
@@ -642,7 +663,7 @@ select:disabled, select[readonly] {
     box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
 }
 
-/* ✅ NEW: Available Hours Info */
+/* ✅ ENHANCED: Available Hours Info */
 .available-hours-info {
     margin-bottom: 20px;
     padding: 12px;
@@ -670,6 +691,123 @@ select:disabled, select[readonly] {
     display: flex;
     align-items: center;
     gap: 8px;
+}
+
+/* ✅ NEW: Rejected Timesheets Modal Styles */
+#rejected-timesheets-modal .modal-content {
+    max-width: 900px;
+}
+
+.modal-description {
+    background: #e3f2fd;
+    border-left: 4px solid #2196f3;
+    padding: 15px;
+    margin-bottom: 20px;
+    border-radius: 4px;
+}
+
+.modal-description p {
+    margin: 0;
+    color: #0d47a1;
+    font-weight: 500;
+}
+
+.rejected-timesheets-content {
+    max-height: 60vh;
+    overflow-y: auto;
+}
+
+.blocking-timesheets-list {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.blocking-timesheet-item {
+    background: #fff;
+    border: 2px solid #ffebee;
+    border-radius: 8px;
+    padding: 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    transition: all 0.3s ease;
+}
+
+.blocking-timesheet-item:hover {
+    border-color: #e74c3c;
+    box-shadow: 0 4px 12px rgba(231, 76, 60, 0.1);
+}
+
+.blocking-timesheet-info {
+    flex: 1;
+}
+
+.blocking-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.blocking-header strong {
+    color: #2c3e50;
+    font-size: 16px;
+}
+
+.blocking-days {
+    background: #e74c3c;
+    color: white;
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.blocking-details {
+    color: #666;
+}
+
+.rejection-reason {
+    background: #ffebee;
+    padding: 10px;
+    border-radius: 4px;
+    margin-bottom: 10px;
+    border-left: 3px solid #e74c3c;
+}
+
+.timesheet-meta {
+    display: flex;
+    gap: 20px;
+    font-size: 14px;
+    color: #7f8c8d;
+}
+
+.blocking-actions {
+    display: flex;
+    gap: 10px;
+    flex-shrink: 0;
+}
+
+.no-blocking-timesheets {
+    text-align: center;
+    padding: 40px 20px;
+    color: #666;
+}
+
+.no-blocking-timesheets i {
+    margin-bottom: 15px;
+}
+
+.error-loading {
+    text-align: center;
+    padding: 40px 20px;
+    color: #e74c3c;
+}
+
+.error-loading i {
+    font-size: 48px;
+    margin-bottom: 15px;
 }
 
 /* Timesheet History Styles */
@@ -705,11 +843,28 @@ select:disabled, select[readonly] {
     border-radius: 0.5rem;
     margin-bottom: 0.5rem;
     background: #fff;
-    transition: box-shadow 0.2s ease;
+    transition: all 0.3s ease;
 }
 
 .history-item:hover {
     box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+/* ✅ NEW: Deadline urgency styles */
+.history-item.deadline-warning {
+    border-left: 4px solid #ffc107;
+    background: linear-gradient(135deg, #fffef0 0%, #fff9e6 100%);
+}
+
+.history-item.deadline-urgent {
+    border-left: 4px solid #e74c3c;
+    background: linear-gradient(135deg, #fff5f5 0%, #ffe6e6 100%);
+    animation: pulse-urgent 2s infinite;
+}
+
+@keyframes pulse-urgent {
+    0%, 100% { box-shadow: 0 2px 8px rgba(231, 76, 60, 0.1); }
+    50% { box-shadow: 0 2px 12px rgba(231, 76, 60, 0.2); }
 }
 
 .history-info {
@@ -722,6 +877,9 @@ select:disabled, select[readonly] {
 .week-range {
     font-weight: 600;
     color: #2c3e50;
+    display: flex;
+    align-items: center;
+    gap: 10px;
 }
 
 .hours-info {
@@ -767,6 +925,69 @@ select:disabled, select[readonly] {
     background: #f5f5f5;
     color: #757575;
     text-decoration: line-through;
+}
+
+/* ✅ NEW: Editing Status Styles */
+.editing-status {
+    padding: 0.2rem 0.6rem;
+    border-radius: 0.75rem;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.status-editable {
+    background: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+}
+
+.status-expired {
+    background: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+}
+
+/* ✅ NEW: Days Remaining Styles */
+.days-remaining {
+    margin-top: 8px;
+    font-size: 0.85rem;
+}
+
+.normal-text {
+    color: #28a745;
+    font-weight: 600;
+}
+
+.warning-text {
+    color: #ffc107;
+    font-weight: 700;
+}
+
+.urgent-text {
+    color: #e74c3c;
+    font-weight: 700;
+    animation: blink 1s infinite;
+}
+
+@keyframes blink {
+    0%, 50% { opacity: 1; }
+    51%, 100% { opacity: 0.5; }
+}
+
+.expired-text {
+    color: #6c757d;
+    font-weight: 600;
+    text-decoration: line-through;
+}
+
+.rejection-info {
+    background: #fff5f5;
+    padding: 0.75rem;
+    border-radius: 0.375rem;
+    border-left: 3px solid #e74c3c;
+    margin-top: 0.5rem;
 }
 
 .history-actions {
@@ -822,6 +1043,25 @@ select:disabled, select[readonly] {
     justify-content: center;
     gap: 10px;
     margin-top: 20px;
+}
+
+/* Edit Timesheet Modal Styles */
+.edit-timesheet-info {
+    background: #e3f2fd;
+    border-left: 4px solid #2196f3;
+    padding: 15px;
+    margin-bottom: 20px;
+    border-radius: 4px;
+}
+
+.edit-timesheet-info p {
+    margin: 5px 0;
+    color: #0d47a1;
+    font-weight: 500;
+}
+
+.edit-timesheet-info strong {
+    color: #1565c0;
 }
 
 /* Summary Modal Styling */
@@ -987,6 +1227,27 @@ select:disabled, select[readonly] {
         margin: 5% auto;
         width: 95%;
     }
+
+    .blocking-timesheet-item {
+        flex-direction: column;
+        gap: 15px;
+    }
+
+    .blocking-actions {
+        width: 100%;
+        justify-content: flex-end;
+    }
+
+    .blocking-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+    }
+
+    .timesheet-meta {
+        flex-direction: column;
+        gap: 5px;
+    }
 }
 
 /* Collapsed Sidebar */
@@ -1022,4 +1283,96 @@ select:disabled, select[readonly] {
         box-shadow: none !important;
         border: 1px solid #000 !important;
     }
+}
+
+/* ✅ NEW: Scrollbar Styling */
+.history-list::-webkit-scrollbar,
+.rejected-timesheets-content::-webkit-scrollbar {
+    width: 6px;
+}
+
+.history-list::-webkit-scrollbar-track,
+.rejected-timesheets-content::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 3px;
+}
+
+.history-list::-webkit-scrollbar-thumb,
+.rejected-timesheets-content::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 3px;
+}
+
+.history-list::-webkit-scrollbar-thumb:hover,
+.rejected-timesheets-content::-webkit-scrollbar-thumb:hover {
+    background: #a8a8a8;
+}
+/* ✅ FIX: Enhanced Modal Stacking Context */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    overflow: auto;
+}
+
+/* ✅ FIX: Ensure edit modal has higher z-index */
+#edit-timesheet-modal {
+    z-index: 1001;
+}
+
+/* ✅ FIX: Modal content proper sizing */
+.modal-content {
+    background-color: #fff;
+    margin: 5% auto;
+    padding: 0;
+    border-radius: 8px;
+    width: 90%;
+    max-width: 500px;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+    position: relative;
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
+.large-modal {
+    max-width: 900px;
+    max-height: 85vh;
+}
+
+/* ✅ FIX: Edit timesheet modal specific styles */
+#edit-timesheet-modal .modal-content {
+    max-width: 95%;
+    max-height: 90vh;
+    width: 95%;
+}
+
+#edit-timesheet-modal .timesheet-table-container {
+    max-height: 50vh;
+    overflow-y: auto;
+    border: 1px solid #e2e8f0;
+    border-radius: 4px;
+}
+
+/* ✅ FIX: Prevent body scroll when modal is open */
+body.modal-open {
+    overflow: hidden;
+}
+
+/* ✅ FIX: Loading spinner above everything */
+.loading-spinner {
+    z-index: 9999;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    display: none;
+    justify-content: center;
+    align-items: center;
 }

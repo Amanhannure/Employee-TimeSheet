@@ -90,24 +90,6 @@ const timesheetEntrySchema = new mongoose.Schema({
     trim: true,
     maxlength: 50,
     required: true
-  },
-  // ✅ ADDED: Track if entry was modified during editing
-  wasEdited: {
-    type: Boolean,
-    default: false
-  },
-  // ✅ ADDED: Original values for audit trail
-  originalNormalHours: {
-    type: Number,
-    default: 0
-  },
-  originalOvertimeHours: {
-    type: Number,
-    default: 0
-  },
-  originalActivityCode: {
-    type: String,
-    default: ''
   }
 }, {
   _id: true,
@@ -248,7 +230,7 @@ const timesheetSchema = new mongoose.Schema({
       message: 'Invalid rejection date'
     }
   },
-  // ✅ ENHANCED: Rejection tracking
+  // ✅ FIXED: Rejection tracking
   rejectionReason: {
     type: String,
     trim: true,
@@ -263,7 +245,7 @@ const timesheetSchema = new mongoose.Schema({
     },
     default: 'other'
   },
-  // ✅ ADDED: 15-day editing window fields
+  // ✅ FIXED: 15-day editing window fields
   editableUntil: {
     type: Date,
     validate: {
@@ -289,7 +271,7 @@ const timesheetSchema = new mongoose.Schema({
     default: 0,
     min: 0
   },
-  // ✅ ADDED: Expiration tracking
+  // ✅ FIXED: Expiration tracking
   isExpired: {
     type: Boolean,
     default: false
@@ -304,7 +286,7 @@ const timesheetSchema = new mongoose.Schema({
       message: 'Invalid expiration date'
     }
   },
-  // ✅ ADDED: Edit history for audit trail
+  // Edit history for audit trail
   editHistory: [{
     editedAt: {
       type: Date,
@@ -352,7 +334,7 @@ const timesheetSchema = new mongoose.Schema({
   toObject: { virtuals: true }
 });
 
-// ✅ ENHANCED: Virtual for week range display
+// ✅ FIXED: Virtual for week range display
 timesheetSchema.virtual('weekRange').get(function() {
   if (!this.weekStartDate || !this.weekEndDate) return '';
   const start = this.weekStartDate.toLocaleDateString('en-GB');
@@ -360,13 +342,13 @@ timesheetSchema.virtual('weekRange').get(function() {
   return `${start} - ${end}`;
 });
 
-// ✅ ENHANCED: Virtual for display status
+// ✅ FIXED: Virtual for display status
 timesheetSchema.virtual('displayStatus').get(function() {
   if (!this.status) return 'Unknown';
   return this.status.charAt(0).toUpperCase() + this.status.slice(1);
 });
 
-// ✅ ADDED: Virtual for days remaining to edit
+// ✅ FIXED: Virtual for days remaining to edit
 timesheetSchema.virtual('daysRemaining').get(function() {
   if (this.status !== 'rejected' || !this.editableUntil) return 0;
   
@@ -375,7 +357,7 @@ timesheetSchema.virtual('daysRemaining').get(function() {
   return Math.max(0, Math.ceil(remainingMs / (1000 * 60 * 60 * 24)));
 });
 
-// ✅ ADDED: Virtual for checking if editable
+// ✅ FIXED: Virtual for checking if editable
 timesheetSchema.virtual('canEdit').get(function() {
   if (this.status !== 'rejected') return false;
   if (!this.editableUntil) return false;
@@ -384,28 +366,32 @@ timesheetSchema.virtual('canEdit').get(function() {
   return this.editableUntil > new Date();
 });
 
-// ✅ ADDED: Virtual for checking if blocking new submissions
+// ✅ FIXED: Virtual for checking if blocking new submissions
+// ✅ FIXED: Virtual for checking if blocking new submissions
 timesheetSchema.virtual('isBlocking').get(function() {
   if (this.status !== 'rejected') return false;
   
   const fifteenDaysAgo = new Date();
   fifteenDaysAgo.setDate(fifteenDaysAgo.getDate() - 15);
+  fifteenDaysAgo.setHours(23, 59, 59, 999);
   
-  return this.submittedAt && this.submittedAt <= fifteenDaysAgo;
+  // ✅ FIX: Use rejectedAt instead of submittedAt for blocking calculation
+  return this.rejectedAt && this.rejectedAt < fifteenDaysAgo && !this.isExpired;
 });
 
-// ✅ FIXED: Pre-save hook without the problematic this.previous() call
+// ✅ FIXED: Pre-save hook WITHOUT the problematic this.previous() call
 timesheetSchema.pre('save', async function(next) {
   console.log('🔄 Running pre-save hook for timesheet:', this._id);
   
   try {
-    // Skip calculations if this is a partial update
-    if (this.isModified('status') && Object.keys(this.getChanges()).length === 1) {
+    // Skip calculations if this is a partial update (only status changed)
+    const modifiedPaths = this.modifiedPaths();
+    if (modifiedPaths.length === 1 && modifiedPaths[0] === 'status') {
       console.log('⏭️ Skipping calculations for status-only update');
       return next();
     }
 
-    // Calculate week number safely
+    // ✅ FIXED: Calculate week number safely
     if (this.weekStartDate && (!this.weekNumber || this.isModified('weekStartDate'))) {
       const date = new Date(this.weekStartDate);
       
@@ -413,29 +399,37 @@ timesheetSchema.pre('save', async function(next) {
         throw new Error('Invalid week start date');
       }
       
-      const startOfYear = new Date(date.getFullYear(), 0, 1);
-      const days = Math.floor((date - startOfYear) / (24 * 60 * 60 * 1000));
-      const weekNumber = Math.ceil((days + 1) / 7);
+      // Get the Thursday of the week (ISO week calculation)
+      const thursday = new Date(date);
+      thursday.setDate(date.getDate() + (4 - (date.getDay() || 7)));
+      
+      const yearStart = new Date(thursday.getFullYear(), 0, 1);
+      const weekNumber = Math.ceil((((thursday - yearStart) / 86400000) + 1) / 7);
       
       this.weekNumber = weekNumber;
-      this.year = date.getFullYear();
+      this.year = thursday.getFullYear();
       
       console.log(`📅 Calculated: year=${this.year}, week=${this.weekNumber}`);
     }
 
     // ✅ FIXED: Handle rejection workflow
-    if (this.isModified('status') && this.status === 'rejected') {
-      console.log('🔄 Setting up 15-day editing window for rejected timesheet');
-      
-      // Set editable period (15 days from now)
-      this.editableUntil = new Date(Date.now() + 15 * 24 * 60 * 60 * 1000);
-      this.rejectedAt = new Date();
-      this.isExpired = false;
-      
-      console.log(`⏰ Timesheet can be edited until: ${this.editableUntil}`);
-    }
+    // ✅ FIXED: Handle rejection workflow
+if (this.isModified('status') && this.status === 'rejected') {
+  console.log('🔄 Setting up 15-day editing window for rejected timesheet');
+  
+  // ✅ FIXED: Use local timezone for consistent calculations
+  const editableUntil = new Date();
+  editableUntil.setDate(editableUntil.getDate() + 15);
+  editableUntil.setHours(23, 59, 59, 999); // End of day 15 days from now
+  
+  this.editableUntil = editableUntil;
+  this.rejectedAt = new Date();
+  this.isExpired = false;
+  
+  console.log(`⏰ Timesheet can be edited until: ${this.editableUntil}`);
+}
 
-    // ✅ FIXED: Handle resubmission - track previous status manually
+    // ✅ FIXED: Handle resubmission
     if (this.isModified('status') && this.status === 'pending') {
       // Check if this was previously rejected by looking at rejection fields
       if (this.rejectedAt && this.rejectionReason) {
@@ -445,19 +439,27 @@ timesheetSchema.pre('save', async function(next) {
         this.resubmissionCount = (this.resubmissionCount || 0) + 1;
         this.rejectionReason = ''; // Clear rejection reason on resubmission
         this.rejectionCategory = undefined;
+        this.editableUntil = null; // Clear editing window
         
         console.log(`📝 Timesheet resubmitted (attempt ${this.resubmissionCount})`);
       }
     }
 
-    // ✅ ADDED: Handle expiration
-    if (this.status === 'rejected' && this.editableUntil && this.editableUntil <= new Date() && !this.isExpired) {
-      console.log('⏰ Auto-expiring timesheet editing period');
-      this.isExpired = true;
-      this.expiredAt = new Date();
-    }
+    // ✅ FIXED: Handle expiration automatically
+if (this.status === 'rejected' && this.editableUntil) {
+  const now = new Date();
+  if (this.editableUntil <= now && !this.isExpired) {
+    console.log('⏰ Auto-expiring timesheet editing period');
+    this.isExpired = true;
+    this.expiredAt = now;
+  }
+} else if (this.status === 'rejected' && !this.editableUntil) {
+  // ✅ ADDED: Set default editableUntil if missing
+  console.log('⚠️ Setting default editing period for rejected timesheet');
+  this.editableUntil = new Date(Date.now() + 15 * 24 * 60 * 60 * 1000);
+}
 
-    // Calculate totals with validation
+    // ✅ FIXED: Calculate totals with validation
     if (this.entries && (this.entries.length > 0 || this.isModified('entries'))) {
       let totalNormal = 0;
       let totalOvertime = 0;
@@ -503,7 +505,7 @@ timesheetSchema.pre('save', async function(next) {
   }
 });
 
-// ✅ ADDED: Method to check if timesheet can be resubmitted
+// ✅ FIXED: Method to check if timesheet can be resubmitted
 timesheetSchema.methods.canBeResubmitted = function() {
   if (this.status !== 'rejected') {
     return { canResubmit: false, reason: 'Only rejected timesheets can be resubmitted' };
@@ -520,7 +522,7 @@ timesheetSchema.methods.canBeResubmitted = function() {
   return { canResubmit: true, reason: '' };
 };
 
-// ✅ ADDED: Method to add edit history entry
+// ✅ FIXED: Method to add edit history entry
 timesheetSchema.methods.addEditHistory = function(editedBy, changes, reason = '') {
   const historyEntry = {
     editedAt: new Date(),
@@ -533,7 +535,7 @@ timesheetSchema.methods.addEditHistory = function(editedBy, changes, reason = ''
   console.log(`📝 Added edit history entry for timesheet ${this._id}`);
 };
 
-// ✅ ADDED: Method to get editing deadline info
+// ✅ FIXED: Method to get editing deadline info
 timesheetSchema.methods.getEditingDeadlineInfo = function() {
   if (this.status !== 'rejected') {
     return { canEdit: false, daysRemaining: 0, deadline: null };
@@ -551,7 +553,7 @@ timesheetSchema.methods.getEditingDeadlineInfo = function() {
   };
 };
 
-// ✅ ENHANCED: Project hours summary with edit tracking
+// ✅ FIXED: Project hours summary
 timesheetSchema.methods.getProjectHoursSummary = function() {
   console.log('📋 Generating project hours summary for timesheet:', this._id);
   
@@ -567,9 +569,7 @@ timesheetSchema.methods.getProjectHoursSummary = function() {
           totalHours: 0,
           normalHours: 0,
           overtimeHours: 0,
-          entries: 0,
-          editedEntries: 0,
-          locations: new Set()
+          entries: 0
         };
       }
       
@@ -577,20 +577,11 @@ timesheetSchema.methods.getProjectHoursSummary = function() {
       projectSummary[entry.projectCode].normalHours += (entry.normalHours || 0);
       projectSummary[entry.projectCode].overtimeHours += (entry.overtimeHours || 0);
       projectSummary[entry.projectCode].entries += 1;
-      
-      if (entry.wasEdited) {
-        projectSummary[entry.projectCode].editedEntries += 1;
-      }
-      
-      if (entry.location) {
-        projectSummary[entry.projectCode].locations.add(entry.location);
-      }
     }
   });
 
-  // Convert Sets to Arrays
+  // Convert to proper numbers
   Object.values(projectSummary).forEach(summary => {
-    summary.locations = Array.from(summary.locations);
     summary.totalHours = parseFloat(summary.totalHours.toFixed(2));
     summary.normalHours = parseFloat(summary.normalHours.toFixed(2));
     summary.overtimeHours = parseFloat(summary.overtimeHours.toFixed(2));
@@ -600,20 +591,21 @@ timesheetSchema.methods.getProjectHoursSummary = function() {
   return projectSummary;
 };
 
-// ✅ ADDED: Static method to find blocking timesheets
+// ✅ FIXED: Static method to find blocking timesheets
+// ✅ FIXED: Static method to find blocking timesheets
 timesheetSchema.statics.findBlockingTimesheets = async function(employeeId) {
   const fifteenDaysAgo = new Date();
   fifteenDaysAgo.setDate(fifteenDaysAgo.getDate() - 15);
+  fifteenDaysAgo.setHours(23, 59, 59, 999); // End of the day
   
   return await this.find({
     employee: employeeId,
     status: 'rejected',
-    submittedAt: { $lte: fifteenDaysAgo },
+    submittedAt: { $lt: fifteenDaysAgo }, // ✅ FIX: Use $lt
     isExpired: false
   }).sort({ submittedAt: 1 }); // Oldest first
 };
-
-// ✅ ADDED: Static method to auto-expire old rejected timesheets
+// ✅ FIXED: Static method to auto-expire old rejected timesheets
 timesheetSchema.statics.autoExpireRejectedTimesheets = async function() {
   const now = new Date();
   
@@ -624,8 +616,10 @@ timesheetSchema.statics.autoExpireRejectedTimesheets = async function() {
       isExpired: { $ne: true }
     },
     {
-      isExpired: true,
-      expiredAt: now
+      $set: {
+        isExpired: true,
+        expiredAt: now
+      }
     }
   );
   
@@ -640,9 +634,6 @@ timesheetSchema.index({ employeeCode: 1 });
 timesheetSchema.index({ weekNumber: 1, year: 1 });
 timesheetSchema.index({ createdAt: 1 });
 timesheetSchema.index({ isArchived: 1 });
-timesheetSchema.index({ 'entries.project': 1 });
-timesheetSchema.index({ 'entries.projectCode': 1 });
-timesheetSchema.index({ projectHoursCounted: 1 });
 timesheetSchema.index({ department: 1, status: 1 });
 timesheetSchema.index({ submittedAt: -1 });
 timesheetSchema.index({ employee: 1, status: 1, weekStartDate: -1 });
@@ -653,7 +644,7 @@ timesheetSchema.index({ employee: 1, status: 1, isExpired: 1 });
 timesheetSchema.index({ rejectedAt: -1 });
 timesheetSchema.index({ resubmittedAt: -1 });
 
-// FIX: Check if model exists before creating
+// ✅ FIXED: Model creation
 const Timesheet = mongoose.models.Timesheet || mongoose.model('Timesheet', timesheetSchema);
 
-export default Timesheet;
+export default Timesheet; Timesheet.js

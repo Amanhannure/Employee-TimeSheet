@@ -1,4 +1,4 @@
-// admin.js - Complete Admin Dashboard with Debug Logging
+// admin.js - Complete Admin Dashboard with 15-Day Editing Window Support
 
 // ==================== UTILITY FUNCTIONS ====================
 
@@ -105,6 +105,79 @@ function setLoadingState(loading) {
             btn.style.opacity = '1';
         }
     });
+}
+
+// ✅ NEW: Format editing deadline information
+function formatEditingDeadline(timesheet) {
+    if (timesheet.status !== 'rejected') return '';
+    
+    const now = new Date();
+    const editableUntil = timesheet.editableUntil ? new Date(timesheet.editableUntil) : null;
+    
+    if (!editableUntil || timesheet.isExpired) {
+        return `<span class="editing-status expired">EXPIRED</span>`;
+    }
+    
+    const daysRemaining = Math.ceil((editableUntil - now) / (24 * 60 * 60 * 1000));
+    const hoursRemaining = Math.ceil((editableUntil - now) / (60 * 60 * 1000));
+    
+    let statusClass = 'normal';
+    let statusText = `${daysRemaining} days`;
+    
+    if (daysRemaining === 1 && hoursRemaining <= 24) {
+        statusClass = 'urgent';
+        statusText = `${hoursRemaining} hours`;
+    } else if (daysRemaining <= 3) {
+        statusClass = 'warning';
+    }
+    
+    return `
+        <div class="editing-deadline-info">
+            <span class="editing-status ${statusClass}">EDITABLE</span>
+            <span class="deadline-${statusClass}">${statusText} remaining</span>
+        </div>
+    `;
+}
+
+function isTimesheetBlocking(timesheet) {
+  if (timesheet.status !== 'rejected') return false;
+  
+  const fifteenDaysAgo = new Date();
+  fifteenDaysAgo.setDate(fifteenDaysAgo.getDate() - 15);
+  fifteenDaysAgo.setHours(23, 59, 59, 999);
+  
+  return timesheet.rejectedAt &&  // ✅ FIX: Use rejectedAt
+         new Date(timesheet.rejectedAt) < fifteenDaysAgo && 
+         !timesheet.isExpired;
+}
+
+// ✅ NEW: Get blocking timesheets summary
+function getBlockingTimesheetsSummary(timesheets) {
+    const blockingTimesheets = timesheets.filter(isTimesheetBlocking);
+    
+    if (blockingTimesheets.length === 0) {
+        return {
+            count: 0,
+            employees: new Set(),
+            message: 'No blocking timesheets'
+        };
+    }
+    
+    const employees = new Set(blockingTimesheets.map(ts => ts.employeeCode));
+    const oldestBlocking = blockingTimesheets.reduce((oldest, current) => {
+        return (!oldest || new Date(current.submittedAt) < new Date(oldest.submittedAt)) ? current : oldest;
+    }, null);
+    
+    const daysBlocking = oldestBlocking ? 
+        Math.floor((new Date() - new Date(oldestBlocking.submittedAt)) / (24 * 60 * 60 * 1000)) - 15 : 0;
+    
+    return {
+        count: blockingTimesheets.length,
+        employees: employees.size,
+        oldestBlocking: oldestBlocking,
+        daysBlocking: daysBlocking,
+        message: `${blockingTimesheets.length} timesheets blocking ${employees.size} employees`
+    };
 }
 
 // ==================== MAIN DASHBOARD CODE ====================
@@ -237,12 +310,16 @@ function initializeEventListeners() {
     window.addEventListener('click', function(event) {
         const miscModal = document.getElementById('miscHoursModal');
         const detailsModal = document.getElementById('timesheetDetailsModal');
+        const rejectedModal = document.getElementById('rejectedOverviewModal');
         
         if (event.target === miscModal) {
             closeMiscellaneousHoursModal();
         }
         if (event.target === detailsModal) {
             closeTimesheetDetailsModal();
+        }
+        if (event.target === rejectedModal) {
+            closeRejectedOverviewModal();
         }
     });
 
@@ -253,6 +330,7 @@ function initializeEventListeners() {
 function hideAllModals() {
     document.getElementById('miscHoursModal').style.display = 'none';
     document.getElementById('timesheetDetailsModal').style.display = 'none';
+    document.getElementById('rejectedOverviewModal').style.display = 'none';
 }
 
 function showSection(sectionName) {
@@ -300,7 +378,7 @@ function showSection(sectionName) {
     }
 }
 
-// DEBUG VERSION: Dashboard data loading with detailed logging
+// ENHANCED: Dashboard data loading with 15-day editing window info
 async function loadDashboardData() {
     if (isLoading) return;
     
@@ -313,7 +391,7 @@ async function loadDashboardData() {
         if (tbody) {
             tbody.innerHTML = `
                 <tr>
-                    <td colspan="5" style="text-align: center; padding: 20px;">
+                    <td colspan="6" style="text-align: center; padding: 20px;">
                         <div class="loading-spinner">
                             <i class="fas fa-spinner fa-spin"></i> Loading dashboard data...
                         </div>
@@ -331,7 +409,7 @@ async function loadDashboardData() {
         console.log('🔍 [DEBUG] Users response:', usersResponse);
         
         console.log('🔍 [DEBUG] Calling apiClient.getAllTimesheets()...');
-        const timesheetsResponse = await apiClient.getAllTimesheets().catch(err => {
+        const timesheetsResponse = await apiClient.getAllTimesheets({ limit: 1000 }).catch(err => {
             console.error('❌ [DEBUG] Timesheets endpoint error:', err);
             return [];
         });
@@ -351,9 +429,21 @@ async function loadDashboardData() {
         const users = usersResponse.users || usersResponse || [];
         console.log('🔍 [DEBUG] Final users array:', users);
         
-        console.log('🔍 [DEBUG] Processing timesheets response...');
-        const timesheets = Array.isArray(timesheetsResponse) ? timesheetsResponse : 
-                          (timesheetsResponse.timesheets || timesheetsResponse.data || []);
+       console.log('🔍 [DEBUG] Processing timesheets response...');
+// Handle all possible response formats from backend
+let timesheets = [];
+if (Array.isArray(timesheetsResponse)) {
+    timesheets = timesheetsResponse;
+} else if (timesheetsResponse && Array.isArray(timesheetsResponse.timesheets)) {
+    timesheets = timesheetsResponse.timesheets;
+} else if (timesheetsResponse && Array.isArray(timesheetsResponse.data)) {
+    timesheets = timesheetsResponse.data;
+} else if (timesheetsResponse && timesheetsResponse.pagination) {
+    timesheets = timesheetsResponse.timesheets || [];
+} else {
+    console.warn('❌ [DEBUG] Unexpected timesheets response format:', timesheetsResponse);
+    timesheets = [];
+}
         console.log('🔍 [DEBUG] Final timesheets array:', timesheets);
         
         console.log('🔍 [DEBUG] Updating dashboard cards...');
@@ -373,7 +463,7 @@ async function loadDashboardData() {
         if (tbody) {
             tbody.innerHTML = `
                 <tr>
-                    <td colspan="5" style="text-align: center; padding: 20px; color: #e74c3c;">
+                    <td colspan="6" style="text-align: center; padding: 20px; color: #e74c3c;">
                         <i class="fas fa-exclamation-triangle"></i> Failed to load data: ${error.message}
                     </td>
                 </tr>
@@ -384,7 +474,7 @@ async function loadDashboardData() {
     }
 }
 
-// DEBUG VERSION: Dashboard cards with detailed logging
+// ENHANCED: Dashboard cards with blocking timesheets count
 function updateDashboardCards(users, timesheets, dashboardStats = {}) {
     try {
         console.log('🔍 [DEBUG] updateDashboardCards called with:', { 
@@ -394,12 +484,22 @@ function updateDashboardCards(users, timesheets, dashboardStats = {}) {
         });
         
         // Ensure users is an array
-        const usersArray = Array.isArray(users) ? users : [];
-        console.log('🔍 [DEBUG] Users array length:', usersArray.length);
-        
-        // Ensure timesheets is an array
-        const timesheetsArray = Array.isArray(timesheets) ? timesheets : [];
-        console.log('🔍 [DEBUG] Timesheets array length:', timesheetsArray.length);
+       // Ensure users is an array (handle multiple response formats)
+let usersArray = [];
+if (Array.isArray(users)) {
+    usersArray = users;
+} else if (users && Array.isArray(users.users)) {
+    usersArray = users.users;
+} else if (users && Array.isArray(users.data)) {
+    usersArray = users.data;
+} else {
+    usersArray = [];
+}
+console.log('🔍 [DEBUG] Users array length:', usersArray.length);
+
+// Use the already processed timesheets array from above
+const timesheetsArray = timesheets; // This is already processed in loadDashboardData
+console.log('🔍 [DEBUG] Timesheets array length:', timesheetsArray.length);
 
         // Total Employees
         const totalEmployees = dashboardStats.totalUsers || usersArray.filter(user => user.role === 'employee').length;
@@ -424,21 +524,33 @@ function updateDashboardCards(users, timesheets, dashboardStats = {}) {
             console.log('❌ [DEBUG] approvedTimesheets element not found');
         }
 
-        // Resubmitted Timesheets
+        // ✅ ENHANCED: Resubmitted Timesheets with editing window info
         const resubmittedTimesheets = timesheetsArray.filter(ts => {
             return ts.status === 'pending' && 
                    (ts.previousStatus === 'rejected' || ts.rejectionReason || ts.resubmitted);
         }).length;
-        console.log('🔍 [DEBUG] Resubmitted timesheets:', resubmittedTimesheets);
+        
+        const editableRejected = timesheetsArray.filter(ts => 
+            ts.status === 'rejected' && 
+            ts.canEdit && 
+            !ts.isExpired
+        ).length;
+        
+        const totalResubmitted = resubmittedTimesheets + editableRejected;
+        
+        console.log('🔍 [DEBUG] Resubmitted/Editable timesheets:', totalResubmitted);
         const resubmittedCountEl = document.getElementById('resubmittedCount');
         if (resubmittedCountEl) {
-            resubmittedCountEl.textContent = resubmittedTimesheets;
+            resubmittedCountEl.textContent = totalResubmitted;
             console.log('🔍 [DEBUG] Updated resubmitted count element');
+            
+            // Add tooltip for breakdown
+            resubmittedCountEl.title = `${resubmittedTimesheets} resubmitted + ${editableRejected} editable`;
         } else {
             console.log('❌ [DEBUG] resubmittedCount element not found');
         }
 
-        // Miscellaneous Hours
+        // ✅ ENHANCED: Miscellaneous Hours with blocking info
         const miscHoursCount = timesheetsArray.reduce((count, ts) => {
             if (!ts.entries || !Array.isArray(ts.entries)) return count;
             
@@ -450,10 +562,33 @@ function updateDashboardCards(users, timesheets, dashboardStats = {}) {
             );
             return count + miscEntries.length;
         }, 0);
-        console.log('🔍 [DEBUG] Misc hours count:', miscHoursCount);
+        
+        // ✅ NEW: Add blocking timesheets overview
+        const blockingSummary = getBlockingTimesheetsSummary(timesheetsArray);
         const miscHoursCountEl = document.getElementById('miscHoursCount');
         if (miscHoursCountEl) {
             miscHoursCountEl.textContent = miscHoursCount;
+            
+            // Make card clickable to show rejected overview
+            const miscCard = miscHoursCountEl.closest('.card');
+            if (miscCard && blockingSummary.count > 0) {
+                miscCard.style.cursor = 'pointer';
+                miscCard.style.border = '2px solid #e74c3c';
+                miscCard.title = `Click to view ${blockingSummary.count} blocking timesheets`;
+                miscCard.onclick = showRejectedOverviewModal;
+                
+                // Add blocking badge
+                let blockingBadge = miscCard.querySelector('.blocking-badge');
+                if (!blockingBadge) {
+                    blockingBadge = document.createElement('div');
+                    blockingBadge.className = 'blocking-badge';
+                    blockingBadge.innerHTML = `
+                        <span class="blocking-count">${blockingSummary.count}</span>
+                        <span class="blocking-text">Blocking</span>
+                    `;
+                    miscCard.appendChild(blockingBadge);
+                }
+            }
             console.log('🔍 [DEBUG] Updated misc hours count element');
         } else {
             console.log('❌ [DEBUG] miscHoursCount element not found');
@@ -467,7 +602,7 @@ function updateDashboardCards(users, timesheets, dashboardStats = {}) {
     }
 }
 
-// Recent timesheets with debug logging
+// ENHANCED: Recent timesheets with 15-day editing window display
 function updateRecentTimesheets(timesheets) {
     const tbody = document.getElementById('recentTimesheetsBody');
     if (!tbody) {
@@ -502,7 +637,7 @@ function updateRecentTimesheets(timesheets) {
         if (recentTimesheets.length === 0) {
             tbody.innerHTML = `
                 <tr>
-                    <td colspan="5" style="text-align: center; padding: 20px;">
+                    <td colspan="6" style="text-align: center; padding: 20px;">
                         <i class="fas fa-inbox"></i> No timesheets found
                     </td>
                 </tr>
@@ -526,15 +661,29 @@ function updateRecentTimesheets(timesheets) {
             const status = timesheet.status ? 
                 timesheet.status.charAt(0).toUpperCase() + timesheet.status.slice(1) : 'Unknown';
             
+            // ✅ ENHANCED: Editing deadline information for rejected timesheets
+            const editingInfo = timesheet.status === 'rejected' ? formatEditingDeadline(timesheet) : '';
+            
             // Show action buttons for 'pending' status
             const isPending = timesheet.status === 'pending';
+            
+            // ✅ NEW: Blocking indicator
+            const isBlocking = isTimesheetBlocking(timesheet);
+            const blockingIndicator = isBlocking ? 
+                `<span class="blocking-indicator" title="Blocking new submissions">🚫</span>` : '';
 
             return `
-                <tr>
-                    <td>${sanitizeHTML(employeeName)}</td>
+                <tr class="${isBlocking ? 'blocking-row' : ''}">
+                    <td>
+                        ${blockingIndicator}
+                        ${sanitizeHTML(employeeName)}
+                    </td>
                     <td>${weekStart} - ${weekEnd}</td>
                     <td>${totalHours.toFixed(1)}</td>
-                    <td><span class="status ${timesheet.status}">${sanitizeHTML(status)}</span></td>
+                    <td>
+                        <span class="status ${timesheet.status}">${sanitizeHTML(status)}</span>
+                        ${editingInfo}
+                    </td>
                     <td>
                         <button class="action-btn view-btn" data-id="${timesheet._id}" title="View Details" ${isLoading ? 'disabled' : ''}>
                             <i class="fas fa-eye"></i>
@@ -566,7 +715,7 @@ function updateRecentTimesheets(timesheets) {
         console.error('❌ [DEBUG] Error updating recent timesheets:', error);
         tbody.innerHTML = `
             <tr>
-                <td colspan="5" style="text-align: center; color: #e74c3c;">
+                <td colspan="6" style="text-align: center; color: #e74c3c;">
                     <i class="fas fa-exclamation-triangle"></i> Error loading timesheets: ${error.message}
                 </td>
             </tr>
@@ -616,7 +765,7 @@ function setupActionButtons() {
     console.log('✅ [DEBUG] Action buttons setup complete');
 }
 
-// View timesheet details with debug logging
+// ENHANCED: View timesheet details with 15-day editing info
 async function viewTimesheetDetails(timesheetId) {
     if (isLoading) return;
     
@@ -660,6 +809,30 @@ async function viewTimesheetDetails(timesheetId) {
         const totalHours = timesheet.totalHours || 
             ((timesheet.totalNormalHours || 0) + (timesheet.totalOvertimeHours || 0));
         
+        // ✅ ENHANCED: Editing deadline info
+        let editingInfo = '';
+        if (timesheet.status === 'rejected') {
+            const now = new Date();
+            const editableUntil = timesheet.editableUntil ? new Date(timesheet.editableUntil) : null;
+            const canEdit = timesheet.canEdit && editableUntil && editableUntil > now && !timesheet.isExpired;
+            const daysRemaining = editableUntil ? Math.ceil((editableUntil - now) / (24 * 60 * 60 * 1000)) : 0;
+            const isBlocking = isTimesheetBlocking(timesheet);
+            
+            editingInfo = `
+                <div class="editing-details">
+                    <h4>Editing Window Information</h4>
+                    <div class="editing-status-info">
+                        <p><strong>Can Edit:</strong> <span class="${canEdit ? 'status-yes' : 'status-no'}">${canEdit ? 'Yes' : 'No'}</span></p>
+                        <p><strong>Days Remaining:</strong> ${daysRemaining}</p>
+                        <p><strong>Editable Until:</strong> ${editableUntil ? formatDate(editableUntil) : 'N/A'}</p>
+                        <p><strong>Is Expired:</strong> <span class="${timesheet.isExpired ? 'status-yes' : 'status-no'}">${timesheet.isExpired ? 'Yes' : 'No'}</span></p>
+                        <p><strong>Blocking New Submissions:</strong> <span class="${isBlocking ? 'status-yes' : 'status-no'}">${isBlocking ? 'Yes' : 'No'}</span></p>
+                        <p><strong>Resubmission Count:</strong> ${timesheet.resubmissionCount || 0}</p>
+                    </div>
+                </div>
+            `;
+        }
+        
         // Create detailed view in modal
         const modal = document.getElementById('timesheetDetailsModal');
         const content = document.getElementById('timesheetDetailsContent');
@@ -685,6 +858,7 @@ async function viewTimesheetDetails(timesheetId) {
                         <p><strong>Normal Hours:</strong> ${timesheet.totalNormalHours || 0}</p>
                         <p><strong>Overtime Hours:</strong> ${timesheet.totalOvertimeHours || 0}</p>
                     </div>
+                    ${editingInfo}
                 </div>
         `;
 
@@ -763,6 +937,8 @@ async function viewTimesheetDetails(timesheetId) {
             detailsHTML += `
                 <div class="rejection-info">
                     <p><strong>Rejection Reason:</strong> ${sanitizeHTML(timesheet.rejectionReason)}</p>
+                    ${timesheet.rejectionCategory ? `<p><strong>Rejection Category:</strong> ${timesheet.rejectionCategory}</p>` : ''}
+                    ${timesheet.rejectedBy ? `<p><strong>Rejected By:</strong> ${timesheet.rejectedBy.firstName} ${timesheet.rejectedBy.lastName}</p>` : ''}
                 </div>
             `;
         }
@@ -781,7 +957,7 @@ async function viewTimesheetDetails(timesheetId) {
     }
 }
 
-// Approve timesheet
+// ENHANCED: Approve timesheet with notification about editing windows
 async function approveTimesheet(timesheetId) {
     if (isLoading) return;
     
@@ -804,11 +980,11 @@ async function approveTimesheet(timesheetId) {
     }
 }
 
-// Reject timesheet
+// ENHANCED: Reject timesheet with 15-day editing window information
 async function rejectTimesheet(timesheetId) {
     if (isLoading) return;
     
-    const remark = prompt("Please provide a reason for rejecting this timesheet:");
+    const remark = prompt(`Please provide a reason for rejecting this timesheet:\n\nNote: Employee will have 15 days to edit and resubmit.`);
     if (remark === null) return; // User cancelled
 
     const sanitizedRemark = remark ? remark.trim() : '';
@@ -826,7 +1002,7 @@ async function rejectTimesheet(timesheetId) {
     try {
         console.log('🔍 [DEBUG] Rejecting timesheet:', timesheetId);
         await apiClient.rejectTimesheet(timesheetId, sanitizedRemark);
-        showNotification('Timesheet rejected successfully!', 'success');
+        showNotification('Timesheet rejected successfully! Employee has 15 days to edit and resubmit.', 'success');
         
         // Refresh data to show updated status
         await loadDashboardData();
@@ -837,6 +1013,181 @@ async function rejectTimesheet(timesheetId) {
     } finally {
         setLoadingState(false);
     }
+}
+
+// ✅ NEW: Show rejected timesheets overview modal
+async function showRejectedOverviewModal() {
+    if (isLoading) return;
+    
+    setLoadingState(true);
+    try {
+        const timesheets = await apiClient.getAllTimesheets();
+        const blockingSummary = getBlockingTimesheetsSummary(timesheets);
+        
+        let rejectedModal = document.getElementById('rejectedOverviewModal');
+        
+        if (!rejectedModal) {
+            rejectedModal = document.createElement('div');
+            rejectedModal.id = 'rejectedOverviewModal';
+            rejectedModal.className = 'modal';
+            rejectedModal.innerHTML = `
+                <div class="modal-content large-modal">
+                    <span class="close">&times;</span>
+                    <h2><i class="fas fa-exclamation-triangle"></i> Rejected Timesheets Overview</h2>
+                    <div class="rejected-overview-content">
+                        <!-- Content will be loaded here -->
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(rejectedModal);
+            
+            rejectedModal.querySelector('.close').addEventListener('click', () => {
+                hideAllModals();
+            });
+        }
+        
+        const content = rejectedModal.querySelector('.rejected-overview-content');
+        content.innerHTML = generateRejectedOverviewContent(timesheets, blockingSummary);
+        
+        rejectedModal.style.display = 'block';
+        
+    } catch (error) {
+        console.error('Error loading rejected overview:', error);
+        showNotification('Failed to load rejected timesheets overview', 'error');
+    } finally {
+        setLoadingState(false);
+    }
+}
+
+// ✅ NEW: Generate rejected overview content
+function generateRejectedOverviewContent(timesheets, blockingSummary) {
+    const rejectedTimesheets = timesheets.filter(ts => ts.status === 'rejected');
+    const editableTimesheets = rejectedTimesheets.filter(ts => ts.canEdit && !ts.isExpired);
+    const expiredTimesheets = rejectedTimesheets.filter(ts => ts.isExpired);
+    const blockingTimesheets = rejectedTimesheets.filter(isTimesheetBlocking);
+    
+    let html = `
+        <div class="rejected-stats">
+            <div class="stat-card">
+                <h3>Total Rejected</h3>
+                <div class="stat-number">${rejectedTimesheets.length}</div>
+            </div>
+            <div class="stat-card">
+                <h3>Still Editable</h3>
+                <div class="stat-number editable">${editableTimesheets.length}</div>
+            </div>
+            <div class="stat-card">
+                <h3>Editing Expired</h3>
+                <div class="stat-number expired">${expiredTimesheets.length}</div>
+            </div>
+            <div class="stat-card urgent">
+                <h3>Blocking Submissions</h3>
+                <div class="stat-number blocking">${blockingTimesheets.length}</div>
+            </div>
+        </div>
+    `;
+    
+    if (blockingTimesheets.length > 0) {
+        html += `
+            <div class="blocking-section">
+                <h3><i class="fas fa-ban"></i> Timesheets Blocking New Submissions</h3>
+                <div class="blocking-list">
+        `;
+        
+        blockingTimesheets.forEach(timesheet => {
+            const daysBlocking = Math.floor((new Date() - new Date(timesheet.submittedAt)) / (24 * 60 * 60 * 1000)) - 15;
+            const weekRange = `${formatDate(timesheet.weekStartDate)} - ${formatDate(timesheet.weekEndDate)}`;
+            
+            html += `
+                <div class="blocking-item">
+                    <div class="blocking-info">
+                        <strong>${timesheet.employeeName}</strong> (${timesheet.employeeCode})
+                        <div class="week-info">${weekRange}</div>
+                        <div class="blocking-duration">Blocking for ${daysBlocking} days</div>
+                    </div>
+                    <div class="blocking-actions">
+                        <button class="btn btn-sm btn-view" onclick="viewTimesheetDetails('${timesheet._id}')">
+                            <i class="fas fa-eye"></i> View
+                        </button>
+                        <button class="btn btn-sm btn-contact" onclick="contactEmployee('${timesheet.employeeCode}')">
+                            <i class="fas fa-envelope"></i> Contact
+                        </button>
+                    </div>
+                </div>
+            `;
+        });
+        
+        html += `
+                </div>
+            </div>
+        `;
+    }
+    
+    // Show editable timesheets about to expire
+    const urgentTimesheets = editableTimesheets.filter(ts => {
+        const daysRemaining = Math.ceil((new Date(ts.editableUntil) - new Date()) / (24 * 60 * 60 * 1000));
+        return daysRemaining <= 3;
+    });
+    
+    if (urgentTimesheets.length > 0) {
+        html += `
+            <div class="urgent-section">
+                <h3><i class="fas fa-clock"></i> Editing Windows Expiring Soon (≤3 days)</h3>
+                <div class="urgent-list">
+        `;
+        
+        urgentTimesheets.forEach(timesheet => {
+            const daysRemaining = Math.ceil((new Date(timesheet.editableUntil) - new Date()) / (24 * 60 * 60 * 1000));
+            const weekRange = `${formatDate(timesheet.weekStartDate)} - ${formatDate(timesheet.weekEndDate)}`;
+            
+            html += `
+                <div class="urgent-item">
+                    <div class="urgent-info">
+                        <strong>${timesheet.employeeName}</strong> (${timesheet.employeeCode})
+                        <div class="week-info">${weekRange}</div>
+                        <div class="deadline-info ${daysRemaining === 1 ? 'critical' : 'warning'}">
+                            ${daysRemaining} day${daysRemaining !== 1 ? 's' : ''} remaining
+                        </div>
+                    </div>
+                    <div class="urgent-actions">
+                        <button class="btn btn-sm btn-view" onclick="viewTimesheetDetails('${timesheet._id}')">
+                            <i class="fas fa-eye"></i> View
+                        </button>
+                        <button class="btn btn-sm btn-contact" onclick="contactEmployee('${timesheet.employeeCode}')">
+                            <i class="fas fa-bell"></i> Remind
+                        </button>
+                    </div>
+                </div>
+            `;
+        });
+        
+        html += `
+                </div>
+            </div>
+        `;
+    }
+    
+    if (blockingTimesheets.length === 0 && urgentTimesheets.length === 0) {
+        html += `
+            <div class="no-issues">
+                <i class="fas fa-check-circle fa-3x"></i>
+                <h3>No Critical Issues</h3>
+                <p>All rejected timesheets are being managed properly.</p>
+            </div>
+        `;
+    }
+    
+    return html;
+}
+
+// ✅ NEW: Contact employee function
+function contactEmployee(employeeCode) {
+    // In a real implementation, this would open an email client or send a notification
+    showNotification(`Contact functionality for ${employeeCode} would be implemented here`, 'info');
+}
+
+function closeRejectedOverviewModal() {
+    document.getElementById('rejectedOverviewModal').style.display = 'none';
 }
 
 // Miscellaneous hours search
@@ -1045,8 +1396,12 @@ function closeTimesheetDetailsModal() {
 window.openMiscellaneousHoursModal = openMiscellaneousHoursModal;
 window.closeMiscellaneousHoursModal = closeMiscellaneousHoursModal;
 window.closeTimesheetDetailsModal = closeTimesheetDetailsModal;
+window.showRejectedOverviewModal = showRejectedOverviewModal;
+window.closeRejectedOverviewModal = closeRejectedOverviewModal;
+window.contactEmployee = contactEmployee;
+window.viewTimesheetDetails = viewTimesheetDetails;
 window.sanitizeHTML = sanitizeHTML;
 window.formatDate = formatDate;
 window.showNotification = showNotification;
 
-console.log('✅ [DEBUG] Admin dashboard with debug logging loaded');
+console.log('✅ [DEBUG] Admin dashboard with 15-day editing window support loaded');

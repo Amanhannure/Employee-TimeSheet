@@ -1,4 +1,4 @@
-// ==================== DASHBOARD.JS - ENHANCED WITH DATE RESTRICTIONS & DEPARTMENT FIX ====================
+// ==================== DASHBOARD.JS - COMPLETE REJECTION WORKFLOW WITH 15-DAY EDITING WINDOW ====================
 
 // Global variables
 let currentCell = null;
@@ -6,12 +6,15 @@ let userData = null;
 let assignedProjects = [];
 let isLoading = false;
 let hasPendingRejectedTimesheets = false;
+let editingDeadlineChecker = null;
+let currentOpenModal = null;
+let currentEditModal = null;
+let isEditMode = false;
 
 // Safe notification function
 function safeNotification(message, type = 'info') {
     console.log(`📢 ${type.toUpperCase()}: ${message}`);
     
-    // Simple DOM notification
     try {
         const notification = document.createElement('div');
         notification.style.cssText = `
@@ -23,7 +26,7 @@ function safeNotification(message, type = 'info') {
             border: 1px solid ${type === 'error' ? '#f5c6cb' : type === 'success' ? '#c3e6cb' : '#bee5eb'};
             border-radius: 4px;
             color: ${type === 'error' ? '#721c24' : type === 'success' ? '#155724' : '#0c5460'};
-            z-index: 10000;
+            z-index: 9999;
             font-family: Arial, sans-serif;
             max-width: 300px;
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
@@ -37,7 +40,6 @@ function safeNotification(message, type = 'info') {
             }
         }, 5000);
     } catch (domError) {
-        // Fallback to alert for critical errors
         if (type === 'error' && typeof alert === 'function') {
             alert(`${type.toUpperCase()}: ${message}`);
         }
@@ -58,7 +60,7 @@ function getFullDayName(shortDay) {
     return dayMap[shortDay] || shortDay;
 }
 
-// ✅ NEW: Check if date is in future
+// Check if date is in future
 function isFutureDate(day) {
     const startDate = new Date(document.getElementById('week-start-date').value);
     const dayIndex = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'].indexOf(day);
@@ -66,21 +68,26 @@ function isFutureDate(day) {
     cellDate.setDate(startDate.getDate() + dayIndex);
     
     const today = new Date();
-    today.setHours(23, 59, 59, 999); // End of today
+    today.setHours(23, 59, 59, 999);
     
     return cellDate > today;
 }
 
-// ✅ NEW: Check for pending rejected timesheets
+// ✅ ENHANCED: Check for pending rejected timesheets with 15-day logic
 async function checkPendingRejectedTimesheets() {
     try {
         const timesheets = await apiClient.getMyTimesheets();
         const now = new Date();
-        const fifteenDaysAgo = new Date(now.setDate(now.getDate() - 15));
+        const fifteenDaysAgo = new Date(now);
+        fifteenDaysAgo.setDate(now.getDate() - 15);
+        fifteenDaysAgo.setHours(23, 59, 59, 999);
         
+        // Only show warning for timesheets rejected MORE than 15 days ago
         const pendingRejected = timesheets.filter(ts => 
             ts.status === 'rejected' && 
-            new Date(ts.submittedAt) > fifteenDaysAgo
+            ts.rejectedAt && 
+            new Date(ts.rejectedAt) < fifteenDaysAgo &&
+            !ts.isExpired
         );
         
         hasPendingRejectedTimesheets = pendingRejected.length > 0;
@@ -89,6 +96,9 @@ async function checkPendingRejectedTimesheets() {
             showPendingRejectedWarning(pendingRejected.length);
         }
         
+        // Start deadline checker for editable timesheets
+        startEditingDeadlineChecker(timesheets);
+        
         return hasPendingRejectedTimesheets;
     } catch (error) {
         console.warn('Could not check pending rejected timesheets:', error);
@@ -96,7 +106,85 @@ async function checkPendingRejectedTimesheets() {
     }
 }
 
-// ✅ NEW: Show warning for pending rejected timesheets
+// ✅ NEW: Start periodic checking of editing deadlines
+function startEditingDeadlineChecker(timesheets) {
+    if (editingDeadlineChecker) {
+        clearInterval(editingDeadlineChecker);
+    }
+    
+    editingDeadlineChecker = setInterval(() => {
+        updateEditingDeadlineDisplays();
+    }, 60 * 60 * 1000);
+    
+    updateEditingDeadlineDisplays();
+}
+
+// ✅ NEW: Update all editing deadline displays
+function updateEditingDeadlineDisplays() {
+    const editableItems = document.querySelectorAll('.history-item.rejected');
+    editableItems.forEach(item => {
+        const timesheetId = item.getAttribute('data-timesheet-id');
+        if (timesheetId) {
+            updateSingleDeadlineDisplay(timesheetId, item);
+        }
+    });
+}
+
+// ✅ NEW: Update single deadline display
+function updateSingleDeadlineDisplay(timesheetId, item) {
+    const daysRemainingEl = item.querySelector('.days-remaining');
+    const editButton = item.querySelector('.edit-rejected-btn');
+    const statusBadge = item.querySelector('.editing-status');
+    
+    if (!daysRemainingEl || !editButton) return;
+    
+    const now = new Date();
+    const editableUntil = new Date(item.getAttribute('data-editable-until'));
+    
+    // Normalize dates for accurate day calculation
+    const nowNormalized = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const editableUntilNormalized = new Date(editableUntil.getFullYear(), editableUntil.getMonth(), editableUntil.getDate());
+    
+    const daysRemaining = Math.ceil((editableUntilNormalized - nowNormalized) / (24 * 60 * 60 * 1000));
+    
+    if (daysRemaining <= 0) {
+        daysRemainingEl.innerHTML = `<span class="expired-text">Editing expired</span>`;
+        editButton.disabled = true;
+        editButton.innerHTML = '<i class="fas fa-ban"></i> Edit Expired';
+        editButton.classList.add('btn-expired');
+        editButton.classList.remove('btn-warning');
+        
+        if (statusBadge) {
+            statusBadge.textContent = 'EXPIRED';
+            statusBadge.className = 'editing-status status-expired';
+        }
+    } else {
+        const hoursRemaining = Math.ceil((editableUntil - now) / (60 * 60 * 1000));
+        
+        if (daysRemaining === 1 && hoursRemaining <= 24) {
+            daysRemainingEl.innerHTML = `<span class="urgent-text">${hoursRemaining} hours remaining</span>`;
+            item.classList.add('deadline-urgent');
+        } else if (daysRemaining <= 3) {
+            daysRemainingEl.innerHTML = `<span class="warning-text">${daysRemaining} days remaining</span>`;
+            item.classList.add('deadline-warning');
+        } else {
+            daysRemainingEl.innerHTML = `<span class="normal-text">${daysRemaining} days remaining</span>`;
+            item.classList.remove('deadline-warning', 'deadline-urgent');
+        }
+        
+        editButton.disabled = false;
+        editButton.innerHTML = '<i class="fas fa-edit"></i> Edit';
+        editButton.classList.remove('btn-expired');
+        editButton.classList.add('btn-warning');
+        
+        if (statusBadge) {
+            statusBadge.textContent = 'EDITABLE';
+            statusBadge.className = 'editing-status status-editable';
+        }
+    }
+}
+
+// ✅ ENHANCED: Show warning for pending rejected timesheets
 function showPendingRejectedWarning(count) {
     const warningDiv = document.createElement('div');
     warningDiv.id = 'pending-rejected-warning';
@@ -104,18 +192,19 @@ function showPendingRejectedWarning(count) {
         background: #fff3cd;
         border: 1px solid #ffeaa7;
         color: #856404;
-        padding: 12px;
+        padding: 12px 20px;
         margin: 10px 0;
-        border-radius: 4px;
+        border-radius: 8px;
         display: flex;
         align-items: center;
         justify-content: space-between;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     `;
     
     warningDiv.innerHTML = `
         <div style="display: flex; align-items: center;">
-            <i class="fas fa-exclamation-triangle" style="margin-right: 10px;"></i>
-            <span>You have ${count} rejected timesheet(s) that need attention. Please resolve them to submit new timesheets.</span>
+            <i class="fas fa-exclamation-triangle" style="margin-right: 10px; color: #856404;"></i>
+            <span><strong>Action Required:</strong> You have ${count} rejected timesheet(s) older than 15 days that need attention. Please resolve them to submit new timesheets.</span>
         </div>
         <button id="view-rejected-btn" class="btn btn-warning btn-sm">
             <i class="fas fa-eye"></i> View Rejected
@@ -127,14 +216,169 @@ function showPendingRejectedWarning(count) {
         formHeader.parentNode.insertBefore(warningDiv, formHeader.nextSibling);
     }
     
-    // Add event listener to view rejected button
     document.getElementById('view-rejected-btn').addEventListener('click', showRejectedTimesheetsModal);
 }
 
-// ✅ NEW: Show rejected timesheets in modal
+// ✅ NEW: Show rejected timesheets in dedicated modal
 function showRejectedTimesheetsModal() {
-    // This would open a modal showing rejected timesheets with edit options
-    safeNotification('Rejected timesheets view feature will be implemented in next version', 'info');
+    if (isLoading) return;
+    
+    setLoadingState(true);
+    try {
+        let rejectedModal = document.getElementById('rejected-timesheets-modal');
+        
+        if (!rejectedModal) {
+            rejectedModal = document.createElement('div');
+            rejectedModal.id = 'rejected-timesheets-modal';
+            rejectedModal.className = 'modal';
+            rejectedModal.innerHTML = `
+                <div class="modal-content large-modal">
+                    <span class="close-modal">&times;</span>
+                    <h2><i class="fas fa-exclamation-triangle"></i> Rejected Timesheets Requiring Attention</h2>
+                    <div class="modal-description">
+                        <p>The following timesheets were rejected more than 15 days ago and are blocking new submissions.</p>
+                    </div>
+                    <div id="rejected-timesheets-content" class="rejected-timesheets-content">
+                        <!-- Content will be loaded here -->
+                    </div>
+                    <div class="modal-actions">
+                        <button class="btn btn-primary close-modal">Close</button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(rejectedModal);
+            
+            rejectedModal.querySelector('.close-modal').addEventListener('click', () => {
+                hideAllModals();
+            });
+        }
+        
+        loadRejectedTimesheetsContent();
+        showModal(rejectedModal);
+        
+    } catch (error) {
+        console.error('Error showing rejected timesheets modal:', error);
+        safeNotification('Failed to load rejected timesheets', 'error');
+    } finally {
+        setLoadingState(false);
+    }
+}
+
+// ✅ NEW: Load rejected timesheets content
+async function loadRejectedTimesheetsContent() {
+    try {
+        const contentDiv = document.getElementById('rejected-timesheets-content');
+        if (!contentDiv) return;
+        
+        const timesheets = await apiClient.getMyTimesheets();
+        const now = new Date();
+        const fifteenDaysAgo = new Date(now);
+        fifteenDaysAgo.setDate(now.getDate() - 15);
+        fifteenDaysAgo.setHours(23, 59, 59, 999);
+        
+        const blockingTimesheets = timesheets.filter(ts => 
+            ts.status === 'rejected' && 
+            ts.rejectedAt && 
+            new Date(ts.rejectedAt) < fifteenDaysAgo &&
+            !ts.isExpired
+        );
+        
+        if (blockingTimesheets.length === 0) {
+            contentDiv.innerHTML = `
+                <div class="no-blocking-timesheets">
+                    <i class="fas fa-check-circle fa-3x" style="color: #28a745; margin-bottom: 20px;"></i>
+                    <h3>No Blocking Timesheets</h3>
+                    <p>All your rejected timesheets have been resolved or are within the editing period.</p>
+                </div>
+            `;
+            return;
+        }
+        
+        let html = '<div class="blocking-timesheets-list">';
+        
+        blockingTimesheets.forEach(timesheet => {
+            const weekStart = new Date(timesheet.weekStartDate).toLocaleDateString();
+            const weekEnd = new Date(timesheet.weekEndDate).toLocaleDateString();
+            const rejectedDate = new Date(timesheet.rejectedAt).toLocaleDateString();
+            const daysBlocking = Math.floor((now - new Date(timesheet.rejectedAt)) / (24 * 60 * 60 * 1000)) - 15;
+            
+            html += `
+                <div class="blocking-timesheet-item">
+                    <div class="blocking-timesheet-info">
+                        <div class="blocking-header">
+                            <strong>Week ${timesheet.weekNumber}</strong>: ${weekStart} - ${weekEnd}
+                            <span class="blocking-days">Blocking for ${daysBlocking} days</span>
+                        </div>
+                        <div class="blocking-details">
+                            <div class="rejection-reason">
+                                <strong>Rejection Reason:</strong> ${timesheet.rejectionReason || 'No reason provided'}
+                            </div>
+                            <div class="timesheet-meta">
+                                <span>Rejected: ${rejectedDate}</span>
+                                <span>Total Hours: ${timesheet.totalHours || 0}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="blocking-actions">
+                        ${timesheet.canEdit ? `
+                            <button class="btn btn-warning btn-sm edit-blocking-btn" data-id="${timesheet._id}">
+                                <i class="fas fa-edit"></i> Edit Now
+                            </button>
+                        ` : `
+                            <button class="btn btn-secondary btn-sm" disabled>
+                                <i class="fas fa-ban"></i> Editing Expired
+                            </button>
+                        `}
+                        <button class="btn btn-info btn-sm view-blocking-btn" data-id="${timesheet._id}">
+                            <i class="fas fa-eye"></i> View Details
+                        </button>
+                    </div>
+                </div>
+            `;
+        });
+        
+        html += '</div>';
+        contentDiv.innerHTML = html;
+        
+        document.querySelectorAll('.edit-blocking-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                hideAllModals();
+                showEditTimesheetModal(btn.getAttribute('data-id'));
+            });
+        });
+        
+        document.querySelectorAll('.view-blocking-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                viewTimesheetDetails(btn.getAttribute('data-id'));
+            });
+        });
+        
+    } catch (error) {
+        console.error('Error loading rejected timesheets content:', error);
+        document.getElementById('rejected-timesheets-content').innerHTML = `
+            <div class="error-loading">
+                <i class="fas fa-exclamation-circle"></i>
+                <p>Failed to load rejected timesheets. Please try again.</p>
+            </div>
+        `;
+    }
+}
+
+// ✅ ENHANCED: Modal Management Functions
+function showModal(modalElement) {
+    hideAllModals();
+    modalElement.style.display = 'block';
+    currentOpenModal = modalElement;
+    document.body.classList.add('modal-open');
+}
+
+function hideAllModals() {
+    document.querySelectorAll('.modal').forEach(modal => {
+        modal.style.display = 'none';
+    });
+    currentCell = null;
+    currentOpenModal = null;
+    document.body.classList.remove('modal-open');
 }
 
 // Loading state management
@@ -145,13 +389,11 @@ function setLoadingState(loading) {
         btn.disabled = loading;
     });
     
-    // Show/hide loading spinner
     const spinner = document.getElementById('loading-spinner');
     if (spinner) {
         spinner.style.display = loading ? 'flex' : 'none';
     }
     
-    // Update submit button text
     const submitButton = document.getElementById('submit-timesheet-btn');
     if (submitButton) {
         if (loading) {
@@ -162,10 +404,11 @@ function setLoadingState(loading) {
     }
 }
 
+// ==================== INITIALIZATION ====================
+
 document.addEventListener('DOMContentLoaded', async function() {
     console.log('🚀 Starting dashboard initialization...');
     
-    // Check authentication
     if (!checkAuthentication()) {
         return;
     }
@@ -204,7 +447,7 @@ async function initializeDashboard() {
         await loadBackendData();
         updateDayDates();
         loadDraftTimesheet();
-        await checkPendingRejectedTimesheets(); // ✅ NEW: Check for rejected timesheets
+        await checkPendingRejectedTimesheets();
     } catch (error) {
         console.error('Error in dashboard initialization:', error);
         safeNotification('Error initializing dashboard', 'error');
@@ -233,10 +476,8 @@ function updateUserInfo() {
         }
     }
     
-    // ✅ FIXED: Remove dropdown and display department directly
     const departmentSelect = document.getElementById('department');
     if (departmentSelect && userData.department) {
-        // Replace dropdown with display text
         const departmentGroup = departmentSelect.closest('.info-group');
         if (departmentGroup) {
             departmentGroup.innerHTML = `
@@ -248,22 +489,13 @@ function updateUserInfo() {
 }
 
 function setupEventListeners() {
-    // Sidebar toggle
     document.getElementById('toggle-sidebar').addEventListener('click', toggleSidebar);
-    
-    // Logout
     document.getElementById('logout-btn').addEventListener('click', handleLogout);
-    
-    // Date changes
     document.getElementById('week-start-date').addEventListener('change', handleDateChange);
     document.getElementById('week-end-date').addEventListener('change', handleDateChange);
-    
-    // Form actions
     document.getElementById('add-row-btn').addEventListener('click', addTimesheetRow);
     document.getElementById('save-timesheet-btn').addEventListener('click', saveTimesheet);
     document.getElementById('submit-timesheet-btn').addEventListener('click', submitTimesheet);
-    
-    // History and admin buttons
     document.getElementById('history-btn').addEventListener('click', showHistoryModal);
     document.getElementById('summary-history-btn').addEventListener('click', showHistoryModal);
     document.getElementById('admin-btn').addEventListener('click', showAccessDenied);
@@ -293,7 +525,7 @@ function handleDateChange() {
         }
         
         updateDayDates();
-        updateDateCellStates(); // ✅ NEW: Update cell states when dates change
+        updateDateCellStates();
     }
 }
 
@@ -325,6 +557,13 @@ function setupModalHandlers() {
             e.target.value = Math.round(value * 2) / 2;
         });
     }
+    
+    // Close modal when clicking outside
+    window.addEventListener('click', function(event) {
+        if (currentOpenModal && event.target === currentOpenModal) {
+            hideAllModals();
+        }
+    });
 }
 
 function toggleSidebar() {
@@ -333,6 +572,10 @@ function toggleSidebar() {
 
 function handleLogout() {
     if (confirm('Are you sure you want to logout?')) {
+        if (editingDeadlineChecker) {
+            clearInterval(editingDeadlineChecker);
+        }
+        
         saveDraftSilently();
         localStorage.removeItem('authToken');
         localStorage.removeItem('userData');
@@ -355,15 +598,9 @@ function saveDraftSilently() {
     }
 }
 
-function hideAllModals() {
-    document.querySelectorAll('.modal').forEach(modal => {
-        modal.style.display = 'none';
-    });
-    currentCell = null;
-}
-
 function showAccessDenied() {
-    document.getElementById('access-denied-modal').style.display = 'block';
+    const modal = document.getElementById('access-denied-modal');
+    showModal(modal);
 }
 
 function showEmployeeProjects() {
@@ -391,13 +628,12 @@ function initializeTimesheetTable() {
     
     updateTotals();
     updateFormStatus('draft');
-    updateDateCellStates(); // ✅ NEW: Set initial cell states
+    updateDateCellStates();
 }
 
 function addTimesheetRow() {
     if (isLoading) return;
     
-    // ✅ NEW: Check if blocked by pending rejected timesheets
     if (hasPendingRejectedTimesheets) {
         safeNotification('Please resolve your rejected timesheets before adding new rows', 'error');
         return;
@@ -452,11 +688,10 @@ function addTimesheetRow() {
     });
     
     updateRowNumbers();
-    updateDateCellStates(); // ✅ NEW: Update cell states for new row
+    updateDateCellStates();
     safeNotification('New row added', 'success');
 }
 
-// ✅ NEW: Update date cell states based on current date
 function updateDateCellStates() {
     const timeCells = document.querySelectorAll('.time-cell');
     timeCells.forEach(cell => {
@@ -537,15 +772,13 @@ function updateRowNumbers() {
 function openHoursModal(cell) {
     if (isLoading) return;
     
-    // ✅ NEW: Check if this is a future date
     const day = cell.getAttribute('data-day');
     if (isFutureDate(day)) {
         safeNotification('Cannot enter hours for future dates', 'warning');
         return;
     }
     
-    // ✅ NEW: Check if blocked by pending rejected timesheets
-    if (hasPendingRejectedTimesheets) {
+    if (hasPendingRejectedTimesheets && !cell.closest('#edit-timesheet-modal')) {
         safeNotification('Please resolve your rejected timesheets before entering hours', 'error');
         return;
     }
@@ -572,7 +805,9 @@ function openHoursModal(cell) {
     document.getElementById('work-remark').value = remark;
     
     updateAvailableHoursInfo(day);
-    document.getElementById('hours-modal').style.display = 'block';
+    
+    const hoursModal = document.getElementById('hours-modal');
+    showModal(hoursModal);
     
     setTimeout(() => {
         document.getElementById('work-hours').focus();
@@ -607,6 +842,13 @@ function updateAvailableHoursInfo(day) {
 }
 
 function saveHoursToCell() {
+    console.log('💾 [MAIN] saveHoursToCell called, isEditMode:', isEditMode);
+    
+    if (isEditMode && currentCell) {
+        saveEditHoursToCell();
+        return;
+    }
+    
     if (!currentCell || isLoading) return;
     
     const hoursType = document.getElementById('hours-type').value;
@@ -900,7 +1142,6 @@ async function saveTimesheet() {
 async function submitTimesheet() {
     if (isLoading) return;
     
-    // ✅ NEW: Check if blocked by pending rejected timesheets
     if (hasPendingRejectedTimesheets) {
         safeNotification('Please resolve your rejected timesheets before submitting new timesheets', 'error');
         return;
@@ -919,7 +1160,6 @@ async function submitTimesheet() {
             return;
         }
 
-        // ✅ NEW: Validate no future dates in backend style
         const today = new Date();
         today.setHours(23, 59, 59, 999);
         const futureEntries = timesheetData.entries.filter(entry => {
@@ -955,9 +1195,11 @@ async function submitTimesheet() {
     } catch (error) {
         console.error('Error submitting timesheet:', error);
         
-        // ✅ NEW: Specific error for future dates from backend
         if (error.message && error.message.includes('future dates')) {
             safeNotification(error.message, 'error');
+        } else if (error.message && error.message.includes('rejected timesheets')) {
+            safeNotification(error.message, 'error');
+            await checkPendingRejectedTimesheets();
         } else {
             safeNotification(error.message || 'Failed to submit timesheet. Please check your entries.', 'error');
         }
@@ -1067,7 +1309,678 @@ window.addEventListener('beforeunload', function(e) {
     }
 });
 
-// ==================== HISTORY MODAL ====================
+// ==================== FIXED EDIT MODAL FUNCTIONS WITH LOGGING ====================
+
+// Show edit modal for rejected timesheets
+function showEditTimesheetModal(timesheetId) {
+    console.log('🔧 [EDIT] Starting showEditTimesheetModal for:', timesheetId);
+    
+    if (isLoading) return;
+    
+    setLoadingState(true);
+    try {
+        apiClient.getTimesheetById(timesheetId)
+            .then(timesheet => {
+                console.log('📋 [EDIT] Loaded timesheet data:', timesheet);
+                console.log('📋 [EDIT] Timesheet entries:', timesheet.entries);
+                
+                // Enhanced validation
+                const now = new Date();
+                const editableUntil = timesheet.editableUntil ? new Date(timesheet.editableUntil) : null;
+                
+                if (!timesheet.canEdit) {
+                    console.log('❌ [EDIT] Timesheet cannot be edited');
+                    if (!editableUntil) {
+                        safeNotification('This timesheet cannot be edited. No editing period was set.', 'error');
+                    } else if (timesheet.isExpired) {
+                        safeNotification('Editing period has expired for this timesheet', 'error');
+                    } else if (editableUntil <= now) {
+                        safeNotification('Editing period ended on ' + editableUntil.toLocaleDateString(), 'error');
+                    } else {
+                        safeNotification('This timesheet cannot be edited at this time', 'error');
+                    }
+                    setLoadingState(false);
+                    return;
+                }
+
+                const daysRemaining = Math.ceil((editableUntil - now) / (24 * 60 * 60 * 1000));
+                safeNotification(`You have ${daysRemaining} days remaining to edit this timesheet`, 'info');
+                
+                createEditTimesheetModal(timesheet);
+            })
+            .catch(error => {
+                console.error('❌ [EDIT] Error loading timesheet:', error);
+                safeNotification('Failed to load timesheet for editing', 'error');
+                setLoadingState(false);
+            });
+    } catch (error) {
+        console.error('❌ [EDIT] Error opening edit modal:', error);
+        safeNotification('Error opening editor', 'error');
+        setLoadingState(false);
+    }
+}
+
+// Create and show edit modal
+function createEditTimesheetModal(timesheet) {
+    console.log('🔄 [EDIT] Creating edit modal for timesheet:', timesheet._id);
+    console.log('📋 [EDIT] Original timesheet data:', {
+        weekStartDate: timesheet.weekStartDate,
+        weekEndDate: timesheet.weekEndDate,
+        entriesCount: timesheet.entries?.length
+    });
+    
+    // Set edit mode flag
+    isEditMode = true;
+    
+    // Store the original timesheet data for reference
+    window.currentEditingTimesheet = timesheet;
+    
+    // Remove existing edit modal if any
+    const existingModal = document.getElementById('edit-timesheet-modal');
+    if (existingModal) {
+        console.log('🗑️ [EDIT] Removing existing modal');
+        existingModal.remove();
+    }
+
+    // Create new modal
+    const editModal = document.createElement('div');
+    editModal.id = 'edit-timesheet-modal';
+    editModal.className = 'modal';
+    editModal.style.cssText = `
+        display: block;
+        position: fixed;
+        z-index: 1002;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0,0,0,0.5);
+        overflow: auto;
+    `;
+
+    editModal.innerHTML = `
+        <div class="modal-content large-modal" style="max-width: 95%; max-height: 90vh; margin: 2% auto; background: white; border-radius: 8px; padding: 20px;">
+            <span class="close-modal" style="float: right; font-size: 28px; cursor: pointer; color: #aaa; font-weight: bold;">&times;</span>
+            <h2 style="margin-bottom: 20px; color: #2c3e50;">
+                <i class="fas fa-edit"></i> Edit Rejected Timesheet
+            </h2>
+            
+            <div class="edit-timesheet-info" style="background: #e3f2fd; padding: 15px; border-radius: 5px; margin-bottom: 20px; border-left: 4px solid #2196f3;">
+                <p><strong>Week:</strong> ${timesheet.weekRange || 'N/A'}</p>
+                <p><strong>Rejection Reason:</strong> ${timesheet.rejectionReason || 'No reason provided'}</p>
+                <p><strong>Days Remaining to Edit:</strong> ${timesheet.daysRemaining || 0} days</p>
+                <p><strong>Resubmission Count:</strong> ${timesheet.resubmissionCount || 0}</p>
+            </div>
+
+            <div style="margin-bottom: 15px;">
+                <button id="add-edit-row-btn" class="btn btn-primary" style="padding: 8px 16px;">
+                    <i class="fas fa-plus"></i> Add New Row
+                </button>
+            </div>
+
+            <div class="timesheet-table-container" style="max-height: 50vh; overflow-y: auto; border: 1px solid #ddd; border-radius: 5px; background: white;">
+                <table class="timesheet-table" id="edit-timesheet-table" style="width: 100%; min-width: 1200px; border-collapse: collapse;">
+                    <thead style="background: #3498db; color: white; position: sticky; top: 0;">
+                        <tr>
+                            <th style="padding: 12px; border: 1px solid #2980b9;">SR.NO</th>
+                            <th style="padding: 12px; border: 1px solid #2980b9;">PROJECT CODE</th>
+                            <th style="padding: 12px; border: 1px solid #2980b9;">LOCATION</th>
+                            <th style="padding: 12px; border: 1px solid #2980b9;">MON<br><span class="day-date">${formatDateForDisplay(timesheet.weekStartDate)}</span></th>
+                            <th style="padding: 12px; border: 1px solid #2980b9;">TUE<br><span class="day-date">${formatDateForDisplay(addDays(timesheet.weekStartDate, 1))}</span></th>
+                            <th style="padding: 12px; border: 1px solid #2980b9;">WED<br><span class="day-date">${formatDateForDisplay(addDays(timesheet.weekStartDate, 2))}</span></th>
+                            <th style="padding: 12px; border: 1px solid #2980b9;">THU<br><span class="day-date">${formatDateForDisplay(addDays(timesheet.weekStartDate, 3))}</span></th>
+                            <th style="padding: 12px; border: 1px solid #2980b9;">FRI<br><span class="day-date">${formatDateForDisplay(addDays(timesheet.weekStartDate, 4))}</span></th>
+                            <th class="weekend" style="padding: 12px; border: 1px solid #2980b9; background: #e74c3c;">SAT<br><span class="day-date">${formatDateForDisplay(addDays(timesheet.weekStartDate, 5))}</span></th>
+                            <th class="weekend" style="padding: 12px; border: 1px solid #2980b9; background: #e74c3c;">SUN<br><span class="day-date">${formatDateForDisplay(addDays(timesheet.weekStartDate, 6))}</span></th>
+                            <th style="padding: 12px; border: 1px solid #2980b9;">ACTION</th>
+                        </tr>
+                    </thead>
+                    <tbody id="edit-timesheet-body" style="background: #f8f9fa;">
+                        <!-- Rows will be populated here -->
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="form-actions" style="margin-top: 20px; display: flex; gap: 10px; justify-content: flex-end;">
+                <button id="save-edited-timesheet" class="btn btn-success" style="padding: 10px 20px;">
+                    <i class="fas fa-check"></i> Save & Resubmit
+                </button>
+                <button class="btn btn-secondary close-modal" style="padding: 10px 20px;">
+                    <i class="fas fa-times"></i> Cancel
+                </button>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(editModal);
+    document.body.classList.add('modal-open');
+    currentEditModal = editModal;
+
+    // Setup event listeners
+    editModal.querySelector('.close-modal').addEventListener('click', () => {
+        console.log('❌ [EDIT] Closing edit modal');
+        isEditMode = false;
+        editModal.remove();
+        document.body.classList.remove('modal-open');
+        currentEditModal = null;
+    });
+
+    editModal.querySelector('#save-edited-timesheet').addEventListener('click', () => {
+        console.log('💾 [EDIT] Save button clicked');
+        saveEditedTimesheet(timesheet._id);
+    });
+
+    editModal.querySelector('#add-edit-row-btn').addEventListener('click', () => {
+        console.log('➕ [EDIT] Add row button clicked');
+        addEditRow();
+    });
+
+    // Close modal when clicking outside
+    editModal.addEventListener('click', (e) => {
+        if (e.target === editModal) {
+            console.log('❌ [EDIT] Closing modal via outside click');
+            isEditMode = false;
+            editModal.remove();
+            document.body.classList.remove('modal-open');
+            currentEditModal = null;
+        }
+    });
+
+    // Populate the table
+    populateEditTable(timesheet);
+    setLoadingState(false);
+    console.log('✅ [EDIT] Edit modal created successfully');
+}
+
+// Populate edit table with timesheet data
+function populateEditTable(timesheet) {
+    console.log('📊 [EDIT] Populating edit table with entries:', timesheet.entries);
+    
+    const tbody = document.getElementById('edit-timesheet-body');
+    if (!tbody) {
+        console.error('❌ [EDIT] Edit timesheet body not found');
+        return;
+    }
+    
+    tbody.innerHTML = '';
+
+    if (!timesheet.entries || timesheet.entries.length === 0) {
+        console.log('ℹ️ [EDIT] No entries found, adding empty row');
+        addEditRow();
+        return;
+    }
+
+    // Group entries by project code and location
+    const groupedEntries = {};
+    timesheet.entries.forEach((entry, index) => {
+        const key = `${entry.projectCode}-${entry.location || ''}`;
+        if (!groupedEntries[key]) {
+            groupedEntries[key] = {
+                projectCode: entry.projectCode,
+                location: entry.location || '',
+                entries: {}
+            };
+        }
+        const day = entry.dayOfWeek.toLowerCase().substring(0, 3);
+        groupedEntries[key].entries[day] = entry;
+        console.log(`📝 [EDIT] Entry ${index}: ${entry.projectCode} - ${day} - ${entry.normalHours}/${entry.overtimeHours}h`);
+    });
+
+    console.log('📋 [EDIT] Grouped entries:', Object.keys(groupedEntries).length, 'groups');
+
+    // Create rows from grouped entries
+    let rowNumber = 1;
+    Object.values(groupedEntries).forEach((group, index) => {
+        console.log(`🔄 [EDIT] Creating row ${rowNumber} for project: ${group.projectCode}`);
+        const row = createEditTableRow(rowNumber, group, timesheet.weekStartDate);
+        tbody.appendChild(row);
+        rowNumber++;
+    });
+
+    console.log('✅ [EDIT] Edit table populated with', rowNumber - 1, 'rows');
+}
+
+// Create a single row for edit table
+function createEditTableRow(rowNumber, group, weekStartDate) {
+    console.log(`🔄 [EDIT] Creating row ${rowNumber} with data:`, group);
+    
+    const row = document.createElement('tr');
+    row.setAttribute('data-edit-row', 'true');
+    
+    row.innerHTML = `
+        <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">${rowNumber}</td>
+        <td style="padding: 4px; border: 1px solid #ddd;">
+            <select class="project-select edit-project-select" required style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; background: white;">
+                <option value="">Select Project</option>
+            </select>
+        </td>
+        <td style="padding: 4px; border: 1px solid #ddd;">
+            <input type="text" class="location-input edit-location-input" value="${group.location || ''}" 
+                   placeholder="Enter location" maxlength="100" 
+                   style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
+        </td>
+        ${['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'].map(day => {
+            const entry = group.entries[day];
+            const normalHours = entry ? (entry.normalHours || 0) : 0;
+            const overtimeHours = entry ? (entry.overtimeHours || 0) : 0;
+            const activityCode = entry ? (entry.activityCode || '') : '';
+            const remark = entry ? (entry.remarks || '') : '';
+            
+            const hasHours = normalHours > 0 || overtimeHours > 0;
+            const cellStyle = hasHours ? 
+                'background-color: #d4edda; cursor: pointer; padding: 8px; border: 1px solid #ddd; text-align: center;' : 
+                'cursor: pointer; padding: 8px; border: 1px solid #ddd; text-align: center;';
+            
+            return `
+                <td class="time-cell edit-time-cell" 
+                    data-day="${day}" 
+                    data-normal-hours="${normalHours}" 
+                    data-overtime-hours="${overtimeHours}" 
+                    data-activity-code="${activityCode}"
+                    data-remark="${remark}"
+                    style="${cellStyle}">
+                    <span class="normal-hours">${normalHours}</span>/<span class="overtime-hours">${overtimeHours}</span>
+                </td>
+            `;
+        }).join('')}
+        <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">
+            <button class="delete-row-btn edit-delete-btn" title="Delete Row" style="background: none; border: none; color: #e74c3c; cursor: pointer; padding: 5px;">
+                <i class="fas fa-trash"></i>
+            </button>
+        </td>
+    `;
+
+    // Setup project dropdown
+    const projectSelect = row.querySelector('.edit-project-select');
+    console.log(`🔄 [EDIT] Setting up project dropdown for row ${rowNumber}`);
+    updateProjectDropdown(projectSelect);
+    
+    // Set project value after dropdown is populated
+    setTimeout(() => {
+        if (group.projectCode) {
+            projectSelect.value = group.projectCode;
+            console.log(`✅ [EDIT] Set project value to: ${group.projectCode}`);
+        }
+    }, 100);
+
+    // Setup time cell click handlers
+    row.querySelectorAll('.edit-time-cell').forEach(cell => {
+        cell.addEventListener('click', function() {
+            console.log('🔄 [EDIT] Time cell clicked in edit modal:', this.getAttribute('data-day'));
+            openEditHoursModal(this);
+        });
+    });
+
+    // Setup delete button
+    row.querySelector('.edit-delete-btn').addEventListener('click', function() {
+        console.log('🗑️ [EDIT] Delete button clicked for row', rowNumber);
+        if (confirm('Are you sure you want to delete this row?')) {
+            row.remove();
+            updateEditRowNumbers();
+            console.log('✅ [EDIT] Row deleted');
+        }
+    });
+
+    console.log(`✅ [EDIT] Row ${rowNumber} created successfully`);
+    return row;
+}
+
+// Add new row in edit mode
+function addEditRow() {
+    console.log('➕ [EDIT] Adding new row to edit table');
+    
+    const tbody = document.getElementById('edit-timesheet-body');
+    if (!tbody) {
+        console.error('❌ [EDIT] Edit timesheet body not found for adding row');
+        return;
+    }
+    
+    const rowCount = tbody.children.length;
+    
+    if (rowCount >= 20) {
+        safeNotification('Maximum 20 rows allowed per timesheet', 'warning');
+        return;
+    }
+    
+    const emptyGroup = {
+        projectCode: '',
+        location: '',
+        entries: {}
+    };
+    
+    const weekStartDate = document.querySelector('#edit-timesheet-modal .day-date')?.textContent;
+    const row = createEditTableRow(rowCount + 1, emptyGroup, weekStartDate);
+    tbody.appendChild(row);
+    
+    console.log('✅ [EDIT] New row added, total rows:', rowCount + 1);
+}
+
+// Special hours modal for edit mode
+function openEditHoursModal(cell) {
+    console.log('🔄 [EDIT] Opening edit hours modal for cell:', cell);
+    console.log('🔄 [EDIT] Cell data - day:', cell.getAttribute('data-day'), 
+                'normal:', cell.getAttribute('data-normal-hours'), 
+                'overtime:', cell.getAttribute('data-overtime-hours'));
+    
+    if (isLoading) return;
+    
+    // Set current cell and mark that we're in edit mode
+    currentCell = cell;
+    isEditMode = true;
+    
+    const normalHours = parseFloat(cell.getAttribute('data-normal-hours')) || 0;
+    const overtimeHours = parseFloat(cell.getAttribute('data-overtime-hours')) || 0;
+    const activityCode = cell.getAttribute('data-activity-code') || '';
+    const remark = cell.getAttribute('data-remark') || '';
+    
+    console.log('📝 [EDIT] Setting form values - normal:', normalHours, 'overtime:', overtimeHours, 'activity:', activityCode);
+    
+    // Set form values
+    if (normalHours > 0) {
+        document.getElementById('hours-type').value = 'normal';
+        document.getElementById('work-hours').value = normalHours;
+    } else if (overtimeHours > 0) {
+        document.getElementById('hours-type').value = 'overtime';
+        document.getElementById('work-hours').value = overtimeHours;
+    } else {
+        document.getElementById('hours-type').value = 'normal';
+        document.getElementById('work-hours').value = '0';
+    }
+    
+    document.getElementById('activity-code').value = activityCode;
+    document.getElementById('work-remark').value = remark;
+    
+    // Show the existing hours modal but ensure it's on top
+    const hoursModal = document.getElementById('hours-modal');
+    if (hoursModal) {
+        hoursModal.style.zIndex = '1003';
+        hoursModal.style.display = 'block';
+        
+        // Update available hours info
+        const day = cell.getAttribute('data-day');
+        updateAvailableHoursInfo(day);
+        
+        console.log('✅ [EDIT] Hours modal shown for edit mode');
+        
+        setTimeout(() => {
+            document.getElementById('work-hours').focus();
+        }, 100);
+    } else {
+        console.error('❌ [EDIT] Hours modal not found');
+    }
+}
+
+// Save hours specifically for edit mode
+function saveEditHoursToCell() {
+    console.log('💾 [EDIT] Saving hours to edit modal cell');
+    
+    if (!currentCell || isLoading) return;
+
+    const hoursType = document.getElementById('hours-type').value;
+    const enteredHours = parseFloat(document.getElementById('work-hours').value) || 0;
+    const activityCode = document.getElementById('activity-code').value;
+    const remark = document.getElementById('work-remark').value.trim();
+    
+    console.log('📝 [EDIT] Saving - type:', hoursType, 'hours:', enteredHours, 'activity:', activityCode);
+
+    if (enteredHours === 0) {
+        safeNotification('Please enter hours greater than 0', 'error');
+        return;
+    }
+    
+    if (!activityCode) {
+        safeNotification('Please select activity code', 'error');
+        return;
+    }
+    
+    if (enteredHours > 24) {
+        safeNotification('Hours cannot exceed 24 per day', 'error');
+        return;
+    }
+    
+    if (enteredHours % 0.5 !== 0) {
+        safeNotification('Hours must be in 0.5 hour increments', 'error');
+        return;
+    }
+    
+    let normalHours = 0;
+    let overtimeHours = 0;
+    
+    if (hoursType === 'normal') {
+        normalHours = enteredHours;
+    } else {
+        overtimeHours = enteredHours;
+    }
+    
+    // Update the cell in edit modal
+    currentCell.innerHTML = `<span class="normal-hours">${normalHours}</span>/<span class="overtime-hours">${overtimeHours}</span>`;
+    currentCell.setAttribute('data-normal-hours', normalHours);
+    currentCell.setAttribute('data-overtime-hours', overtimeHours);
+    currentCell.setAttribute('data-activity-code', activityCode);
+    
+    if (remark) {
+        currentCell.setAttribute('data-remark', remark);
+    }
+    
+    // Visual feedback
+    currentCell.style.backgroundColor = '#d4edda';
+    
+    console.log('✅ [EDIT] Hours saved to edit cell - normal:', normalHours, 'overtime:', overtimeHours);
+    
+    // Close the hours modal but keep edit modal open
+    const hoursModal = document.getElementById('hours-modal');
+    if (hoursModal) {
+        hoursModal.style.display = 'none';
+    }
+    
+    safeNotification('Hours saved to timesheet', 'success');
+}
+
+// Update row numbers in edit mode
+function updateEditRowNumbers() {
+    const rows = document.querySelectorAll('#edit-timesheet-body tr');
+    console.log('🔄 [EDIT] Updating row numbers for', rows.length, 'rows');
+    
+    rows.forEach((row, index) => {
+        const firstCell = row.cells[0];
+        if (firstCell) {
+            firstCell.textContent = index + 1;
+        }
+    });
+    console.log('✅ [EDIT] Row numbers updated');
+}
+
+// Fixed collectEditTimesheetData function
+function collectEditTimesheetData() {
+    console.log('📝 [EDIT] Starting to collect data from edit table');
+    
+    const tbody = document.getElementById('edit-timesheet-body');
+    if (!tbody) {
+        console.error('❌ [EDIT] Edit timesheet body not found for data collection');
+        return [];
+    }
+    
+    const rows = tbody.querySelectorAll('tr');
+    const entries = [];
+    
+    console.log('📝 [EDIT] Found', rows.length, 'rows to process');
+
+    // Get the week start date from the modal header
+    const weekStartText = document.querySelector('#edit-timesheet-modal .day-date')?.textContent;
+    console.log('📅 [EDIT] Week start text from modal:', weekStartText);
+    
+    let weekStartDate = new Date();
+    
+    if (weekStartText) {
+        try {
+            // Parse "day/month" format from the table header (e.g., "20/11")
+            const [startDay, startMonth] = weekStartText.split('/');
+            const currentYear = new Date().getFullYear();
+            weekStartDate = new Date(currentYear, parseInt(startMonth) - 1, parseInt(startDay));
+            console.log('📅 [EDIT] Parsed week start date:', weekStartDate.toISOString());
+        } catch (error) {
+            console.error('❌ [EDIT] Error parsing week start date:', error);
+            // Fallback to current date
+            weekStartDate = new Date();
+        }
+    }
+
+    rows.forEach((row, rowIndex) => {
+        const projectSelect = row.querySelector('.edit-project-select');
+        const locationInput = row.querySelector('.edit-location-input');
+        const dayCells = row.querySelectorAll('.edit-time-cell');
+        
+        console.log(`📝 [EDIT] Processing row ${rowIndex + 1}, project:`, projectSelect?.value);
+        
+        if (projectSelect && projectSelect.value) {
+            ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'].forEach((day, dayIndex) => {
+                const dayCell = dayCells[dayIndex];
+                if (dayCell) {
+                    const normalHours = parseFloat(dayCell.getAttribute('data-normal-hours')) || 0;
+                    const overtimeHours = parseFloat(dayCell.getAttribute('data-overtime-hours')) || 0;
+                    const activityCode = dayCell.getAttribute('data-activity-code');
+                    
+                    console.log(`📝 [EDIT] Cell ${day}: normal=${normalHours}, overtime=${overtimeHours}, activity=${activityCode}`);
+                    
+                    if (normalHours > 0 || overtimeHours > 0) {
+                        // Calculate date based on week start date + day index
+                        const cellDate = new Date(weekStartDate);
+                        cellDate.setDate(weekStartDate.getDate() + dayIndex);
+                        
+                        const entry = {
+                            date: cellDate.toISOString().split('T')[0],
+                            dayOfWeek: getFullDayName(day),
+                            projectCode: projectSelect.value,
+                            project: projectSelect.querySelector(`option[value="${projectSelect.value}"]`)?.getAttribute('data-project-id') || null,
+                            location: locationInput?.value || '',
+                            normalHours: normalHours,
+                            overtimeHours: overtimeHours,
+                            activityCode: activityCode || 'MISC',
+                            remarks: dayCell.getAttribute('data-remark') || '',
+                            department: userData.department
+                        };
+                        
+                        console.log(`📅 [EDIT] Entry ${entries.length + 1}:`, entry);
+                        entries.push(entry);
+                    } else {
+                        console.log(`⏭️ [EDIT] Skipping ${day} - no hours entered`);
+                    }
+                }
+            });
+        } else {
+            console.log(`⚠️ [EDIT] Row ${rowIndex + 1} skipped - no project selected`);
+        }
+    });
+    
+    console.log('✅ [EDIT] Collection complete -', entries.length, 'entries total');
+    
+    if (entries.length === 0) {
+        console.warn('⚠️ [EDIT] No entries with hours found!');
+    }
+    
+    return entries;
+}
+
+// Also fix the saveEditedTimesheet function to handle the response properly
+function saveEditedTimesheet(timesheetId) {
+    console.log('💾 [EDIT] Starting saveEditedTimesheet for:', timesheetId);
+    
+    if (isLoading) return;
+    
+    const entries = collectEditTimesheetData();
+    console.log('📝 [EDIT] Collected entries for saving:', entries);
+    
+    if (entries.length === 0) {
+        safeNotification('Please add at least one timesheet entry with hours', 'error');
+        return;
+    }
+    
+    // Validate that we have at least some hours
+    const totalHours = entries.reduce((sum, entry) => sum + entry.normalHours + entry.overtimeHours, 0);
+    if (totalHours === 0) {
+        safeNotification('Please enter some hours in the timesheet', 'error');
+        return;
+    }
+    
+    if (!confirm('Are you sure you want to save and resubmit this timesheet?')) {
+        console.log('❌ [EDIT] Save cancelled by user');
+        return;
+    }
+    
+    setLoadingState(true);
+    console.log('🔄 [EDIT] Sending data to server...');
+    
+    // Create the complete timesheet data object
+    const timesheetData = {
+        entries: entries
+    };
+    
+    console.log('📤 [EDIT] Sending timesheet data:', timesheetData);
+    
+    apiClient.editRejectedTimesheet(timesheetId, timesheetData)
+        .then(response => {
+            console.log('✅ [EDIT] Timesheet edited successfully:', response);
+            safeNotification('Timesheet edited and resubmitted successfully!', 'success');
+            
+            // Reset edit mode
+            isEditMode = false;
+            
+            // Close modal
+            const editModal = document.getElementById('edit-timesheet-modal');
+            if (editModal) {
+                editModal.remove();
+            }
+            document.body.classList.remove('modal-open');
+            currentEditModal = null;
+            
+            console.log('✅ [EDIT] Modal closed, refreshing page...');
+            
+            // Refresh the page after delay
+            setTimeout(() => {
+                window.location.reload();
+            }, 2000);
+        })
+        .catch(error => {
+            console.error('❌ [EDIT] Error editing timesheet:', error);
+            
+            if (error.message && error.message.includes('editing period')) {
+                safeNotification('Editing period has expired. Please contact your manager.', 'error');
+            } else if (error.message && error.message.includes('future dates')) {
+                safeNotification(error.message, 'error');
+            } else if (error.message && error.message.includes('rejected timesheets')) {
+                safeNotification(error.message, 'error');
+            } else {
+                safeNotification(error.message || 'Failed to edit timesheet. Please try again.', 'error');
+            }
+        })
+        .finally(() => {
+            setLoadingState(false);
+        });
+}
+
+// Utility functions for date formatting
+function formatDateForDisplay(dateString) {
+    if (!dateString) return '';
+    try {
+        const date = new Date(dateString);
+        return `${date.getDate()}/${date.getMonth() + 1}`;
+    } catch (error) {
+        return '';
+    }
+}
+
+function addDays(dateString, days) {
+    if (!dateString) return new Date();
+    try {
+        const date = new Date(dateString);
+        date.setDate(date.getDate() + days);
+        return date;
+    } catch (error) {
+        return new Date();
+    }
+}
+
+// ==================== HISTORY & EDIT MODAL ====================
 
 async function showHistoryModal() {
     if (isLoading) return;
@@ -1076,7 +1989,8 @@ async function showHistoryModal() {
     try {
         const timesheets = await apiClient.getMyTimesheets();
         displayHistoryContent(timesheets);
-        document.getElementById('history-modal').style.display = 'block';
+        const historyModal = document.getElementById('history-modal');
+        showModal(historyModal);
     } catch (error) {
         console.error('Error loading history:', error);
         safeNotification('Failed to load timesheet history', 'error');
@@ -1085,6 +1999,7 @@ async function showHistoryModal() {
     }
 }
 
+// ✅ ENHANCED: Display history content with 15-day editing window
 function displayHistoryContent(timesheets) {
     const historyContent = document.getElementById('history-content');
     
@@ -1106,21 +2021,74 @@ function displayHistoryContent(timesheets) {
         const weekStart = new Date(timesheet.weekStartDate).toLocaleDateString();
         const weekEnd = new Date(timesheet.weekEndDate).toLocaleDateString();
         
+        let editingInfo = '';
+        let editButton = '';
+        let editingStatus = '';
+        
+        if (timesheet.status === 'rejected') {
+            const now = new Date();
+            const editableUntil = timesheet.editableUntil ? new Date(timesheet.editableUntil) : null;
+            const canEdit = timesheet.canEdit && editableUntil && editableUntil > now && !timesheet.isExpired;
+            
+            let daysRemaining = 0;
+            if (editableUntil) {
+                const nowNormalized = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                const editableUntilNormalized = new Date(editableUntil.getFullYear(), editableUntil.getMonth(), editableUntil.getDate());
+                daysRemaining = Math.ceil((editableUntilNormalized - nowNormalized) / (24 * 60 * 60 * 1000));
+            }
+            
+            if (canEdit) {
+                editingStatus = `<span class="editing-status status-editable">EDITABLE</span>`;
+                editingInfo = `<div class="days-remaining" data-timesheet-id="${timesheet._id}" data-editable-until="${editableUntil.toISOString()}">
+                    <span class="normal-text">${daysRemaining} days remaining</span>
+                </div>`;
+                editButton = `<button class="btn-small btn-warning edit-rejected-btn" onclick="showEditTimesheetModal('${timesheet._id}')" ${isLoading ? 'disabled' : ''}>
+                    <i class="fas fa-edit"></i> Edit
+                </button>`;
+            } else if (timesheet.isExpired) {
+                editingStatus = `<span class="editing-status status-expired">EXPIRED</span>`;
+                editingInfo = `<div class="days-remaining">
+                    <span class="expired-text">Editing expired</span>
+                </div>`;
+                editButton = `<button class="btn-small btn-expired" disabled>
+                    <i class="fas fa-ban"></i> Edit Expired
+                </button>`;
+            } else {
+                editingStatus = `<span class="editing-status status-expired">EXPIRED</span>`;
+                editingInfo = `<div class="days-remaining">
+                    <span class="expired-text">Editing expired</span>
+                </div>`;
+                editButton = `<button class="btn-small btn-expired" disabled>
+                    <i class="fas fa-ban"></i> Edit Expired
+                </button>`;
+            }
+        }
+        
         html += `
-            <div class="history-item ${statusClass}">
+            <div class="history-item ${statusClass} ${timesheet.status === 'rejected' ? 'rejected' : ''}" 
+                 data-timesheet-id="${timesheet._id}" 
+                 data-editable-until="${timesheet.editableUntil || ''}">
                 <div class="history-info">
                     <div class="week-range">
                         <strong>Week ${timesheet.weekNumber}</strong>: ${weekStart} - ${weekEnd}
+                        ${editingStatus}
                     </div>
                     <div class="hours-info">
                         Total: ${(timesheet.totalHours || 0).toFixed(1)} hrs 
                         (Normal: ${timesheet.totalNormalHours || 0}, Overtime: ${timesheet.totalOvertimeHours || 0})
                     </div>
+                    ${timesheet.status === 'rejected' ? `
+                        <div class="rejection-info">
+                            <strong>Rejection Reason:</strong> ${timesheet.rejectionReason || 'No reason provided'}
+                            ${editingInfo}
+                        </div>
+                    ` : ''}
                     <div class="timesheet-status ${statusClass}">
                         ${timesheet.status.toUpperCase()}
                     </div>
                 </div>
                 <div class="history-actions">
+                    ${editButton}
                     <button class="btn-small btn-view" onclick="viewTimesheetDetails('${timesheet._id}')" ${isLoading ? 'disabled' : ''}>
                         <i class="fas fa-eye"></i> View
                     </button>
@@ -1134,6 +2102,8 @@ function displayHistoryContent(timesheets) {
     
     html += '</div>';
     historyContent.innerHTML = html;
+    
+    updateEditingDeadlineDisplays();
 }
 
 async function viewTimesheetDetails(timesheetId) {
@@ -1174,4 +2144,13 @@ async function exportTimesheetToCSV(timesheetId) {
     }
 }
 
-console.log('✅ Enhanced Dashboard.js loaded with date restrictions and department fix');
+// Make functions global for onclick events
+window.showEditTimesheetModal = showEditTimesheetModal;
+window.viewTimesheetDetails = viewTimesheetDetails;
+window.exportTimesheetToCSV = exportTimesheetToCSV;
+window.openMiscellaneousHoursModal = showRejectedTimesheetsModal;
+window.closeMiscellaneousHoursModal = hideAllModals;
+window.closeTimesheetDetailsModal = hideAllModals;
+window.saveEditHoursToCell = saveEditHoursToCell;
+
+console.log('✅ Enhanced Dashboard.js loaded with complete 15-day editing window workflow and comprehensive logging');
