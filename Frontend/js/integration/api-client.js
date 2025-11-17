@@ -103,6 +103,11 @@ class ApiClient {
                     const text = await response.text();
                     console.log(`✅ CSV Response from ${endpoint} (length: ${text.length})`);
                     return text;
+                } else if (contentType && contentType.includes('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')) {
+                    // Handle Excel file download
+                    const blob = await response.blob();
+                    console.log(`✅ Excel File Response from ${endpoint} (size: ${blob.size} bytes)`);
+                    return blob;
                 } else {
                     const text = await response.text();
                     console.log(`✅ Text Response from ${endpoint}:`, text);
@@ -607,6 +612,127 @@ class ApiClient {
         });
     }
 
+    // ✅ ADDED: Export project to Excel
+    async exportProjectToExcel(projectId) {
+        try {
+            console.log(`📊 Exporting project ${projectId} to Excel...`);
+            
+            const blob = await this.request(`/projects/${projectId}/export-excel`, {
+                headers: {
+                    'Accept': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                }
+            });
+            
+            if (blob instanceof Blob) {
+                // Create download link
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = url;
+                
+                // Get project name for filename
+                const project = await this.getProject(projectId);
+                const projectName = project?.name || 'project';
+                const fileName = `${projectName.replace(/\s+/g, '_')}_report.xlsx`;
+                a.download = fileName;
+                
+                document.body.appendChild(a);
+                a.click();
+                
+                // Clean up
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+                
+                console.log(`✅ Excel file downloaded: ${fileName}`);
+                return { success: true, fileName };
+            } else {
+                throw new Error('Invalid response format for Excel export');
+            }
+        } catch (error) {
+            console.error('❌ Error exporting project to Excel:', error);
+            
+            // Fallback to CSV if Excel is not available
+            console.log('🔄 Trying CSV export as fallback...');
+            try {
+                const csvData = await this.request(`/projects/${projectId}/export-csv`, {
+                    headers: {
+                        'Accept': 'text/csv'
+                    }
+                });
+                
+                if (typeof csvData === 'string') {
+                    // Create download link for CSV
+                    const blob = new Blob([csvData], { type: 'text/csv' });
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.style.display = 'none';
+                    a.href = url;
+                    
+                    const project = await this.getProject(projectId);
+                    const projectName = project?.name || 'project';
+                    const fileName = `${projectName.replace(/\s+/g, '_')}_report.csv`;
+                    a.download = fileName;
+                    
+                    document.body.appendChild(a);
+                    a.click();
+                    
+                    // Clean up
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+                    
+                    console.log(`✅ CSV file downloaded as fallback: ${fileName}`);
+                    return { success: true, fileName, format: 'csv' };
+                }
+            } catch (csvError) {
+                console.error('❌ CSV export also failed:', csvError);
+            }
+            
+            throw error;
+        }
+    }
+
+    // ✅ ADDED: Export all projects to Excel
+    async exportAllProjectsToExcel(filters = {}) {
+        try {
+            console.log('📊 Exporting all projects to Excel...');
+            
+            const queryParams = new URLSearchParams(filters).toString();
+            const endpoint = `/projects/export-excel${queryParams ? `?${queryParams}` : ''}`;
+            
+            const blob = await this.request(endpoint, {
+                headers: {
+                    'Accept': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                }
+            });
+            
+            if (blob instanceof Blob) {
+                // Create download link
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = url;
+                
+                const fileName = `all_projects_report_${new Date().toISOString().split('T')[0]}.xlsx`;
+                a.download = fileName;
+                
+                document.body.appendChild(a);
+                a.click();
+                
+                // Clean up
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+                
+                console.log(`✅ All projects Excel file downloaded: ${fileName}`);
+                return { success: true, fileName };
+            } else {
+                throw new Error('Invalid response format for Excel export');
+            }
+        } catch (error) {
+            console.error('❌ Error exporting all projects to Excel:', error);
+            throw error;
+        }
+    }
+
     // ==================== ACTIVITY CODE ENDPOINTS ====================
 
     async getActivityCodes(department = null) {
@@ -1012,6 +1138,8 @@ if (typeof window !== 'undefined') {
             }
         });
     }, 1000);
+
+    
 }
 
 console.log('✅ Enhanced API Client initialized with offline support and safe error handling');

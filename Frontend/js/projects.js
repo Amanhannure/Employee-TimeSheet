@@ -1,4 +1,4 @@
-// projects.js - Complete Fixed Version
+// projects.js - Complete Fixed Version with Variable Hours Support
 document.addEventListener('DOMContentLoaded', async function() {
     console.log('🚀 Projects.js: Starting initialization...');
     
@@ -26,7 +26,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     });
 
     document.getElementById('searchProjects').addEventListener('input', filterProjects);
-    document.getElementById('searchPLNo').addEventListener('input', filterProjects);
+    document.getElementById('searchProjectCode').addEventListener('input', filterProjects);
     document.getElementById('filterStatus').addEventListener('change', filterProjects);
     document.getElementById('departments').addEventListener('change', handleDepartmentSelection);
 });
@@ -57,18 +57,41 @@ function createProjectCard(project) {
     const card = document.createElement('div');
     card.className = 'project-card';
 
-    // ✅ UPDATED: Calculate progress using department hours
-    const totalConsumed = project.departmentHours?.reduce((sum, dept) => sum + (dept.consumedHours || 0), 0) || 0;
-    const totalAllocated = project.departmentHours?.reduce((sum, dept) => sum + (dept.allocatedHours || 0), 0) || project.totalHours || 1;
-    const totalProgress = totalAllocated > 0 ? (totalConsumed / totalAllocated * 100).toFixed(1) : 0;
+    // ✅ UPDATED: Calculate hours including variable hours
+    let totalConsumed = 0;
+    let totalAllocated = 0;
+    let totalVariable = 0;
+    let totalAvailable = 0;
 
-    console.log(`📊 Project ${project.name} progress: ${totalConsumed}/${totalAllocated} = ${totalProgress}%`);
+    if (project.departmentHours && Array.isArray(project.departmentHours)) {
+        totalConsumed = project.departmentHours.reduce((sum, dept) => {
+            const consumed = typeof dept === 'object' ? (dept.consumedHours || 0) : 0;
+            return sum + consumed;
+        }, 0);
+        
+        totalAllocated = project.departmentHours.reduce((sum, dept) => {
+            const allocated = typeof dept === 'object' ? (dept.allocatedHours || 0) : 0;
+            return sum + allocated;
+        }, 0);
+        
+        totalVariable = project.departmentHours.reduce((sum, dept) => {
+            const variable = typeof dept === 'object' ? (dept.variableHours || 0) : 0;
+            return sum + variable;
+        }, 0);
+        
+        totalAvailable = totalAllocated + totalVariable;
+    }
+
+    const totalProgress = totalAvailable > 0 ? (totalConsumed / totalAvailable * 100).toFixed(1) : 0;
+    const balanceHours = Math.max(0, totalAvailable - totalConsumed);
+
+    console.log(`📊 Project ${project.name}: ${totalConsumed}/${totalAvailable} = ${totalProgress}% (Allocated: ${totalAllocated}, Variable: ${totalVariable})`);
 
     card.innerHTML = `
         <div class="project-header">
             <div>
                 <h3 class="project-title">${project.name}</h3>
-                <div class="project-pl-no">PL No: ${project.plNo}</div>
+                <div class="project-code">Project Code: ${project.projectCode}</div>
             </div>
             <span class="project-status status-${project.status}">${project.status}</span>
         </div>
@@ -77,7 +100,8 @@ function createProjectCard(project) {
             <div class="stat-row">
                 <div class="stat-item">
                     <div class="stat-label">Total Hours</div>
-                    <div class="stat-value">${totalAllocated}</div>
+                    <div class="stat-value">${totalAvailable}</div>
+                    ${totalVariable > 0 ? `<small style="color: #f59e0b;">(+${totalVariable} variable)</small>` : ''}
                 </div>
                 <div class="stat-item">
                     <div class="stat-label">Consumed Hours</div>
@@ -85,7 +109,7 @@ function createProjectCard(project) {
                 </div>
                 <div class="stat-item">
                     <div class="stat-label">Balance Hours</div>
-                    <div class="stat-value">${totalAllocated - totalConsumed}</div>
+                    <div class="stat-value">${balanceHours}</div>
                 </div>
             </div>
         </div>
@@ -107,6 +131,11 @@ function createProjectCard(project) {
             <button class="action-btn" onclick="editProject('${project._id}')">
                 <i class="fas fa-edit"></i> Edit
             </button>
+            ${project.status === 'on-hold' ? `
+            <button class="action-btn warning" onclick="addVariableHours('${project._id}')">
+                <i class="fas fa-plus-circle"></i> Add Hours
+            </button>
+            ` : ''}
             <button class="action-btn delete" onclick="deleteProject('${project._id}')">
                 <i class="fas fa-trash"></i> Delete
             </button>
@@ -120,6 +149,97 @@ function createProjectCard(project) {
     `;
 
     return card;
+}
+
+// ✅ ADDED: Function to add variable hours to on-hold projects
+async function addVariableHours(projectId) {
+    try {
+        console.log(`➕ Adding variable hours to project: ${projectId}`);
+        const project = await apiClient.getProject(projectId);
+        if (!project) return;
+
+        // Create modal for adding variable hours
+        const modal = document.createElement('div');
+        modal.className = 'modal';
+        modal.id = 'addVariableHoursModal';
+        
+        let departmentOptions = '';
+        if (project.departmentHours && Array.isArray(project.departmentHours)) {
+            project.departmentHours.forEach(dept => {
+                const availableHours = (dept.allocatedHours + dept.variableHours) - dept.consumedHours;
+                departmentOptions += `
+                    <option value="${dept.department}">
+                        ${dept.department} (Available: ${Math.max(0, availableHours)} hours)
+                    </option>
+                `;
+            });
+        }
+
+        modal.innerHTML = `
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>Add Variable Hours - ${project.name}</h2>
+                    <span class="close" onclick="closeAddVariableHoursModal()">&times;</span>
+                </div>
+                <div class="modal-body">
+                    <form id="addVariableHoursForm">
+                        <div class="form-group">
+                            <label for="variableHoursDepartment">Select Department *</label>
+                            <select id="variableHoursDepartment" name="variableHoursDepartment" required>
+                                ${departmentOptions}
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="variableHours">Variable Hours to Add *</label>
+                            <input type="number" id="variableHours" name="variableHours" min="1" required>
+                        </div>
+                        <div class="form-actions">
+                            <button type="submit" class="btn-primary">Add Hours</button>
+                            <button type="button" class="btn-secondary" onclick="closeAddVariableHoursModal()">Cancel</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(modal);
+        modal.style.display = 'block';
+
+        // Handle form submission
+        document.getElementById('addVariableHoursForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const formData = new FormData(this);
+            const department = formData.get('variableHoursDepartment');
+            const variableHours = parseInt(formData.get('variableHours'));
+
+            try {
+                await apiClient.request(`/projects/${projectId}/add-variable-hours`, {
+                    method: 'PATCH',
+                    body: { department, variableHours }
+                });
+                
+                closeAddVariableHoursModal();
+                await loadProjects();
+                updateOverviewCards();
+                showNotification(`Successfully added ${variableHours} variable hours to ${department}`);
+            } catch (error) {
+                console.error('❌ Error adding variable hours:', error);
+                showNotification(error.message || 'Failed to add variable hours', 'error');
+            }
+        });
+
+    } catch (error) {
+        console.error('❌ Error preparing variable hours form:', error);
+        showNotification('Failed to load project data', 'error');
+    }
+}
+
+function closeAddVariableHoursModal() {
+    const modal = document.getElementById('addVariableHoursModal');
+    if (modal) {
+        modal.remove();
+        console.log('❌ Add variable hours modal closed');
+    }
 }
 
 async function showAssignedEmployees(projectId) {
@@ -165,7 +285,6 @@ async function showAssignedEmployees(projectId) {
     }
 }
 
-// ✅ FIXED: Updated populateEmployeeSelect function
 async function populateEmployeeSelect(selectedDepartments = []) {
     try {
         console.log('👤 Populating employee select...');
@@ -173,7 +292,6 @@ async function populateEmployeeSelect(selectedDepartments = []) {
         const response = await apiClient.getUsers();
         console.log('📋 API Response:', response);
         
-        // FIX: Handle different API response structures
         let users = [];
         if (Array.isArray(response)) {
             users = response;
@@ -182,7 +300,6 @@ async function populateEmployeeSelect(selectedDepartments = []) {
         } else if (response && Array.isArray(response.data)) {
             users = response.data;
         } else if (response && typeof response === 'object') {
-            // If response is an object with array inside, try to find the array
             for (const key in response) {
                 if (Array.isArray(response[key])) {
                     users = response[key];
@@ -199,14 +316,12 @@ async function populateEmployeeSelect(selectedDepartments = []) {
             return;
         }
 
-        // Clear existing options except the first one
         while (employeeSelect.options.length > 1) {
             employeeSelect.remove(1);
         }
 
         console.log('🏢 Selected departments for filtering:', selectedDepartments);
 
-        // Filter users based on selected departments
         const filteredUsers = users.filter(user => {
             if (selectedDepartments.length === 0) return true;
             return selectedDepartments.includes(user.department);
@@ -214,7 +329,6 @@ async function populateEmployeeSelect(selectedDepartments = []) {
 
         console.log('👥 Filtered employees:', filteredUsers.length);
 
-        // Add filtered users to select
         filteredUsers.forEach(user => {
             if (user.status === 'active') {
                 const option = document.createElement('option');
@@ -245,20 +359,20 @@ async function addProject() {
             selectedDepartments: selectedDepartments
         });
 
-        // ✅ UPDATED: Build department hours array
+        // ✅ UPDATED: Build department hours array with variable hours
         const departmentHours = selectedDepartments.map(dept => {
             const allocatedHours = parseInt(formData.get(`deptHours_${dept}`)) || 0;
             console.log(`🏢 Department ${dept}: ${allocatedHours} hours`);
             return {
                 department: dept,
                 allocatedHours: allocatedHours,
+                variableHours: 0, // ✅ ADDED: Initialize variable hours as 0
                 consumedHours: 0
             };
         });
 
-        // ✅ UPDATED: Project data with department hours (removed junior/senior)
         const projectData = {
-            plNo: formData.get('plNo'),
+            projectCode: formData.get('projectCode'),
             name: formData.get('projectName'),
             totalHours: parseInt(formData.get('totalHours')),
             departmentHours: departmentHours,
@@ -292,13 +406,10 @@ async function editProject(id) {
 
         console.log('📋 Project data loaded for editing:', project);
 
-        // ✅ UPDATED: Set basic form values
         document.getElementById('projectName').value = project.name;
-        document.getElementById('plNo').value = project.plNo;
+        document.getElementById('projectCode').value = project.projectCode;
         document.getElementById('totalHours').value = project.totalHours;
         document.getElementById('projectStatus').value = project.status;
-
-        // ✅ REMOVED: Junior/Senior hours fields
 
         const select = document.getElementById('assignedEmployees');
         if (select) {
@@ -330,18 +441,8 @@ async function editProject(id) {
                 }
             });
 
-            // Populate department hours for editing
-            handleDepartmentSelection();
-            
-            // Set department hours values
-            if (project.departmentHours) {
-                project.departmentHours.forEach(deptHours => {
-                    const input = document.getElementById(`deptHours_${deptHours.department}`);
-                    if (input) {
-                        input.value = deptHours.allocatedHours;
-                    }
-                });
-            }
+            // ✅ UPDATED: Create department hours inputs with variable hours for editing
+            handleDepartmentSelectionForEdit(project.departmentHours);
         }
 
         document.querySelector('#addProjectModal .modal-header h2').textContent = 'Edit Project';
@@ -352,6 +453,72 @@ async function editProject(id) {
     } catch (error) {
         console.error('❌ Error editing project:', error);
         showNotification('Failed to load project data', 'error');
+    }
+}
+
+// ✅ ADDED: Special handler for editing with variable hours
+function handleDepartmentSelectionForEdit(departmentHours) {
+    console.log('🏢 Handling department selection for editing...');
+    const departmentSelect = document.getElementById('departments');
+    if (!departmentSelect) return;
+
+    const selectedDepartments = Array.from(departmentSelect.selectedOptions).map(option => option.value);
+    const container = document.getElementById('departmentHoursContainer');
+    const inputsContainer = document.getElementById('departmentHoursInputs');
+
+    if (!container || !inputsContainer) return;
+
+    console.log(`🏢 Selected departments: ${selectedDepartments.length} departments`);
+
+    if (selectedDepartments.length > 0) {
+        container.style.display = 'block';
+        inputsContainer.innerHTML = '';
+
+        selectedDepartments.forEach((dept, index) => {
+            const deptDiv = document.createElement('div');
+            deptDiv.className = 'form-row';
+            
+            // Find existing department data
+            const existingDept = departmentHours?.find(d => d.department === dept);
+            const allocatedHours = existingDept?.allocatedHours || 0;
+            const variableHours = existingDept?.variableHours || 0;
+            const consumedHours = existingDept?.consumedHours || 0;
+            
+            deptDiv.innerHTML = `
+                <div class="form-group">
+                    <label for="deptHours_${dept}">${dept} Allocated Hours</label>
+                    <input type="number" id="deptHours_${dept}" name="deptHours_${dept}" value="${allocatedHours}" min="0" readonly style="background-color: #f3f4f6;">
+                    <small style="color: #6b7280;">Original allocated hours cannot be changed</small>
+                </div>
+                <div class="form-group">
+                    <label for="variableHours_${dept}">${dept} Variable Hours</label>
+                    <input type="number" id="variableHours_${dept}" name="variableHours_${dept}" value="${variableHours}" min="0">
+                    <small style="color: #f59e0b;">Additional hours to extend project capacity</small>
+                </div>
+                <div class="form-group">
+                    <label>Current Status</label>
+                    <div style="padding: 0.5rem; background: #f8fafc; border-radius: 0.375rem; font-size: 0.875rem;">
+                        <div>Allocated: ${allocatedHours} hours</div>
+                        <div>Variable: ${variableHours} hours</div>
+                        <div>Consumed: ${consumedHours} hours</div>
+                        <div><strong>Total Available: ${allocatedHours + variableHours} hours</strong></div>
+                        <div>Balance: ${Math.max(0, (allocatedHours + variableHours) - consumedHours)} hours</div>
+                    </div>
+                </div>
+            `;
+            inputsContainer.appendChild(deptDiv);
+            console.log(`✅ Added department hours input for editing: ${dept}`);
+        });
+
+        populateEmployeeSelect(selectedDepartments);
+    } else {
+        container.style.display = 'none';
+        inputsContainer.innerHTML = '';
+        const employeeSelect = document.getElementById('assignedEmployees');
+        if (employeeSelect) {
+            employeeSelect.innerHTML = '';
+        }
+        console.log('❌ No departments selected, hiding department hours');
     }
 }
 
@@ -369,20 +536,29 @@ async function updateProject(id) {
             selectedDepartments: selectedDepartments
         });
 
-        // ✅ UPDATED: Build department hours array for update
+        // ✅ FIXED: Get current project data to preserve allocated hours and consumed hours
+        const currentProject = await apiClient.getProject(id);
+        
+        // ✅ FIXED: Build department hours array while preserving allocated hours and only updating variable hours
         const departmentHours = selectedDepartments.map(dept => {
-            const allocatedHours = parseInt(formData.get(`deptHours_${dept}`)) || 0;
-            console.log(`🏢 Department ${dept}: ${allocatedHours} hours`);
+            // Find existing department data
+            const existingDept = currentProject.departmentHours?.find(d => d.department === dept);
+            const allocatedHours = existingDept?.allocatedHours || 0; // Preserve original allocated hours
+            const variableHours = parseInt(formData.get(`variableHours_${dept}`)) || 0; // Get new variable hours
+            const consumedHours = existingDept?.consumedHours || 0; // Preserve consumed hours
+            
+            console.log(`🏢 Department ${dept}: ${allocatedHours} allocated, ${variableHours} variable, ${consumedHours} consumed`);
+            
             return {
                 department: dept,
-                allocatedHours: allocatedHours,
-                consumedHours: 0 // Reset consumed hours when updating allocation
+                allocatedHours: allocatedHours, // ✅ PRESERVE original allocated hours
+                variableHours: variableHours,   // ✅ UPDATE variable hours
+                consumedHours: consumedHours    // ✅ PRESERVE consumed hours
             };
         });
 
-        // ✅ UPDATED: Project data with department hours (removed junior/senior)
         const projectData = {
-            plNo: formData.get('plNo'),
+            projectCode: formData.get('projectCode'),
             name: formData.get('projectName'),
             totalHours: parseInt(formData.get('totalHours')),
             departmentHours: departmentHours,
@@ -443,16 +619,16 @@ async function deleteProject(id) {
 
 function filterProjects() {
     const searchTerm = document.getElementById('searchProjects').value.toLowerCase();
-    const searchPLNoTerm = document.getElementById('searchPLNo').value.toLowerCase();
+    const searchProjectCodeTerm = document.getElementById('searchProjectCode').value.toLowerCase();
     const statusFilter = document.getElementById('filterStatus').value;
 
-    console.log(`🔍 Filtering projects - Search: "${searchTerm}", PL No: "${searchPLNoTerm}", Status: "${statusFilter}"`);
+    console.log(`🔍 Filtering projects - Search: "${searchTerm}", Project Code: "${searchProjectCodeTerm}", Status: "${statusFilter}"`);
 
     const filteredProjects = (window.projects || []).filter(project => {
         const matchesSearch = project.name.toLowerCase().includes(searchTerm);
-        const matchesPLNo = project.plNo.toLowerCase().includes(searchPLNoTerm);
+        const matchesProjectCode = project.projectCode.toLowerCase().includes(searchProjectCodeTerm);
         const matchesStatus = statusFilter === 'all' || project.status === statusFilter;
-        return matchesSearch && matchesPLNo && matchesStatus;
+        return matchesSearch && matchesProjectCode && matchesStatus;
     });
 
     console.log(`📋 Filter results: ${filteredProjects.length} projects match criteria`);
@@ -500,7 +676,6 @@ function handleDepartmentSelection() {
         selectedDepartments.forEach((dept, index) => {
             const deptDiv = document.createElement('div');
             deptDiv.className = 'form-row';
-            // ✅ UPDATED: Simplified department hours input (only allocated hours)
             deptDiv.innerHTML = `
                 <div class="form-group">
                     <label for="deptHours_${dept}">${dept} Allocated Hours *</label>
@@ -529,7 +704,6 @@ function showNotification(message, type = 'info') {
     notification.className = 'notification';
     notification.textContent = message;
     
-    // Set background color based on type
     const colors = {
         success: '#10b981',
         error: '#ef4444',
@@ -565,6 +739,8 @@ document.getElementById('toggle-sidebar').addEventListener('click', function() {
 window.onclick = function(event) {
     const addModal = document.getElementById('addProjectModal');
     const assignedModal = document.getElementById('assignedEmployeesModal');
+    const variableModal = document.getElementById('addVariableHoursModal');
+    
     if (event.target === addModal) {
         console.log('❌ Add project modal closed (outside click)');
         addModal.style.display = 'none';
@@ -573,10 +749,92 @@ window.onclick = function(event) {
         console.log('❌ Assigned employees modal closed (outside click)');
         closeAssignedEmployeesModal();
     }
+    if (event.target === variableModal) {
+        console.log('❌ Add variable hours modal closed (outside click)');
+        closeAddVariableHoursModal();
+    }
 };
 
-// Add download function (placeholder)
-function downloadProjectExcel(projectId) {
-    console.log(`📥 Downloading project excel for: ${projectId}`);
-    showNotification('Excel download feature coming soon!', 'info');
+// ✅ UPDATED: Download function with better error handling
+async function downloadProjectExcel(projectId) {
+    try {
+        console.log(`📥 Downloading project excel for: ${projectId}`);
+        showNotification('Generating project report...', 'info');
+        
+        // Try Excel export first
+        try {
+            const result = await apiClient.exportProjectToExcel(projectId);
+            showNotification(`Project report downloaded: ${result.fileName}`, 'success');
+            console.log('✅ Excel download completed successfully');
+        } catch (excelError) {
+            console.warn('❌ Excel export failed, trying alternative methods:', excelError);
+            
+            // Fallback: Generate client-side CSV
+            try {
+                await generateClientSideReport(projectId);
+            } catch (clientError) {
+                console.error('❌ All export methods failed:', clientError);
+                showNotification('Export feature not available yet. Please try again later.', 'warning');
+            }
+        }
+    } catch (error) {
+        console.error('❌ Error downloading project report:', error);
+        showNotification(error.message || 'Failed to download project report', 'error');
+    }
+}
+
+// ✅ ADDED: Client-side report generation as fallback
+async function generateClientSideReport(projectId) {
+    try {
+        console.log(`🔄 Generating client-side report for project: ${projectId}`);
+        
+        const project = await apiClient.getProject(projectId);
+        if (!project) {
+            throw new Error('Project not found');
+        }
+
+        // Create CSV content
+        const headers = ['Project Code', 'Project Name', 'Status', 'Total Hours', 'Allocated Hours', 'Variable Hours', 'Consumed Hours', 'Balance Hours'];
+        
+        const totalAllocated = project.departmentHours.reduce((sum, dept) => sum + dept.allocatedHours, 0);
+        const totalVariable = project.departmentHours.reduce((sum, dept) => sum + dept.variableHours, 0);
+        const totalConsumed = project.departmentHours.reduce((sum, dept) => sum + dept.consumedHours, 0);
+        const totalAvailable = totalAllocated + totalVariable;
+        const balanceHours = Math.max(0, totalAvailable - totalConsumed);
+        
+        const row = [
+            project.projectCode,
+            project.name,
+            project.status,
+            project.totalHours,
+            totalAllocated,
+            totalVariable,
+            totalConsumed,
+            balanceHours
+        ];
+        
+        const csvContent = [headers, row].map(row => row.map(field => `"${field}"`).join(',')).join('\n');
+        
+        // Create and download file
+        const blob = new Blob([csvContent], { type: 'text/csv' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.style.display = 'none';
+        a.href = url;
+        a.download = `${project.name.replace(/\s+/g, '_')}_report.csv`;
+        
+        document.body.appendChild(a);
+        a.click();
+        
+        // Clean up
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        
+        console.log('✅ Client-side CSV generated successfully');
+        showNotification(`CSV report downloaded: ${a.download}`, 'success');
+        
+    } catch (error) {
+        console.error('❌ Client-side report generation failed:', error);
+        throw error;
+    }
 }

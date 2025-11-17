@@ -94,16 +94,16 @@ router.get('/:id', authenticate, async (req, res) => {
   }
 });
 
-// Create new project (Project Manager/Admin only) - ✅ CHANGED AUTHORIZATION & UPDATED LOGIC
+// Create new project (Project Manager/Admin only) - ✅ UPDATED: Include variable hours
 router.post('/', authenticate, authorizeProjectManager, async (req, res) => {
   try {
     console.log('📝 Creating new project with data:', req.body);
     
     const {
-      plNo,           // ✅ CHANGED: from projectCode to plNo
+      projectCode,
       name,
       totalHours,
-      departmentHours, // ✅ ADDED: Department hours allocation
+      departmentHours,
       status,
       assignedEmployees,
       departments,
@@ -111,14 +111,14 @@ router.post('/', authenticate, authorizeProjectManager, async (req, res) => {
       endDate
     } = req.body;
 
-    // ✅ UPDATED: Check if PL No already exists
-    const existingProject = await Project.findOne({ plNo });
+    // ✅ UPDATED: Check if projectCode already exists
+    const existingProject = await Project.findOne({ projectCode });
     if (existingProject) {
-      console.log('❌ PL Number already exists:', plNo);
-      return res.status(400).json({ message: 'PL Number already exists' });
+      console.log('❌ Project Code already exists:', projectCode);
+      return res.status(400).json({ message: 'Project Code already exists' });
     }
 
-    console.log('✅ PL Number validation passed');
+    console.log('✅ Project Code validation passed');
 
     // ✅ ADDED: Validate department hours allocation
     if (!departmentHours || !Array.isArray(departmentHours) || departmentHours.length === 0) {
@@ -126,24 +126,28 @@ router.post('/', authenticate, authorizeProjectManager, async (req, res) => {
       return res.status(400).json({ message: 'Department hours allocation is required' });
     }
 
-    const totalAllocatedHours = departmentHours.reduce((sum, dept) => sum + dept.allocatedHours, 0);
-    console.log(`📊 Total allocated hours: ${totalAllocatedHours}, Project total hours: ${totalHours}`);
+    // ✅ UPDATED: Calculate total allocated hours including variable hours
+    const totalAllocatedHours = departmentHours.reduce((sum, dept) => 
+      sum + dept.allocatedHours + (dept.variableHours || 0), 0
+    );
+    console.log(`📊 Total allocated + variable hours: ${totalAllocatedHours}, Project total hours: ${totalHours}`);
 
     if (totalAllocatedHours > totalHours) {
-      console.log('❌ Department hours exceed total project hours');
+      console.log('❌ Department hours (allocated + variable) exceed total project hours');
       return res.status(400).json({ 
-        message: 'Sum of department allocated hours cannot exceed total project hours' 
+        message: 'Sum of department allocated + variable hours cannot exceed total project hours' 
       });
     }
 
-    // ✅ UPDATED: Create project with new schema
+    // ✅ UPDATED: Create project with variable hours support
     const newProject = new Project({
-      plNo,
+      projectCode,
       name,
       totalHours: parseInt(totalHours),
       departmentHours: departmentHours.map(dept => ({
         department: dept.department,
         allocatedHours: parseInt(dept.allocatedHours),
+        variableHours: parseInt(dept.variableHours) || 0, // ✅ ADDED: Variable hours
         consumedHours: 0
       })),
       status: status || 'active',
@@ -169,6 +173,16 @@ router.post('/', authenticate, authorizeProjectManager, async (req, res) => {
 
   } catch (error) {
     console.error('❌ Create project error:', error);
+    
+    // ✅ IMPROVED: Better error handling for duplicate key
+    if (error.code === 11000) {
+      const field = Object.keys(error.keyPattern)[0];
+      console.error(`❌ Duplicate ${field}: ${error.keyValue[field]}`);
+      return res.status(400).json({ 
+        message: `${field} already exists: ${error.keyValue[field]}` 
+      });
+    }
+    
     res.status(500).json({ 
       message: 'Server error creating project',
       error: error.message 
@@ -176,19 +190,20 @@ router.post('/', authenticate, authorizeProjectManager, async (req, res) => {
   }
 });
 
-// Update project (Project Manager/Admin only) - ✅ CHANGED AUTHORIZATION & UPDATED LOGIC
+// Update project (Project Manager/Admin only) - ✅ UPDATED: Include variable hours
 router.put('/:id', authenticate, authorizeProjectManager, async (req, res) => {
   try {
     console.log(`📝 Updating project ${req.params.id} with data:`, req.body);
     
-    // ✅ UPDATED: Only allow specific fields to be updated
+    // ✅ UPDATED: Include variable hours in update data
     const updateData = {
-      plNo: req.body.plNo,
+      projectCode: req.body.projectCode,
       name: req.body.name,
       totalHours: parseInt(req.body.totalHours),
       departmentHours: req.body.departmentHours ? req.body.departmentHours.map(dept => ({
         department: dept.department,
         allocatedHours: parseInt(dept.allocatedHours),
+        variableHours: parseInt(dept.variableHours) || 0, // ✅ ADDED: Variable hours
         consumedHours: parseInt(dept.consumedHours) || 0
       })) : undefined,
       status: req.body.status,
@@ -226,12 +241,186 @@ router.put('/:id', authenticate, authorizeProjectManager, async (req, res) => {
     });
   } catch (error) {
     console.error('❌ Update project error:', error);
+    
+    // ✅ ADDED: Handle duplicate key errors in update
+    if (error.code === 11000) {
+      const field = Object.keys(error.keyPattern)[0];
+      console.error(`❌ Duplicate ${field}: ${error.keyValue[field]}`);
+      return res.status(400).json({ 
+        message: `${field} already exists: ${error.keyValue[field]}` 
+      });
+    }
+    
     res.status(500).json({ 
       message: 'Server error updating project',
       error: error.message 
     });
   }
 });
+
+// ✅ ADDED: Add variable hours to project (for admin to extend hours)
+router.patch('/:id/add-variable-hours', authenticate, authorizeProjectManager, async (req, res) => {
+  try {
+    console.log(`➕ Adding variable hours to project ${req.params.id}:`, req.body);
+    
+    const { department, variableHours } = req.body;
+    
+    if (!department || !variableHours || variableHours <= 0) {
+      console.log('❌ Invalid variable hours data');
+      return res.status(400).json({ 
+        message: 'Department and positive variable hours are required' 
+      });
+    }
+
+    const project = await Project.findById(req.params.id);
+    
+    if (!project) {
+      console.log('❌ Project not found');
+      return res.status(404).json({ message: 'Project not found' });
+    }
+
+    // Add variable hours using the model method
+    await project.addVariableHours(department, parseInt(variableHours));
+    
+    // Get updated project
+    const updatedProject = await Project.findById(req.params.id)
+      .populate('assignedEmployees', 'firstName lastName employeeId department');
+
+    console.log('✅ Variable hours added successfully');
+
+    res.json({
+      message: `Successfully added ${variableHours} variable hours to ${department}`,
+      project: updatedProject
+    });
+  } catch (error) {
+    console.error('❌ Add variable hours error:', error);
+    res.status(500).json({ 
+      message: 'Server error adding variable hours',
+      error: error.message 
+    });
+  }
+});
+
+// ✅ ADDED: Export project to Excel
+router.get('/:id/export-excel', authenticate, authorizeProjectManager, async (req, res) => {
+  try {
+    console.log(`📊 Exporting project ${req.params.id} to Excel`);
+    
+    const project = await Project.findById(req.params.id)
+      .populate('assignedEmployees', 'firstName lastName employeeId department');
+    
+    if (!project) {
+      console.log('❌ Project not found for export');
+      return res.status(404).json({ message: 'Project not found' });
+    }
+
+    // For now, return a simple CSV as placeholder
+    // You can implement proper Excel generation later
+    const csvData = generateProjectCSV(project);
+    
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="${project.name}_report.csv"`);
+    res.send(csvData);
+    
+    console.log('✅ Project exported successfully');
+  } catch (error) {
+    console.error('❌ Export project error:', error);
+    res.status(500).json({ 
+      message: 'Server error exporting project',
+      error: error.message 
+    });
+  }
+});
+
+// ✅ ADDED: Export all projects to Excel
+router.get('/export-excel', authenticate, authorizeProjectManager, async (req, res) => {
+  try {
+    console.log('📊 Exporting all projects to Excel');
+    
+    const projects = await Project.find()
+      .populate('assignedEmployees', 'firstName lastName employeeId department')
+      .sort({ createdAt: -1 });
+
+    // For now, return a simple CSV as placeholder
+    const csvData = generateAllProjectsCSV(projects);
+    
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="all_projects_${new Date().toISOString().split('T')[0]}.csv"`);
+    res.send(csvData);
+    
+    console.log(`✅ Exported ${projects.length} projects successfully`);
+  } catch (error) {
+    console.error('❌ Export all projects error:', error);
+    res.status(500).json({ 
+      message: 'Server error exporting projects',
+      error: error.message 
+    });
+  }
+});
+
+// ✅ ADDED: Helper function to generate CSV for single project
+function generateProjectCSV(project) {
+  const headers = ['Project Code', 'Project Name', 'Status', 'Total Hours', 'Allocated Hours', 'Variable Hours', 'Consumed Hours', 'Balance Hours', 'Departments', 'Assigned Employees'];
+  
+  const totalAllocated = project.departmentHours.reduce((sum, dept) => sum + dept.allocatedHours, 0);
+  const totalVariable = project.departmentHours.reduce((sum, dept) => sum + dept.variableHours, 0);
+  const totalConsumed = project.departmentHours.reduce((sum, dept) => sum + dept.consumedHours, 0);
+  const totalAvailable = totalAllocated + totalVariable;
+  const balanceHours = Math.max(0, totalAvailable - totalConsumed);
+  
+  const departments = project.departments.join(', ');
+  const assignedEmployees = project.assignedEmployees.map(emp => 
+    `${emp.firstName} ${emp.lastName} (${emp.employeeId})`
+  ).join(', ');
+  
+  const row = [
+    project.projectCode,
+    project.name,
+    project.status,
+    project.totalHours,
+    totalAllocated,
+    totalVariable,
+    totalConsumed,
+    balanceHours,
+    departments,
+    assignedEmployees
+  ];
+  
+  return [headers, row].map(row => row.map(field => `"${field}"`).join(',')).join('\n');
+}
+
+// ✅ ADDED: Helper function to generate CSV for all projects
+function generateAllProjectsCSV(projects) {
+  const headers = ['Project Code', 'Project Name', 'Status', 'Total Hours', 'Allocated Hours', 'Variable Hours', 'Consumed Hours', 'Balance Hours', 'Progress %', 'Departments', 'Employee Count'];
+  
+  const rows = projects.map(project => {
+    const totalAllocated = project.departmentHours.reduce((sum, dept) => sum + dept.allocatedHours, 0);
+    const totalVariable = project.departmentHours.reduce((sum, dept) => sum + dept.variableHours, 0);
+    const totalConsumed = project.departmentHours.reduce((sum, dept) => sum + dept.consumedHours, 0);
+    const totalAvailable = totalAllocated + totalVariable;
+    const balanceHours = Math.max(0, totalAvailable - totalConsumed);
+    const progress = totalAvailable > 0 ? ((totalConsumed / totalAvailable) * 100).toFixed(1) : 0;
+    
+    const departments = project.departments.join(', ');
+    const employeeCount = project.assignedEmployees.length;
+    
+    return [
+      project.projectCode,
+      project.name,
+      project.status,
+      project.totalHours,
+      totalAllocated,
+      totalVariable,
+      totalConsumed,
+      balanceHours,
+      progress,
+      departments,
+      employeeCount
+    ];
+  });
+  
+  return [headers, ...rows].map(row => row.map(field => `"${field}"`).join(',')).join('\n');
+}
 
 // Delete project (Project Manager/Admin only) - ✅ CHANGED AUTHORIZATION
 router.delete('/:id', authenticate, authorizeProjectManager, async (req, res) => {

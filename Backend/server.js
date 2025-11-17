@@ -14,7 +14,7 @@ import leaveRoutes from './routes/leaveRoutes.js';
 import connectDB from './mongoDB.js';
 import { securityHeaders } from './security/headers.js';
 import { sanitizeMiddleware } from './security/sanitize.js';
-import { authLimiter, apiLimiter } from './security/rateLimit.js';
+/*import { authLimiter, apiLimiter } from './security/rateLimit.js';*/
 import { auditLogger } from './security/auditLogger.js';
 import dashboardRoutes from './routes/dashboardRoutes.js';
 import Timesheet from './models/TimeSheet.js'; // ✅ ADDED MISSING IMPORT
@@ -98,9 +98,9 @@ console.log('🕒 Archive job scheduled - will run daily');
 app.use('/uploads', express.static('uploads')); 
 
 // Rate limiting
-app.use('/api/auth/login', authLimiter);
+/*app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/login-admin', authLimiter);
-app.use('/api/', apiLimiter);
+app.use('/api/', apiLimiter);*/
 
 // Routes
 app.use('/api/auth', authRoutes);

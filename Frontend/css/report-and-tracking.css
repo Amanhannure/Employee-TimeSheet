@@ -573,3 +573,211 @@
         grid-template:auto;
     }
 }
+/* Additional CSS for report and tracking */
+.section-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid #e9ecef;
+}
+
+.timesheets-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 1rem;
+    margin-top: 1rem;
+}
+
+.timesheet-card {
+    background: white;
+    border-radius: 8px;
+    padding: 1rem;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    border-left: 4px solid #007bff;
+}
+
+.timesheet-card.status-pending {
+    border-left-color: #ffc107;
+}
+
+.timesheet-card.status-approved {
+    border-left-color: #28a745;
+}
+
+.timesheet-card.status-rejected {
+    border-left-color: #dc3545;
+}
+
+.timesheet-card.status-draft {
+    border-left-color: #6c757d;
+}
+
+.timesheet-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+}
+
+.timesheet-period {
+    font-weight: 600;
+    color: #333;
+}
+
+.timesheet-status {
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.timesheet-body {
+    margin-bottom: 1rem;
+}
+
+.hours-total {
+    font-size: 1.2rem;
+    font-weight: bold;
+    color: #007bff;
+}
+
+.hours-breakdown {
+    font-size: 0.9rem;
+    color: #666;
+}
+
+.timesheet-dates {
+    font-size: 0.8rem;
+    color: #666;
+    margin-top: 0.5rem;
+}
+
+.timesheet-footer {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.details-btn {
+    background: #6c757d;
+    color: white;
+    border: none;
+    padding: 0.5rem 1rem;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    cursor: pointer;
+}
+
+.details-btn:hover {
+    background: #545b62;
+}
+
+.employee-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem;
+    border-bottom: 1px solid #e9ecef;
+}
+
+.employee-item:last-child {
+    border-bottom: none;
+}
+
+.employee-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.employee-name {
+    font-weight: 600;
+    color: #333;
+}
+
+.employee-id {
+    font-size: 0.9rem;
+    color: #666;
+}
+
+.employee-department {
+    font-size: 0.8rem;
+    color: #999;
+}
+
+.employee-designation {
+    font-size: 0.9rem;
+    color: #666;
+}
+
+.results-stats {
+    display: flex;
+    gap: 2rem;
+    margin-top: 1rem;
+}
+
+.stat-item {
+    text-align: center;
+}
+
+.stat-number {
+    display: block;
+    font-size: 2rem;
+    font-weight: bold;
+    color: #007bff;
+}
+
+.stat-label {
+    font-size: 0.9rem;
+    color: #666;
+}
+
+.clear-btn {
+    background: #6c757d;
+    color: white;
+    border: none;
+    padding: 0.75rem 1rem;
+    border-radius: 4px;
+    font-size: 0.9rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.clear-btn:hover {
+    background: #545b62;
+}
+
+.pdf-btn {
+    background: #dc3545;
+}
+
+.pdf-btn:hover {
+    background: #c82333;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+    .hours-tracking-container {
+        grid-template-columns: 1fr;
+    }
+    
+    .search-row {
+        grid-template-columns: 1fr;
+    }
+    
+    .stats-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .timesheets-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .results-stats {
+        flex-direction: column;
+        gap: 1rem;
+    }
+}

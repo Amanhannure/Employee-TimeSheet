@@ -576,3 +576,63 @@
         justify-content: center;
     }
 }
+/* Add these styles to your projects.css file */
+
+/* Variable hours indicator */
+.project-stats .stat-item small {
+    font-size: 0.7rem;
+    display: block;
+    margin-top: 2px;
+}
+
+/* Warning button for Add Hours */
+.action-btn.warning {
+    background: linear-gradient(135deg, #f59e0b, #d97706);
+    border: 1px solid #f59e0b;
+}
+
+.action-btn.warning:hover {
+    background: linear-gradient(135deg, #d97706, #b45309);
+    border: 1px solid #d97706;
+}
+
+/* Project status colors */
+.project-status.status-on-hold {
+    background: linear-gradient(135deg, #f59e0b, #d97706);
+    color: white;
+}
+
+.project-status.status-active {
+    background: linear-gradient(135deg, #10b981, #059669);
+    color: white;
+}
+
+.project-status.status-completed {
+    background: linear-gradient(135deg, #3b82f6, #2563eb);
+    color: white;
+}
+
+/* Variable hours modal specific styles */
+#addVariableHoursModal .modal-content {
+    max-width: 500px;
+}
+
+#addVariableHoursModal .form-group {
+    margin-bottom: 1.5rem;
+}
+
+#addVariableHoursModal select,
+#addVariableHoursModal input {
+    width: 100%;
+    padding: 0.75rem;
+    border: 1px solid #d1d5db;
+    border-radius: 0.5rem;
+    font-size: 1rem;
+}
+
+#addVariableHoursModal select:focus,
+#addVariableHoursModal input:focus {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
