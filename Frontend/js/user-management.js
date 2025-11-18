@@ -7,19 +7,38 @@ document.addEventListener('DOMContentLoaded', async function() {
         showNotification('Failed to load users data', 'error');
     }
     
-    document.getElementById('addUserForm').addEventListener('submit', function(e) {
-        e.preventDefault();
-        addUser();
-    });
+    // Safe event listener binding
+    const addUserForm = document.getElementById('addUserForm');
+    const editUserForm = document.getElementById('editUserForm');
+    const searchUsers = document.getElementById('searchUsers');
+    const filterRole = document.getElementById('filterRole');
+    const filterStatus = document.getElementById('filterStatus');
     
-    document.getElementById('editUserForm').addEventListener('submit', function(e) {
-        e.preventDefault();
-        updateUser();
-    });
+    if (addUserForm) {
+        addUserForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            addUser();
+        });
+    }
     
-    document.getElementById('searchUsers').addEventListener('input', filterUsers);
-    document.getElementById('filterRole').addEventListener('change', filterUsers);
-    document.getElementById('filterStatus').addEventListener('change', filterUsers);
+    if (editUserForm) {
+        editUserForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            updateUser();
+        });
+    }
+    
+    if (searchUsers) {
+        searchUsers.addEventListener('input', filterUsers);
+    }
+    
+    if (filterRole) {
+        filterRole.addEventListener('change', filterUsers);
+    }
+    
+    if (filterStatus) {
+        filterStatus.addEventListener('change', filterUsers);
+    }
 });
 
 async function loadAllUsers() {
@@ -50,6 +69,11 @@ async function loadAllUsers() {
         console.log(`✅ Successfully loaded ${uniqueUsers.length} unique users`);
         
         const grid = document.getElementById('usersGrid');
+        if (!grid) {
+            console.error('usersGrid element not found');
+            return;
+        }
+        
         grid.innerHTML = '';
         
         if (uniqueUsers.length === 0) {
@@ -151,9 +175,14 @@ function updateOverviewCards() {
     const activeUsers = users.filter(u => u.status === 'active').length;
     const inactiveUsers = users.filter(u => u.status === 'inactive').length;
     
-    document.getElementById('totalUsers').textContent = totalUsers;
-    document.getElementById('activeUsers').textContent = activeUsers;
-    document.getElementById('InactiveUsers').textContent = inactiveUsers;
+    // Safe element updates
+    const totalUsersEl = document.getElementById('totalUsers');
+    const activeUsersEl = document.getElementById('activeUsers');
+    const inactiveUsersEl = document.getElementById('InactiveUsers');
+    
+    if (totalUsersEl) totalUsersEl.textContent = totalUsers;
+    if (activeUsersEl) activeUsersEl.textContent = activeUsers;
+    if (inactiveUsersEl) inactiveUsersEl.textContent = inactiveUsers;
     
     console.log(`Overview updated: ${totalUsers} total, ${activeUsers} active, ${inactiveUsers} inactive`);
 }
@@ -161,6 +190,11 @@ function updateOverviewCards() {
 async function addUser() {
     try {
         const form = document.getElementById('addUserForm');
+        if (!form) {
+            showNotification('Add user form not found', 'error');
+            return;
+        }
+        
         const formData = new FormData(form);
         
         const userData = {
@@ -232,17 +266,31 @@ async function openEditUserModal(userId) {
 
         console.log('User data for edit:', user);
 
-        // Populate all form fields according to schema
-        document.getElementById('editUserId').value = user._id;
-        document.getElementById('editEmployeeId').value = user.employeeId || '';
-        document.getElementById('editUsername').value = user.username || '';
-        document.getElementById('editFirstName').value = user.firstName || '';
-        document.getElementById('editLastName').value = user.lastName || '';
-        document.getElementById('editEmail').value = user.email || '';
-        document.getElementById('editPhone').value = user.phone || '';
-        document.getElementById('editRole').value = user.role || 'employee';
-        document.getElementById('editDesignation').value = user.designation || '';
-        document.getElementById('editDepartment').value = user.department || '';
+        // Safe element population
+        const editUserIdEl = document.getElementById('editUserId');
+        const editEmployeeIdEl = document.getElementById('editEmployeeId');
+        const editUsernameEl = document.getElementById('editUsername');
+        const editFirstNameEl = document.getElementById('editFirstName');
+        const editLastNameEl = document.getElementById('editLastName');
+        const editEmailEl = document.getElementById('editEmail');
+        const editPhoneEl = document.getElementById('editPhone');
+        const editRoleEl = document.getElementById('editRole');
+        const editDesignationEl = document.getElementById('editDesignation');
+        const editDepartmentEl = document.getElementById('editDepartment');
+        const editJoinDateEl = document.getElementById('editJoinDate');
+        const editStatusEl = document.getElementById('editStatus');
+        const editUserModalEl = document.getElementById('editUserModal');
+
+        if (editUserIdEl) editUserIdEl.value = user._id;
+        if (editEmployeeIdEl) editEmployeeIdEl.value = user.employeeId || '';
+        if (editUsernameEl) editUsernameEl.value = user.username || '';
+        if (editFirstNameEl) editFirstNameEl.value = user.firstName || '';
+        if (editLastNameEl) editLastNameEl.value = user.lastName || '';
+        if (editEmailEl) editEmailEl.value = user.email || '';
+        if (editPhoneEl) editPhoneEl.value = user.phone || '';
+        if (editRoleEl) editRoleEl.value = user.role || 'employee';
+        if (editDesignationEl) editDesignationEl.value = user.designation || '';
+        if (editDepartmentEl) editDepartmentEl.value = user.department || '';
         
         // Handle join date formatting
         let joinDateValue = '';
@@ -254,11 +302,11 @@ async function openEditUserModal(userId) {
                 joinDateValue = user.joinDate;
             }
         }
-        document.getElementById('editJoinDate').value = joinDateValue;
+        if (editJoinDateEl) editJoinDateEl.value = joinDateValue;
         
-        document.getElementById('editStatus').value = user.status || 'active';
+        if (editStatusEl) editStatusEl.value = user.status || 'active';
         
-        document.getElementById('editUserModal').style.display = 'block';
+        if (editUserModalEl) editUserModalEl.style.display = 'block';
         console.log('Edit modal opened successfully');
     } catch (error) {
         console.error('Error loading user for edit:', error);
@@ -269,9 +317,19 @@ async function openEditUserModal(userId) {
 async function updateUser() {
     try {
         const form = document.getElementById('editUserForm');
+        if (!form) {
+            showNotification('Edit user form not found', 'error');
+            return;
+        }
+        
         const formData = new FormData(form);
         
-        const userId = document.getElementById('editUserId').value;
+        const userIdEl = document.getElementById('editUserId');
+        if (!userIdEl) {
+            throw new Error('User ID element not found');
+        }
+        
+        const userId = userIdEl.value;
         
         if (!userId) {
             throw new Error('User ID is required');
@@ -326,9 +384,17 @@ async function openDeleteUserModal(userId) {
         const userName = `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Unknown User';
         const userEmployeeId = user.employeeId || 'No ID';
         
-        document.getElementById('deleteUserName').textContent = `${userName} (${userEmployeeId})`;
-        document.getElementById('deleteUserModal').dataset.userId = userId;
-        document.getElementById('deleteUserModal').style.display = 'block';
+        const deleteUserNameEl = document.getElementById('deleteUserName');
+        const deleteUserModalEl = document.getElementById('deleteUserModal');
+        
+        if (deleteUserNameEl) {
+            deleteUserNameEl.textContent = `${userName} (${userEmployeeId})`;
+        }
+        
+        if (deleteUserModalEl) {
+            deleteUserModalEl.dataset.userId = userId;
+            deleteUserModalEl.style.display = 'block';
+        }
     } catch (error) {
         console.error('Error loading user for delete:', error);
         showNotification('Failed to load user data', 'error');
@@ -337,7 +403,12 @@ async function openDeleteUserModal(userId) {
 
 async function confirmDeleteUser() {
     try {
-        const userId = document.getElementById('deleteUserModal').dataset.userId;
+        const deleteUserModalEl = document.getElementById('deleteUserModal');
+        if (!deleteUserModalEl) {
+            throw new Error('Delete user modal not found');
+        }
+        
+        const userId = deleteUserModalEl.dataset.userId;
         if (!userId) {
             throw new Error('No user ID provided for deletion');
         }
@@ -355,9 +426,17 @@ async function confirmDeleteUser() {
 }
 
 function filterUsers() {
-    const searchTerm = document.getElementById('searchUsers').value.toLowerCase();
-    const roleFilter = document.getElementById('filterRole').value;
-    const statusFilter = document.getElementById('filterStatus').value;
+    const searchTermEl = document.getElementById('searchUsers');
+    const roleFilterEl = document.getElementById('filterRole');
+    const statusFilterEl = document.getElementById('filterStatus');
+    
+    if (!searchTermEl || !roleFilterEl || !statusFilterEl) {
+        return;
+    }
+    
+    const searchTerm = searchTermEl.value.toLowerCase();
+    const roleFilter = roleFilterEl.value;
+    const statusFilter = statusFilterEl.value;
     
     const users = window.users || [];
     const filteredUsers = users.filter(user => {
@@ -381,6 +460,8 @@ function filterUsers() {
     });
     
     const grid = document.getElementById('usersGrid');
+    if (!grid) return;
+    
     grid.innerHTML = '';
     
     if (filteredUsers.length === 0) {
@@ -397,21 +478,29 @@ function filterUsers() {
 }
 
 function openAddUserModal() {
-    document.getElementById('addUserModal').style.display = 'block';
+    const modal = document.getElementById('addUserModal');
+    if (modal) modal.style.display = 'block';
 }
 
 function closeAddUserModal() {
-    document.getElementById('addUserModal').style.display = 'none';
-    document.getElementById('addUserForm').reset();
+    const modal = document.getElementById('addUserModal');
+    const form = document.getElementById('addUserForm');
+    
+    if (modal) modal.style.display = 'none';
+    if (form) form.reset();
 }
 
 function closeEditUserModal() {
-    document.getElementById('editUserModal').style.display = 'none';
+    const modal = document.getElementById('editUserModal');
+    if (modal) modal.style.display = 'none';
 }
 
 function closeDeleteUserModal() {
-    document.getElementById('deleteUserModal').style.display = 'none';
-    document.getElementById('deleteUserModal').dataset.userId = '';
+    const modal = document.getElementById('deleteUserModal');
+    if (modal) {
+        modal.style.display = 'none';
+        modal.dataset.userId = '';
+    }
 }
 
 function showNotification(message, type = 'success') {
@@ -447,9 +536,16 @@ function showNotification(message, type = 'success') {
     }, 3000);
 }
 
-document.getElementById('toggle-sidebar').addEventListener('click', function() {
-    document.querySelector('.dashboard-container').classList.toggle('sidebar-collapsed');
-});
+// Safe event listener for sidebar toggle
+const toggleSidebar = document.getElementById('toggle-sidebar');
+if (toggleSidebar) {
+    toggleSidebar.addEventListener('click', function() {
+        const dashboardContainer = document.querySelector('.dashboard-container');
+        if (dashboardContainer) {
+            dashboardContainer.classList.toggle('sidebar-collapsed');
+        }
+    });
+}
 
 window.onclick = function(event) {
     if (event.target.classList.contains('modal')) {

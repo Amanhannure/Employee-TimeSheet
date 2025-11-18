@@ -26,6 +26,12 @@ function safeDisplay(element, display) {
     }
 }
 
+function safeAddEventListener(element, event, handler) {
+    if (element) {
+        element.addEventListener(event, handler);
+    }
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     console.log('🚀 Report and Tracking: Starting initialization...');
     initializeTabs();
@@ -39,7 +45,7 @@ function initializeTabs() {
     const tabContents = document.querySelectorAll('.tab-panel');
 
     tabButtons.forEach(button => {
-        button.addEventListener('click', function() {
+        safeAddEventListener(button, 'click', function() {
             const targetTab = this.getAttribute('data-tab') || this.textContent.toLowerCase().replace(/\s/g, '-');
             tabButtons.forEach(btn => btn.classList.remove('active'));
             tabContents.forEach(content => content.classList.remove('active'));
@@ -183,7 +189,7 @@ function loadHoursTrackingContent() {
     const projectNameInput = getElement('project-name');
     
     if (plNoInput) {
-        plNoInput.addEventListener('input', function() {
+        safeAddEventListener(plNoInput, 'input', function() {
             const plNo = this.value.trim();
             const project = currentFilteredProjects.find(p => p.plNo === plNo);
             if (project && projectNameInput) {
@@ -193,7 +199,7 @@ function loadHoursTrackingContent() {
     }
 
     if (projectNameInput) {
-        projectNameInput.addEventListener('input', function() {
+        safeAddEventListener(projectNameInput, 'input', function() {
             const name = this.value.trim();
             const project = currentFilteredProjects.find(p => p.name === name);
             if (project && plNoInput) {
@@ -230,17 +236,29 @@ async function searchProject() {
             return;
         }
         
-        const result = await apiClient.getHoursTracking({ plNo, projectName });
+        console.log('🔍 Searching for project with:', { plNo, projectName });
         
-        if (result.success && result.projects && result.projects.length > 0) {
+        // Use the getHoursTracking method
+        const result = await apiClient.getHoursTracking({ 
+            plNo, 
+            projectName
+        });
+        
+        console.log('📊 API Response:', result);
+        
+        // ✅ FIXED: Handle the actual API response structure from your backend
+        if (result && result.success && result.projects && result.projects.length > 0) {
             currentFilteredProjects = result.projects;
             
-            updateStatsDisplay(result.totals);
-            initializeHoursChart(result.totals);
+            // Use totals from backend or calculate if not provided
+            const totals = result.totals || calculateTotals(result.projects);
+            updateStatsDisplay(totals);
+            initializeHoursChart(totals);
             displaySearchResults(result.projects);
             
             showNotification(`Found ${result.projects.length} project(s) matching the criteria.`, 'success');
         } else {
+            console.log('🔍 No projects found or unexpected response format:', result);
             showNotification('No projects found matching the criteria.', 'error');
             clearResults();
         }
@@ -249,6 +267,25 @@ async function searchProject() {
         showNotification('Failed to search projects. Please try again.', 'error');
         clearResults();
     }
+}
+
+// Helper function to calculate totals from project data
+function calculateTotals(projects) {
+    const totals = {
+        totalHours: 0,
+        consumedHours: 0,
+        balanceHours: 0,
+        variationHours: 0
+    };
+
+    projects.forEach(project => {
+        totals.totalHours += project.totalHours || 0;
+        totals.consumedHours += project.consumedHours || 0;
+        totals.balanceHours += project.balanceHours || 0;
+        totals.variationHours += project.variationHours || 0;
+    });
+
+    return totals;
 }
 
 function updateStatsDisplay(totals) {
@@ -353,17 +390,19 @@ function displaySearchResults(projects) {
     // Clear existing rows
     tableBody.innerHTML = '';
 
-    // Add project rows
+    // Add project rows with proper data mapping
     projects.forEach(project => {
+        console.log('📋 Project data for display:', project);
+        
         const row = document.createElement('tr');
         row.innerHTML = `
-            <td>${project.plNo || 'N/A'}</td>
+            <td>${project.plNo || project.projectCode || 'N/A'}</td>
             <td>${project.name || 'N/A'}</td>
             <td><span class="status-badge status-${project.status || 'unknown'}">${project.status || 'Unknown'}</span></td>
             <td>${project.totalHours ? project.totalHours.toFixed(1) : '0.0'}</td>
             <td>${project.consumedHours ? project.consumedHours.toFixed(1) : '0.0'}</td>
             <td>${project.balanceHours ? project.balanceHours.toFixed(1) : '0.0'}</td>
-            <td>${project.assignedEmployees || 0}</td>
+            <td>${project.assignedEmployees || project.assignedEmployeesCount || 0}</td>
         `;
         tableBody.appendChild(row);
     });
@@ -519,7 +558,7 @@ function loadEmployeeReportContent() {
     const nameProjectInput = getElement('name-project');
     
     if (idPlNoInput) {
-        idPlNoInput.addEventListener('input', function() {
+        safeAddEventListener(idPlNoInput, 'input', function() {
             const value = this.value.trim();
             if (value && nameProjectInput) {
                 nameProjectInput.value = '';
@@ -528,7 +567,7 @@ function loadEmployeeReportContent() {
     }
 
     if (nameProjectInput) {
-        nameProjectInput.addEventListener('input', function() {
+        safeAddEventListener(nameProjectInput, 'input', function() {
             const value = this.value.trim();
             if (value && idPlNoInput) {
                 idPlNoInput.value = '';
@@ -562,25 +601,25 @@ async function searchEmployee() {
         showNotification('Searching employee data...', 'info');
 
         // Check if apiClient is available
-        if (typeof apiClient === 'undefined' || !apiClient.getEmployeeReport) {
+        if (typeof apiClient === 'undefined') {
             showNotification('API client not available. Please check console for errors.', 'error');
-            console.error('apiClient.getEmployeeReport is not a function');
+            console.error('apiClient is not defined');
             return;
         }
 
+        // Use getEmployeeReport for employee search
         const result = await apiClient.getEmployeeReport({
             employeeId: idPlNo,
             name: nameProject,
-            plNo: idPlNo,
             startDate: startDate,
             endDate: endDate
         });
 
-        if (result.success) {
+        if (result && result.success) {
             displaySearchResultsEmployee(result);
             showNotification('Search completed successfully.', 'success');
         } else {
-            showNotification(result.message || 'No data found matching the criteria.', 'error');
+            showNotification('No data found matching the criteria.', 'error');
             clearEmployeeResults();
         }
     } catch (error) {
@@ -609,51 +648,44 @@ function displaySearchResultsEmployee(result) {
     safeDisplay(exportSection, 'none');
     safeDisplay(resultsHeader, 'none');
 
-    if (result.type === 'employee') {
-        currentEmployee = result.employee;
-        currentSearchType = 'employee';
+    // Handle different response types
+    if (result.type === 'employee' && result.employee) {
         currentEmployeeData = result;
+        currentSearchType = 'employee';
 
         // Show employee details
         safeDisplay(employeeDetailsCard, 'block');
         safeInnerHTML(employeeDetailsContent, `
-            <div class="detail-grid">
-                <div class="detail-item">
-                    <span class="detail-label">Employee ID:</span>
-                    <span class="detail-value">${result.employee.employeeId}</span>
-                </div>
-                <div class="detail-item">
-                    <span class="detail-label">Name:</span>
-                    <span class="detail-value">${result.employee.firstName} ${result.employee.lastName}</span>
-                </div>
-                <div class="detail-item">
-                    <span class="detail-label">Department:</span>
-                    <span class="detail-value">${result.employee.department || 'N/A'}</span>
-                </div>
-                <div class="detail-item">
-                    <span class="detail-label">Designation:</span>
-                    <span class="detail-value">${result.employee.designation || 'N/A'}</span>
-                </div>
-                <div class="detail-item">
-                    <span class="detail-label">Status:</span>
-                    <span class="detail-value status-${result.employee.status}">${result.employee.status}</span>
-                </div>
-                <div class="detail-item">
-                    <span class="detail-label">Join Date:</span>
-                    <span class="detail-value">${result.employee.joinDate ? new Date(result.employee.joinDate).toLocaleDateString() : 'N/A'}</span>
-                </div>
+            <div class="detail-item">
+                <span class="detail-label">Employee ID:</span>
+                <span class="detail-value">${result.employee.employeeId || 'N/A'}</span>
+            </div>
+            <div class="detail-item">
+                <span class="detail-label">Name:</span>
+                <span class="detail-value">${result.employee.firstName || ''} ${result.employee.lastName || ''}</span>
+            </div>
+            <div class="detail-item">
+                <span class="detail-label">Department:</span>
+                <span class="detail-value">${result.employee.department || 'N/A'}</span>
+            </div>
+            <div class="detail-item">
+                <span class="detail-label">Designation:</span>
+                <span class="detail-value">${result.employee.designation || 'N/A'}</span>
+            </div>
+            <div class="detail-item">
+                <span class="detail-label">Status:</span>
+                <span class="detail-value">${result.employee.status || 'N/A'}</span>
             </div>
         `);
 
         // Show results header with stats
         safeDisplay(resultsHeader, 'block');
         const totalHours = result.timesheets ? result.timesheets.reduce((sum, ts) => sum + (ts.totalHours || 0), 0) : 0;
-        const totalTimesheets = result.timesheets ? result.timesheets.length : 0;
-        const approvedTimesheets = result.timesheets ? result.timesheets.filter(ts => ts.status === 'approved').length : 0;
+        const totalEntries = result.timesheets ? result.timesheets.length : 0;
         
         safeInnerHTML(resultsStats, `
             <div class="stat-item">
-                <span class="stat-number">${totalTimesheets}</span>
+                <span class="stat-number">${totalEntries}</span>
                 <span class="stat-label">Total Timesheets</span>
             </div>
             <div class="stat-item">
@@ -661,82 +693,58 @@ function displaySearchResultsEmployee(result) {
                 <span class="stat-label">Total Hours</span>
             </div>
             <div class="stat-item">
-                <span class="stat-number">${approvedTimesheets}</span>
-                <span class="stat-label">Approved</span>
+                <span class="stat-number">${result.timesheets ? result.timesheets.length : 0}</span>
+                <span class="stat-label">Records Found</span>
             </div>
         `);
 
-        displayEmployeeProjects(result.timesheets || []);
+        if (result.timesheets && result.timesheets.length > 0) {
+            displayEmployeeTimesheets(result.timesheets);
+        } else {
+            projectsList.innerHTML = '<div class="no-results">No timesheets found for this employee.</div>';
+        }
+        
         safeDisplay(exportSection, 'block');
-
-    } else if (result.type === 'project') {
-        currentProject = result.project;
-        currentSearchType = 'project';
+        
+    } else if (result.type === 'project' && result.project) {
         currentEmployeeData = result;
+        currentSearchType = 'project';
 
         // Show project details
         safeDisplay(projectDetailsCard, 'block');
         safeInnerHTML(projectDetailsContent, `
-            <div class="detail-grid">
-                <div class="detail-item">
-                    <span class="detail-label">Project Code:</span>
-                    <span class="detail-value">${result.project.plNo}</span>
-                </div>
-                <div class="detail-item">
-                    <span class="detail-label">Project Name:</span>
-                    <span class="detail-value">${result.project.name}</span>
-                </div>
-                <div class="detail-item">
-                    <span class="detail-label">Status:</span>
-                    <span class="detail-value status-${result.project.status}">${result.project.status}</span>
-                </div>
-                <div class="detail-item">
-                    <span class="detail-label">Total Hours:</span>
-                    <span class="detail-value">${result.project.totalHours ? result.project.totalHours.toFixed(1) : '0.0'}</span>
-                </div>
-                <div class="detail-item">
-                    <span class="detail-label">Consumed Hours:</span>
-                    <span class="detail-value">${result.project.consumedHours ? result.project.consumedHours.toFixed(1) : '0.0'}</span>
-                </div>
-                <div class="detail-item">
-                    <span class="detail-label">Balance Hours:</span>
-                    <span class="detail-value">${result.project.balanceHours ? result.project.balanceHours.toFixed(1) : '0.0'}</span>
-                </div>
-                <div class="detail-item">
-                    <span class="detail-label">Start Date:</span>
-                    <span class="detail-value">${result.project.startDate ? new Date(result.project.startDate).toLocaleDateString() : 'N/A'}</span>
-                </div>
-                <div class="detail-item">
-                    <span class="detail-label">End Date:</span>
-                    <span class="detail-value">${result.project.endDate ? new Date(result.project.endDate).toLocaleDateString() : 'N/A'}</span>
-                </div>
+            <div class="detail-item">
+                <span class="detail-label">Project Code:</span>
+                <span class="detail-value">${result.project.plNo || 'N/A'}</span>
+            </div>
+            <div class="detail-item">
+                <span class="detail-label">Project Name:</span>
+                <span class="detail-value">${result.project.name || 'N/A'}</span>
+            </div>
+            <div class="detail-item">
+                <span class="detail-label">Status:</span>
+                <span class="detail-value">${result.project.status || 'N/A'}</span>
+            </div>
+            <div class="detail-item">
+                <span class="detail-label">Total Hours:</span>
+                <span class="detail-value">${result.project.totalHours ? result.project.totalHours.toFixed(1) : '0.0'}</span>
+            </div>
+            <div class="detail-item">
+                <span class="detail-label">Consumed Hours:</span>
+                <span class="detail-value">${result.project.consumedHours ? result.project.consumedHours.toFixed(1) : '0.0'}</span>
+            </div>
+            <div class="detail-item">
+                <span class="detail-label">Balance Hours:</span>
+                <span class="detail-value">${result.project.balanceHours ? result.project.balanceHours.toFixed(1) : '0.0'}</span>
             </div>
         `);
 
-        // Show assigned employees
-        if (result.assignedEmployees && result.assignedEmployees.length > 0 && projectsList) {
-            projectsList.innerHTML = `
-                <div class="section-title">Assigned Employees (${result.assignedEmployees.length})</div>
-                ${result.assignedEmployees.map(emp => `
-                    <div class="employee-item">
-                        <div class="employee-info">
-                            <span class="employee-name">${emp.firstName} ${emp.lastName}</span>
-                            <span class="employee-id">${emp.employeeId}</span>
-                            <span class="employee-department">${emp.department}</span>
-                        </div>
-                        <div class="employee-designation">${emp.designation || 'N/A'}</div>
-                    </div>
-                `).join('')}
-            `;
-        }
-
-        // Show timesheets for this project
         if (result.timesheets && result.timesheets.length > 0) {
-            safeDisplay(timesheetsSection, 'block');
             displayProjectTimesheets(result.timesheets);
         }
-
+        
         safeDisplay(exportSection, 'block');
+        
     } else {
         if (projectsList) {
             projectsList.innerHTML = '<div class="no-results">No results found matching your search criteria.</div>';
@@ -744,7 +752,7 @@ function displaySearchResultsEmployee(result) {
     }
 }
 
-function displayEmployeeProjects(timesheets) {
+function displayEmployeeTimesheets(timesheets) {
     const projectsList = getElement('employeeProjectsList');
     const timesheetsSection = getElement('timesheetsSection');
     const timesheetsList = getElement('timesheetsList');
@@ -755,48 +763,44 @@ function displayEmployeeProjects(timesheets) {
     timesheetsList.innerHTML = '';
 
     if (!timesheets || timesheets.length === 0) {
-        projectsList.innerHTML = '<div class="no-projects">No timesheets found for the selected period.</div>';
+        projectsList.innerHTML = '<div class="no-projects">No timesheet data found for the selected period.</div>';
         safeDisplay(timesheetsSection, 'none');
         return;
     }
 
-    // Group timesheets by project
+    // Group timesheets by project for summary
     const projectMap = new Map();
     
     timesheets.forEach(timesheet => {
-        if (timesheet.projectSummary) {
+        if (timesheet.projectSummary && Array.isArray(timesheet.projectSummary)) {
             timesheet.projectSummary.forEach(project => {
-                if (!projectMap.has(project.projectCode)) {
-                    projectMap.set(project.projectCode, {
-                        projectCode: project.projectCode,
+                const projectCode = project.projectCode;
+                if (!projectMap.has(projectCode)) {
+                    projectMap.set(projectCode, {
+                        projectCode: projectCode,
+                        projectName: projectCode, // You might want to map this to actual project names
                         totalHours: 0,
-                        timesheets: [],
                         entries: 0
                     });
                 }
-                const projectData = projectMap.get(project.projectCode);
+                const projectData = projectMap.get(projectCode);
                 projectData.totalHours += project.totalHours || 0;
                 projectData.entries += project.entries || 0;
-                projectData.timesheets.push(timesheet);
             });
         }
     });
 
-    // Display projects
+    // Display projects summary
     if (projectMap.size > 0) {
         projectsList.innerHTML = `
             <div class="section-title">Projects Worked On (${projectMap.size})</div>
             ${Array.from(projectMap.values()).map(project => `
                 <div class="project-item">
                     <div class="project-info">
-                        <span class="project-name">${project.projectCode}</span>
+                        <span class="project-name">${project.projectName}</span>
+                        <span class="project-code">${project.projectCode}</span>
                         <span class="project-hours">${project.totalHours.toFixed(1)} total hours</span>
                         <span class="project-entries">${project.entries} entries</span>
-                    </div>
-                    <div class="project-actions">
-                        <button class="view-btn" onclick="viewProjectDetails('${project.projectCode}')">
-                            <i class="fas fa-eye"></i> View Details
-                        </button>
                     </div>
                 </div>
             `).join('')}
@@ -807,30 +811,31 @@ function displayEmployeeProjects(timesheets) {
     safeDisplay(timesheetsSection, 'block');
     timesheetsList.innerHTML = `
         <div class="section-title">All Timesheets (${timesheets.length})</div>
-        <div class="timesheets-grid">
-            ${timesheets.map(timesheet => `
-                <div class="timesheet-card status-${timesheet.status}">
-                    <div class="timesheet-header">
-                        <span class="timesheet-period">${timesheet.weekRange || 'N/A'}</span>
-                        <span class="timesheet-status">${timesheet.status || 'unknown'}</span>
-                    </div>
-                    <div class="timesheet-body">
-                        <div class="timesheet-hours">
-                            <span class="hours-total">${timesheet.totalHours ? timesheet.totalHours.toFixed(1) : '0.0'}h</span>
-                            <span class="hours-breakdown">(${timesheet.totalNormalHours ? timesheet.totalNormalHours.toFixed(1) : '0.0'} normal + ${timesheet.totalOvertimeHours ? timesheet.totalOvertimeHours.toFixed(1) : '0.0'} OT)</span>
-                        </div>
-                        <div class="timesheet-dates">
-                            <span class="submitted-date">Submitted: ${timesheet.submittedAt ? new Date(timesheet.submittedAt).toLocaleDateString() : 'Not submitted'}</span>
-                            ${timesheet.approvedAt ? `<span class="approved-date">Approved: ${new Date(timesheet.approvedAt).toLocaleDateString()}</span>` : ''}
-                        </div>
-                    </div>
-                    <div class="timesheet-footer">
-                        <button class="details-btn" onclick="viewTimesheetDetails('${timesheet._id}')">
-                            <i class="fas fa-list"></i> View Entries
-                        </button>
-                    </div>
-                </div>
-            `).join('')}
+        <div class="timesheets-table">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Week Range</th>
+                        <th>Total Hours</th>
+                        <th>Normal Hours</th>
+                        <th>Overtime Hours</th>
+                        <th>Status</th>
+                        <th>Submitted</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${timesheets.map(ts => `
+                        <tr>
+                            <td>${ts.weekRange || 'N/A'}</td>
+                            <td>${ts.totalHours ? ts.totalHours.toFixed(1) : '0.0'}</td>
+                            <td>${ts.totalNormalHours ? ts.totalNormalHours.toFixed(1) : '0.0'}</td>
+                            <td>${ts.totalOvertimeHours ? ts.totalOvertimeHours.toFixed(1) : '0.0'}</td>
+                            <td><span class="status-badge status-${ts.status}">${ts.status}</span></td>
+                            <td>${ts.submittedAt ? new Date(ts.submittedAt).toLocaleDateString() : 'Not submitted'}</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
         </div>
     `;
 }
@@ -876,18 +881,19 @@ function displayProjectTimesheets(timesheets) {
 }
 
 function filterProjects() {
-    const filterValue = getElement('project-filter');
-    if (!filterValue) return;
+    const filterSelect = getElement('project-filter');
+    if (!filterSelect) return;
     
-    const filter = filterValue.value;
-    const timesheetCards = document.querySelectorAll('#timesheetsList .timesheet-card');
+    const filter = filterSelect.value;
+    const timesheetRows = document.querySelectorAll('#timesheetsList tbody tr');
     
-    timesheetCards.forEach(card => {
+    timesheetRows.forEach(row => {
         if (filter === 'all') {
-            card.style.display = 'block';
+            row.style.display = '';
         } else {
-            const hasStatus = card.classList.contains(`status-${filter}`);
-            card.style.display = hasStatus ? 'block' : 'none';
+            const statusCell = row.querySelector('.status-badge');
+            const hasStatus = statusCell && statusCell.textContent.toLowerCase().includes(filter);
+            row.style.display = hasStatus ? '' : 'none';
         }
     });
 }
@@ -953,37 +959,21 @@ async function exportEmployeeReportToExcel() {
         const startDate = startDateInput.value;
         const endDate = endDateInput.value;
         
-        const reportType = currentSearchType;
-        
         // Check if apiClient is available
         if (typeof apiClient === 'undefined' || !apiClient.exportEmployeeReportToExcel) {
             showNotification('Export functionality not available.', 'error');
             return;
         }
         
-        const blob = await apiClient.exportEmployeeReportToExcel({
+        // Use the correct export method
+        await apiClient.exportEmployeeReportToExcel({
             employeeId: idPlNo,
             name: nameProject,
-            plNo: idPlNo,
             startDate: startDate,
             endDate: endDate,
-            reportType: reportType
+            reportType: currentSearchType || 'employee'
         });
         
-        // Create download link
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.style.display = 'none';
-        a.href = url;
-        a.download = `employee_report_${new Date().toISOString().split('T')[0]}.xlsx`;
-        
-        document.body.appendChild(a);
-        a.click();
-        
-        window.URL.revokeObjectURL(url);
-        document.body.removeChild(a);
-        
-        showNotification('Excel report downloaded successfully!', 'success');
     } catch (error) {
         console.error('Error exporting to Excel:', error);
         showNotification('Failed to generate Excel report.', 'error');
@@ -1045,5 +1035,20 @@ function formatNumber(num, decimals = 1) {
 // Utility function to format dates
 function formatDate(dateString) {
     if (!dateString) return 'N/A';
-    return new Date(dateString).toLocaleDateString('en-GB');
+    try {
+        return new Date(dateString).toLocaleDateString('en-GB');
+    } catch (error) {
+        return 'Invalid Date';
+    }
 }
+
+// Make functions globally available
+window.searchProject = searchProject;
+window.searchEmployee = searchEmployee;
+window.applyDateFilter = applyDateFilter;
+window.clearDateFilter = clearDateFilter;
+window.filterProjects = filterProjects;
+window.exportEmployeeReportToExcel = exportEmployeeReportToExcel;
+window.exportToPDF = exportToPDF;
+window.viewProjectDetails = viewProjectDetails;
+window.viewTimesheetDetails = viewTimesheetDetails;

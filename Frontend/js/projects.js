@@ -12,23 +12,43 @@ document.addEventListener('DOMContentLoaded', async function() {
         showNotification('Failed to load projects data', 'error');
     }
 
-    document.getElementById('addProjectForm').addEventListener('submit', function(e) {
-        e.preventDefault();
-        console.log('📝 Project form submitted');
-        const editId = this.dataset.editId;
-        if (editId) {
-            console.log('✏️ Updating project:', editId);
-            updateProject(editId);
-        } else {
-            console.log('🆕 Adding new project');
-            addProject();
-        }
-    });
+    // Safe event listener binding
+    const addProjectForm = document.getElementById('addProjectForm');
+    const searchProjects = document.getElementById('searchProjects');
+    const searchProjectCode = document.getElementById('searchProjectCode');
+    const filterStatus = document.getElementById('filterStatus');
+    const departments = document.getElementById('departments');
 
-    document.getElementById('searchProjects').addEventListener('input', filterProjects);
-    document.getElementById('searchProjectCode').addEventListener('input', filterProjects);
-    document.getElementById('filterStatus').addEventListener('change', filterProjects);
-    document.getElementById('departments').addEventListener('change', handleDepartmentSelection);
+    if (addProjectForm) {
+        addProjectForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            console.log('📝 Project form submitted');
+            const editId = this.dataset.editId;
+            if (editId) {
+                console.log('✏️ Updating project:', editId);
+                updateProject(editId);
+            } else {
+                console.log('🆕 Adding new project');
+                addProject();
+            }
+        });
+    }
+
+    if (searchProjects) {
+        searchProjects.addEventListener('input', filterProjects);
+    }
+
+    if (searchProjectCode) {
+        searchProjectCode.addEventListener('input', filterProjects);
+    }
+
+    if (filterStatus) {
+        filterStatus.addEventListener('change', filterProjects);
+    }
+
+    if (departments) {
+        departments.addEventListener('change', handleDepartmentSelection);
+    }
 });
 
 async function loadProjects() {
@@ -39,6 +59,11 @@ async function loadProjects() {
         console.log(`✅ Loaded ${projects.length} projects:`, projects);
         
         const grid = document.getElementById('projectsGrid');
+        if (!grid) {
+            console.error('❌ projectsGrid element not found');
+            return;
+        }
+        
         grid.innerHTML = '';
 
         projects.forEach(project => {
@@ -206,27 +231,30 @@ async function addVariableHours(projectId) {
         modal.style.display = 'block';
 
         // Handle form submission
-        document.getElementById('addVariableHoursForm').addEventListener('submit', async function(e) {
-            e.preventDefault();
-            const formData = new FormData(this);
-            const department = formData.get('variableHoursDepartment');
-            const variableHours = parseInt(formData.get('variableHours'));
+        const form = document.getElementById('addVariableHoursForm');
+        if (form) {
+            form.addEventListener('submit', async function(e) {
+                e.preventDefault();
+                const formData = new FormData(this);
+                const department = formData.get('variableHoursDepartment');
+                const variableHours = parseInt(formData.get('variableHours'));
 
-            try {
-                await apiClient.request(`/projects/${projectId}/add-variable-hours`, {
-                    method: 'PATCH',
-                    body: { department, variableHours }
-                });
-                
-                closeAddVariableHoursModal();
-                await loadProjects();
-                updateOverviewCards();
-                showNotification(`Successfully added ${variableHours} variable hours to ${department}`);
-            } catch (error) {
-                console.error('❌ Error adding variable hours:', error);
-                showNotification(error.message || 'Failed to add variable hours', 'error');
-            }
-        });
+                try {
+                    await apiClient.request(`/projects/${projectId}/add-variable-hours`, {
+                        method: 'PATCH',
+                        body: { department, variableHours }
+                    });
+                    
+                    closeAddVariableHoursModal();
+                    await loadProjects();
+                    updateOverviewCards();
+                    showNotification(`Successfully added ${variableHours} variable hours to ${department}`);
+                } catch (error) {
+                    console.error('❌ Error adding variable hours:', error);
+                    showNotification(error.message || 'Failed to add variable hours', 'error');
+                }
+            });
+        }
 
     } catch (error) {
         console.error('❌ Error preparing variable hours form:', error);
@@ -316,9 +344,18 @@ async function populateEmployeeSelect(selectedDepartments = []) {
             return;
         }
 
-        while (employeeSelect.options.length > 1) {
-            employeeSelect.remove(1);
+        // Clear existing options except the first one (if it's a placeholder)
+        while (employeeSelect.options.length > 0) {
+            employeeSelect.remove(0);
         }
+
+        // Add a default option
+        const defaultOption = document.createElement('option');
+        defaultOption.value = '';
+        defaultOption.textContent = 'Select employees...';
+        defaultOption.disabled = true;
+        defaultOption.selected = true;
+        employeeSelect.appendChild(defaultOption);
 
         console.log('🏢 Selected departments for filtering:', selectedDepartments);
 
@@ -349,6 +386,11 @@ async function addProject() {
     try {
         console.log('🆕 Starting project creation...');
         const form = document.getElementById('addProjectForm');
+        if (!form) {
+            showNotification('Add project form not found', 'error');
+            return;
+        }
+        
         const formData = new FormData(form);
 
         const selectedEmployees = Array.from(formData.getAll('assignedEmployees'));
@@ -406,29 +448,50 @@ async function editProject(id) {
 
         console.log('📋 Project data loaded for editing:', project);
 
-        document.getElementById('projectName').value = project.name;
-        document.getElementById('projectCode').value = project.projectCode;
-        document.getElementById('totalHours').value = project.totalHours;
-        document.getElementById('projectStatus').value = project.status;
+        // Safe element population
+        const projectNameEl = document.getElementById('projectName');
+        const projectCodeEl = document.getElementById('projectCode');
+        const totalHoursEl = document.getElementById('totalHours');
+        const projectStatusEl = document.getElementById('projectStatus');
+        const modalHeaderEl = document.querySelector('#addProjectModal .modal-header h2');
+        const primaryButtonEl = document.querySelector('#addProjectModal .btn-primary');
+        const addProjectFormEl = document.getElementById('addProjectForm');
 
-        const select = document.getElementById('assignedEmployees');
-        if (select) {
-            Array.from(select.options).forEach(option => {
+        if (projectNameEl) projectNameEl.value = project.name;
+        if (projectCodeEl) projectCodeEl.value = project.projectCode;
+        if (totalHoursEl) totalHoursEl.value = project.totalHours;
+        if (projectStatusEl) projectStatusEl.value = project.status;
+
+        // ✅ FIXED: Properly handle assigned employees selection
+        const employeeSelect = document.getElementById('assignedEmployees');
+        if (employeeSelect) {
+            // First populate the select with all employees
+            await populateEmployeeSelect(project.departments || []);
+            
+            // Then set the selected employees
+            const assignedIds = project.assignedEmployees || [];
+            console.log(`👥 Setting ${assignedIds.length} assigned employees:`, assignedIds);
+            
+            // Clear any existing selections
+            Array.from(employeeSelect.options).forEach(option => {
                 option.selected = false;
             });
 
-            const assignedIds = project.assignedEmployees || [];
-            console.log(`👥 Setting ${assignedIds.length} assigned employees`);
+            // Set the selected employees
             assignedIds.forEach(employeeId => {
-                const option = select.querySelector(`option[value="${employeeId}"]`);
+                const option = employeeSelect.querySelector(`option[value="${employeeId}"]`);
                 if (option) {
                     option.selected = true;
+                    console.log(`✅ Selected employee: ${employeeId}`);
+                } else {
+                    console.warn(`❌ Employee option not found for ID: ${employeeId}`);
                 }
             });
         }
 
         const departmentSelect = document.getElementById('departments');
         if (departmentSelect && project.departments) {
+            // Clear existing selections
             Array.from(departmentSelect.options).forEach(option => {
                 option.selected = false;
             });
@@ -445,9 +508,10 @@ async function editProject(id) {
             handleDepartmentSelectionForEdit(project.departmentHours);
         }
 
-        document.querySelector('#addProjectModal .modal-header h2').textContent = 'Edit Project';
-        document.querySelector('#addProjectModal .btn-primary').textContent = 'Save Changes';
-        document.getElementById('addProjectForm').dataset.editId = id;
+        if (modalHeaderEl) modalHeaderEl.textContent = 'Edit Project';
+        if (primaryButtonEl) primaryButtonEl.textContent = 'Save Changes';
+        if (addProjectFormEl) addProjectFormEl.dataset.editId = id;
+        
         toggleAddProjectModal();
         console.log('✅ Edit form populated successfully');
     } catch (error) {
@@ -510,6 +574,7 @@ function handleDepartmentSelectionForEdit(departmentHours) {
             console.log(`✅ Added department hours input for editing: ${dept}`);
         });
 
+        // Populate employee select with the selected departments
         populateEmployeeSelect(selectedDepartments);
     } else {
         container.style.display = 'none';
@@ -526,6 +591,11 @@ async function updateProject(id) {
     try {
         console.log(`💾 Updating project: ${id}`);
         const form = document.getElementById('addProjectForm');
+        if (!form) {
+            showNotification('Edit project form not found', 'error');
+            return;
+        }
+        
         const formData = new FormData(form);
 
         const selectedEmployees = Array.from(formData.getAll('assignedEmployees'));
@@ -576,9 +646,16 @@ async function updateProject(id) {
 
         form.reset();
         toggleAddProjectModal();
-        document.querySelector('#addProjectModal .modal-header h2').textContent = 'Add New Project';
-        document.querySelector('#addProjectModal .btn-primary').textContent = 'Add Project';
-        document.getElementById('addProjectForm').dataset.editId = '';
+        
+        // Safe element updates
+        const modalHeaderEl = document.querySelector('#addProjectModal .modal-header h2');
+        const primaryButtonEl = document.querySelector('#addProjectModal .btn-primary');
+        const addProjectFormEl = document.getElementById('addProjectForm');
+        
+        if (modalHeaderEl) modalHeaderEl.textContent = 'Add New Project';
+        if (primaryButtonEl) primaryButtonEl.textContent = 'Add Project';
+        if (addProjectFormEl) addProjectFormEl.dataset.editId = '';
+        
         showNotification('Project updated successfully!');
         console.log('✅ Project updated successfully');
     } catch (error) {
@@ -593,10 +670,16 @@ function updateOverviewCards() {
     const completedProjects = window.projects?.filter(p => p.status === 'completed').length || 0;
     const onHoldProjects = window.projects?.filter(p => p.status === 'on-hold').length || 0;
 
-    document.getElementById('totalProjects').textContent = totalProjects;
-    document.getElementById('activeProjects').textContent = activeProjects;
-    document.getElementById('completedProjects').textContent = completedProjects;
-    document.getElementById('onHoldProjects').textContent = onHoldProjects;
+    // Safe element updates
+    const totalProjectsEl = document.getElementById('totalProjects');
+    const activeProjectsEl = document.getElementById('activeProjects');
+    const completedProjectsEl = document.getElementById('completedProjects');
+    const onHoldProjectsEl = document.getElementById('onHoldProjects');
+
+    if (totalProjectsEl) totalProjectsEl.textContent = totalProjects;
+    if (activeProjectsEl) activeProjectsEl.textContent = activeProjects;
+    if (completedProjectsEl) completedProjectsEl.textContent = completedProjects;
+    if (onHoldProjectsEl) onHoldProjectsEl.textContent = onHoldProjects;
 
     console.log(`📊 Overview updated - Total: ${totalProjects}, Active: ${activeProjects}, Completed: ${completedProjects}, On Hold: ${onHoldProjects}`);
 }
@@ -618,9 +701,17 @@ async function deleteProject(id) {
 }
 
 function filterProjects() {
-    const searchTerm = document.getElementById('searchProjects').value.toLowerCase();
-    const searchProjectCodeTerm = document.getElementById('searchProjectCode').value.toLowerCase();
-    const statusFilter = document.getElementById('filterStatus').value;
+    const searchTermEl = document.getElementById('searchProjects');
+    const searchProjectCodeEl = document.getElementById('searchProjectCode');
+    const filterStatusEl = document.getElementById('filterStatus');
+
+    if (!searchTermEl || !searchProjectCodeEl || !filterStatusEl) {
+        return;
+    }
+
+    const searchTerm = searchTermEl.value.toLowerCase();
+    const searchProjectCodeTerm = searchProjectCodeEl.value.toLowerCase();
+    const statusFilter = filterStatusEl.value;
 
     console.log(`🔍 Filtering projects - Search: "${searchTerm}", Project Code: "${searchProjectCodeTerm}", Status: "${statusFilter}"`);
 
@@ -634,6 +725,8 @@ function filterProjects() {
     console.log(`📋 Filter results: ${filteredProjects.length} projects match criteria`);
 
     const grid = document.getElementById('projectsGrid');
+    if (!grid) return;
+    
     grid.innerHTML = '';
 
     filteredProjects.forEach(project => {
@@ -644,8 +737,10 @@ function filterProjects() {
 
 function toggleAddProjectModal() {
     const modal = document.getElementById('addProjectModal');
-    modal.style.display = modal.style.display === 'block' ? 'none' : 'block';
-    console.log(`🪟 Add project modal: ${modal.style.display}`);
+    if (modal) {
+        modal.style.display = modal.style.display === 'block' ? 'none' : 'block';
+        console.log(`🪟 Add project modal: ${modal.style.display}`);
+    }
 }
 
 function closeAssignedEmployeesModal() {
@@ -727,14 +822,23 @@ function showNotification(message, type = 'info') {
     document.body.appendChild(notification);
     
     setTimeout(() => {
-        notification.remove();
+        if (notification.parentNode) {
+            notification.remove();
+        }
     }, 3000);
 }
 
-document.getElementById('toggle-sidebar').addEventListener('click', function() {
-    console.log('🔘 Sidebar toggle clicked');
-    document.querySelector('.dashboard-container').classList.toggle('sidebar-collapsed');
-});
+// Safe event listener for sidebar toggle
+const toggleSidebar = document.getElementById('toggle-sidebar');
+if (toggleSidebar) {
+    toggleSidebar.addEventListener('click', function() {
+        console.log('🔘 Sidebar toggle clicked');
+        const dashboardContainer = document.querySelector('.dashboard-container');
+        if (dashboardContainer) {
+            dashboardContainer.classList.toggle('sidebar-collapsed');
+        }
+    });
+}
 
 window.onclick = function(event) {
     const addModal = document.getElementById('addProjectModal');
@@ -743,7 +847,7 @@ window.onclick = function(event) {
     
     if (event.target === addModal) {
         console.log('❌ Add project modal closed (outside click)');
-        addModal.style.display = 'none';
+        if (addModal) addModal.style.display = 'none';
     }
     if (event.target === assignedModal) {
         console.log('❌ Assigned employees modal closed (outside click)');
@@ -838,3 +942,13 @@ async function generateClientSideReport(projectId) {
         throw error;
     }
 }
+
+// Make functions globally available
+window.showAssignedEmployees = showAssignedEmployees;
+window.editProject = editProject;
+window.addVariableHours = addVariableHours;
+window.deleteProject = deleteProject;
+window.downloadProjectExcel = downloadProjectExcel;
+window.closeAssignedEmployeesModal = closeAssignedEmployeesModal;
+window.closeAddVariableHoursModal = closeAddVariableHoursModal;
+window.toggleAddProjectModal = toggleAddProjectModal;

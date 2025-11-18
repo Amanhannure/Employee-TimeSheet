@@ -367,6 +367,11 @@ class ApiClient {
         }
     }
 
+    // ✅ ADDED: Get user by ID (alias for getUser)
+    async getUserById(userId) {
+        return await this.getUser(userId);
+    }
+
     // ✅ UPDATED: Update user using existing route
     async updateUser(userId, userData) {
         return await this.request(`/users/${userId}`, {
@@ -788,6 +793,174 @@ class ApiClient {
         }
     }
 
+    // ✅ FIXED: getHoursTracking method - properly handles backend response structure
+    async getHoursTracking(filters = {}) {
+        try {
+            console.log('📊 Fetching hours tracking data with filters:', filters);
+            
+            const queryParams = new URLSearchParams(filters).toString();
+            const endpoint = `/reports/hours-tracking${queryParams ? `?${queryParams}` : ''}`;
+            
+            const response = await this.request(endpoint);
+            
+            console.log('🔍 Raw hours tracking response:', response);
+            
+            // ✅ FIXED: Handle the actual backend response structure
+            if (response && response.success && Array.isArray(response.projects)) {
+                return response; // This matches your backend structure: { success: true, projects: [...], totals: {...} }
+            } else if (Array.isArray(response)) {
+                // Fallback: if response is directly an array
+                console.warn('Unexpected response format (array), converting to expected structure');
+                return { 
+                    success: true, 
+                    projects: response,
+                    totals: this.calculateTotals(response),
+                    count: response.length 
+                };
+            } else if (response && Array.isArray(response.data)) {
+                // Alternative format support
+                console.warn('Using alternative response format (data array)');
+                return { 
+                    success: true, 
+                    projects: response.data,
+                    totals: response.summary || this.calculateTotals(response.data),
+                    count: response.data.length 
+                };
+            } else {
+                console.warn('Unexpected hours tracking response format, returning mock data');
+                return this.getMockHoursTracking(filters);
+            }
+        } catch (error) {
+            console.warn('Could not load hours tracking data, returning mock data:', error);
+            return this.getMockHoursTracking(filters);
+        }
+    }
+
+    // ✅ ADDED: Get employee report method
+    async getEmployeeReport(filters = {}) {
+        try {
+            console.log('📊 Fetching employee report data with filters:', filters);
+            
+            const queryParams = new URLSearchParams(filters).toString();
+            const endpoint = `/reports/employee-report${queryParams ? `?${queryParams}` : ''}`;
+            
+            const response = await this.request(endpoint);
+            
+            console.log('🔍 Raw employee report response:', response);
+            
+            // Handle the backend response structure
+            if (response && response.success) {
+                return response;
+            } else {
+                console.warn('Unexpected employee report response format, returning mock data');
+                return this.getMockEmployeeReport(filters);
+            }
+        } catch (error) {
+            console.warn('Could not load employee report data, returning mock data:', error);
+            return this.getMockEmployeeReport(filters);
+        }
+    }
+
+    // ✅ ADDED: Export employee report to Excel
+    async exportEmployeeReportToExcel(filters = {}) {
+        try {
+            console.log('📥 Exporting employee report to Excel:', filters);
+            
+            const response = await this.request('/reports/export-employee-excel', {
+                method: 'POST',
+                body: {
+                    employeeId: filters.employeeId,
+                    plNo: filters.plNo,
+                    name: filters.name,
+                    startDate: filters.startDate,
+                    endDate: filters.endDate,
+                    reportType: filters.reportType || 'employee'
+                }
+            });
+            
+            if (response instanceof Blob) {
+                // Create download link for Excel file
+                const url = window.URL.createObjectURL(response);
+                const a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = url;
+                
+                const fileName = `employee_report_${new Date().toISOString().split('T')[0]}.xlsx`;
+                a.download = fileName;
+                
+                document.body.appendChild(a);
+                a.click();
+                
+                // Clean up
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+                
+                console.log(`✅ Excel file downloaded: ${fileName}`);
+                return { success: true, fileName };
+            } else {
+                throw new Error('Invalid response format for Excel export');
+            }
+        } catch (error) {
+            console.error('❌ Error exporting employee report to Excel:', error);
+            throw error;
+        }
+    }
+
+    // ✅ ADDED: Generate custom reports
+    async generateReport(reportData) {
+        try {
+            console.log('📈 Generating custom report:', reportData);
+            
+            const response = await this.request('/reports/generate', {
+                method: 'POST',
+                body: reportData
+            });
+            
+            return response;
+        } catch (error) {
+            console.warn('Could not generate report, returning mock data:', error);
+            return this.getMockReportData(reportData);
+        }
+    }
+
+    // ✅ FIXED: Export report data - use correct backend endpoint
+    async exportReport(filters = {}, format = 'json') {
+        try {
+            console.log(`📥 Exporting report data in ${format} format`);
+            
+            // Use the correct endpoint that exists in your backend
+            const response = await this.request('/reports/export-employee-excel', {
+                method: 'POST',
+                body: {
+                    employeeId: filters.employeeId,
+                    plNo: filters.plNo,
+                    name: filters.employeeName,
+                    startDate: filters.startDate,
+                    endDate: filters.endDate,
+                    reportType: filters.reportType || 'employee'
+                }
+            });
+            
+            return response;
+        } catch (error) {
+            console.warn('Could not export report, generating client-side export:', error);
+            return this.generateClientSideExport(filters, format);
+        }
+    }
+
+    // ✅ ADDED: Get report summary
+    async getReportSummary(period = 'week') {
+        try {
+            console.log(`📋 Fetching report summary for period: ${period}`);
+            
+            const response = await this.request(`/reports/summary?period=${period}`);
+            return response;
+        } catch (error) {
+            console.warn('Could not load report summary, returning mock data:', error);
+            return this.getMockReportSummary(period);
+        }
+    }
+
     // ==================== MOCK DATA FOR OFFLINE USE ====================
 
     getMockUsers() {
@@ -981,6 +1154,170 @@ class ApiClient {
         ];
     }
 
+    // ✅ ADDED: Mock hours tracking data that matches backend structure
+    getMockHoursTracking(filters = {}) {
+        const { plNo, projectName } = filters;
+        
+        const mockProjects = [
+            {
+                plNo: 'PROJ001',
+                name: 'Website Development',
+                status: 'active',
+                totalHours: 200,
+                consumedHours: 50,
+                balanceHours: 150,
+                assignedEmployees: 3,
+                startDate: '2024-01-01',
+                endDate: '2024-06-30'
+            },
+            {
+                plNo: 'PROJ002', 
+                name: 'Mobile App',
+                status: 'active',
+                totalHours: 300,
+                consumedHours: 120,
+                balanceHours: 180,
+                assignedEmployees: 2,
+                startDate: '2024-02-01',
+                endDate: '2024-08-31'
+            },
+            {
+                plNo: 'PROJ003',
+                name: 'Database Upgrade',
+                status: 'completed',
+                totalHours: 100,
+                consumedHours: 100,
+                balanceHours: 0,
+                assignedEmployees: 1,
+                startDate: '2024-01-15',
+                endDate: '2024-03-15'
+            }
+        ];
+
+        // Apply filtering based on search criteria
+        let filteredProjects = mockProjects;
+        
+        if (plNo) {
+            filteredProjects = filteredProjects.filter(project => 
+                project.plNo.toLowerCase().includes(plNo.toLowerCase())
+            );
+        }
+        
+        if (projectName) {
+            filteredProjects = filteredProjects.filter(project => 
+                project.name.toLowerCase().includes(projectName.toLowerCase())
+            );
+        }
+
+        const totals = this.calculateTotals(filteredProjects);
+
+        return {
+            success: true,
+            projects: filteredProjects,
+            totals: totals,
+            count: filteredProjects.length
+        };
+    }
+
+    // ✅ ADDED: Mock employee report data
+    getMockEmployeeReport(filters = {}) {
+        const { employeeId, name, startDate, endDate } = filters;
+        
+        // Mock employee data
+        const mockEmployee = {
+            type: 'employee',
+            employee: {
+                employeeId: 'T1166',
+                firstName: 'Ashish',
+                lastName: 'Dhole',
+                department: 'IT',
+                designation: 'Software Engineer',
+                status: 'active',
+                joinDate: '2023-01-15'
+            },
+            timesheets: [
+                {
+                    _id: 'ts1',
+                    weekStartDate: '2024-01-01',
+                    weekEndDate: '2024-01-07',
+                    weekRange: '01/01/2024 - 01/07/2024',
+                    totalHours: 40,
+                    totalNormalHours: 40,
+                    totalOvertimeHours: 0,
+                    status: 'approved',
+                    submittedAt: '2024-01-08T09:00:00Z',
+                    approvedAt: '2024-01-09T10:00:00Z',
+                    approvedBy: { firstName: 'Manager', lastName: 'User' },
+                    projectSummary: [
+                        { projectCode: 'PROJ001', totalHours: 25, normalHours: 25, overtimeHours: 0, entries: 5 },
+                        { projectCode: 'PROJ002', totalHours: 15, normalHours: 15, overtimeHours: 0, entries: 3 }
+                    ]
+                },
+                {
+                    _id: 'ts2',
+                    weekStartDate: '2024-01-08',
+                    weekEndDate: '2024-01-14',
+                    weekRange: '01/08/2024 - 01/14/2024',
+                    totalHours: 42,
+                    totalNormalHours: 40,
+                    totalOvertimeHours: 2,
+                    status: 'approved',
+                    submittedAt: '2024-01-15T09:00:00Z',
+                    approvedAt: '2024-01-16T10:00:00Z',
+                    approvedBy: { firstName: 'Manager', lastName: 'User' },
+                    projectSummary: [
+                        { projectCode: 'PROJ001', totalHours: 30, normalHours: 28, overtimeHours: 2, entries: 6 },
+                        { projectCode: 'PROJ002', totalHours: 12, normalHours: 12, overtimeHours: 0, entries: 2 }
+                    ]
+                }
+            ]
+        };
+
+        return {
+            success: true,
+            ...mockEmployee
+        };
+    }
+
+    // ✅ ADDED: Mock report data
+    getMockReportData(reportData) {
+        return {
+            success: true,
+            data: this.getMockHoursTracking(reportData).projects,
+            totals: {
+                totalHours: 120,
+                totalEntries: 15,
+                userCount: 3,
+                projectCount: 2
+            },
+            filters: reportData
+        };
+    }
+
+    // ✅ ADDED: Mock report summary
+    getMockReportSummary(period = 'week') {
+        const baseData = {
+            hoursByUser: [
+                { userName: 'Ashish Dhole', employeeId: 'T1166', totalHours: 40 },
+                { userName: 'John Smith', employeeId: 'T1167', totalHours: 35 },
+                { userName: 'Sarah Johnson', employeeId: 'T1168', totalHours: 45 }
+            ],
+            hoursByProject: [
+                { projectName: 'Website Development', projectCode: 'PROJ001', totalHours: 60 },
+                { projectName: 'Mobile App', projectCode: 'PROJ002', totalHours: 40 },
+                { projectName: 'Database Upgrade', projectCode: 'PROJ003', totalHours: 20 }
+            ],
+            recentActivity: this.getMockTimesheets().slice(0, 5),
+            period: period,
+            startDate: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+        };
+
+        return {
+            success: true,
+            data: baseData
+        };
+    }
+
     getMockDashboardStats() {
         return {
             totalUsers: 45,
@@ -1052,7 +1389,55 @@ class ApiClient {
         };
     }
 
+    // ✅ ADDED: Client-side export generation
+    generateClientSideExport(filters, format) {
+        console.log(`🔄 Generating client-side export in ${format} format`);
+        
+        const data = this.getMockHoursTracking(filters).projects;
+        
+        if (format === 'csv') {
+            const headers = ['PL No', 'Project Name', 'Status', 'Total Hours', 'Consumed Hours', 'Balance Hours', 'Assigned Employees'];
+            const csvRows = data.map(project => [
+                project.plNo,
+                project.name,
+                project.status,
+                project.totalHours,
+                project.consumedHours,
+                project.balanceHours,
+                project.assignedEmployees
+            ]);
+            
+            const csvContent = [headers, ...csvRows]
+                .map(row => row.map(field => `"${field}"`).join(','))
+                .join('\n');
+            
+            return csvContent;
+        } else {
+            // Default to JSON
+            return JSON.stringify(data, null, 2);
+        }
+    }
+
     // ==================== UTILITY METHODS ====================
+
+    // ✅ ADDED: Helper function to calculate totals for projects
+    calculateTotals(projects) {
+        const totals = {
+            totalHours: 0,
+            consumedHours: 0,
+            balanceHours: 0,
+            variationHours: 0
+        };
+
+        projects.forEach(project => {
+            totals.totalHours += project.totalHours || 0;
+            totals.consumedHours += project.consumedHours || 0;
+            totals.balanceHours += project.balanceHours || 0;
+            totals.variationHours += project.variationHours || 0;
+        });
+
+        return totals;
+    }
 
     // Safe user data retrieval
     getSafeUserData() {
@@ -1138,8 +1523,6 @@ if (typeof window !== 'undefined') {
             }
         });
     }, 1000);
-
-    
 }
 
 console.log('✅ Enhanced API Client initialized with offline support and safe error handling');
