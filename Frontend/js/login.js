@@ -154,6 +154,92 @@ function checkPasswordMatch(password, confirmPassword) {
     }
 }
 
+// ==================== NOTIFICATION SYSTEM ====================
+
+function showNotification(message, type = 'info', duration = 5000) {
+    // Remove any existing notifications
+    const existingNotifications = document.querySelectorAll('.custom-notification');
+    existingNotifications.forEach(notification => {
+        if (notification.parentNode) {
+            notification.parentNode.removeChild(notification);
+        }
+    });
+    
+    // Create notification element
+    const notification = document.createElement('div');
+    notification.className = `custom-notification ${type}`;
+    
+    // Set icon based on type
+    let icon = 'info-circle';
+    switch (type) {
+        case 'success':
+            icon = 'check-circle';
+            break;
+        case 'error':
+            icon = 'exclamation-circle';
+            break;
+        case 'warning':
+            icon = 'exclamation-triangle';
+            break;
+    }
+    
+    notification.innerHTML = `
+        <div class="notification-content">
+            <i class="fas fa-${icon}"></i>
+            <span>${message}</span>
+        </div>
+        <button class="notification-close" onclick="this.parentElement.remove()">
+            <i class="fas fa-times"></i>
+        </button>
+    `;
+    
+    // Add to page
+    document.body.appendChild(notification);
+    
+    // Show with animation
+    setTimeout(() => {
+        notification.classList.add('show');
+    }, 10);
+    
+    // Auto remove after duration
+    if (duration > 0) {
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.classList.remove('show');
+                setTimeout(() => {
+                    if (notification.parentNode) {
+                        notification.parentNode.removeChild(notification);
+                    }
+                }, 300);
+            }
+        }, duration);
+    }
+    
+    return notification;
+}
+
+// ==================== PASSWORD RESET STATE MANAGEMENT ====================
+
+let passwordResetState = {
+    currentEmployeeCode: '',
+    currentResetToken: '',
+    currentMethod: '',
+    securityQuestion: '',
+    userEmail: ''
+};
+
+function resetPasswordResetState() {
+    passwordResetState = {
+        currentEmployeeCode: '',
+        currentResetToken: '',
+        currentMethod: '',
+        securityQuestion: '',
+        userEmail: ''
+    };
+}
+
+// ==================== MAIN LOGIN SCRIPT ====================
+
 document.addEventListener('DOMContentLoaded', function() {
     // ==================== INITIALIZATION ====================
     const token = localStorage.getItem('authToken');
@@ -277,8 +363,11 @@ document.addEventListener('DOMContentLoaded', function() {
             showNotification('Login successful!', 'success');
             
             // Store remember me preference
-            if (document.getElementById(`${userType}-remember`).checked) {
-                localStorage.setItem('rememberMe', 'true');
+            if (document.getElementById(`${userType}-remember`)) {
+                const rememberChecked = document.getElementById(`${userType}-remember`).checked;
+                if (rememberChecked) {
+                    localStorage.setItem('rememberMe', 'true');
+                }
             }
             
             setTimeout(() => {
@@ -287,7 +376,7 @@ document.addEventListener('DOMContentLoaded', function() {
             
         } catch (error) {
             console.error('Login error:', error);
-            showNotification(error.message || 'Login failed. Please check your credentials.', 'error');
+            showNotification(error.userMessage || error.message || 'Login failed. Please check your credentials.', 'error');
             
             const loginButton = form.querySelector('button[type="submit"]');
             setLoadingState(loginButton, false);
@@ -481,11 +570,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function setupPasswordResetEventListeners() {
-        let currentEmployeeCode = '';
-        let currentResetToken = '';
-        let currentMethod = '';
-
-        // Initiate Reset Form
+        // Initiate Reset Form - FIXED: Now sends proper format
         const initiateResetForm = document.getElementById('initiate-reset-form');
         if (initiateResetForm) {
             initiateResetForm.addEventListener('submit', async function(e) {
@@ -497,16 +582,16 @@ document.addEventListener('DOMContentLoaded', function() {
                     return;
                 }
 
-                currentEmployeeCode = employeeCode;
+                passwordResetState.currentEmployeeCode = employeeCode;
 
                 try {
                     const button = this.querySelector('button[type="submit"]');
                     setLoadingState(button, true, 'Checking...');
 
-                    const result = await apiClient.initiatePasswordReset({ employeeCode });
+                    // FIXED: Send employee code as string, not object
+                    const result = await apiClient.initiatePasswordReset(employeeCode);
                     
                     setLoadingState(button, false);
-                    button.innerHTML = '<i class="fas fa-key"></i> Continue';
 
                     if (result.contactAdmin) {
                         showModal('contact-admin-modal');
@@ -514,12 +599,14 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
 
                     if (result.autoProceed) {
-                        currentMethod = result.method;
+                        passwordResetState.currentMethod = result.method;
                         if (result.method === 'security_question') {
                             document.getElementById('security-question-text').textContent = result.user.securityQuestion;
+                            passwordResetState.securityQuestion = result.user.securityQuestion;
                             showModal('security-question-modal');
                         } else if (result.method === 'email') {
                             document.getElementById('user-email').textContent = result.user.maskedEmail;
+                            passwordResetState.userEmail = result.user.maskedEmail;
                             showModal('email-verification-modal');
                         }
                     } else {
@@ -528,7 +615,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 } catch (error) {
                     const button = document.querySelector('#initiate-reset-form button[type="submit"]');
                     setLoadingState(button, false);
-                    showNotification(error.message || 'Failed to initiate password reset', 'error');
+                    showNotification(error.userMessage || error.message || 'Failed to initiate password reset', 'error');
                 }
             });
         }
@@ -537,7 +624,7 @@ document.addEventListener('DOMContentLoaded', function() {
         document.querySelectorAll('.method-btn').forEach(btn => {
             btn.addEventListener('click', function() {
                 const method = this.getAttribute('data-method');
-                handleMethodSelection(method, currentEmployeeCode);
+                handleMethodSelection(method);
             });
         });
 
@@ -546,7 +633,7 @@ document.addEventListener('DOMContentLoaded', function() {
         setupBackButton('back-to-method-from-security', 'method-selection-modal');
         setupBackButton('back-to-method-from-email', 'method-selection-modal');
         setupBackButton('back-to-verification', () => {
-            if (currentMethod === 'security_question') {
+            if (passwordResetState.currentMethod === 'security_question') {
                 showModal('security-question-modal');
             } else {
                 showModal('email-verification-modal');
@@ -570,18 +657,18 @@ document.addEventListener('DOMContentLoaded', function() {
                     setLoadingState(button, true, 'Verifying...');
 
                     const result = await apiClient.verifySecurityAnswer({
-                        employeeCode: currentEmployeeCode,
+                        employeeCode: passwordResetState.currentEmployeeCode,
                         securityAnswer
                     });
                     
-                    currentResetToken = result.resetToken;
-                    currentMethod = 'security_question';
+                    passwordResetState.currentResetToken = result.resetToken;
+                    passwordResetState.currentMethod = 'security_question';
                     showModal('reset-password-modal');
                     
                 } catch (error) {
                     const button = document.querySelector('#security-question-form button[type="submit"]');
                     setLoadingState(button, false);
-                    showNotification(error.message || 'Incorrect security answer', 'error');
+                    showNotification(error.userMessage || error.message || 'Incorrect security answer', 'error');
                 }
             });
         }
@@ -603,18 +690,18 @@ document.addEventListener('DOMContentLoaded', function() {
                     setLoadingState(button, true, 'Verifying...');
 
                     const result = await apiClient.verifyEmailCode({
-                        employeeCode: currentEmployeeCode,
+                        employeeCode: passwordResetState.currentEmployeeCode,
                         emailCode
                     });
                     
-                    currentResetToken = result.resetToken;
-                    currentMethod = 'email';
+                    passwordResetState.currentResetToken = result.resetToken;
+                    passwordResetState.currentMethod = 'email';
                     showModal('reset-password-modal');
                     
                 } catch (error) {
                     const button = document.querySelector('#email-verification-form button[type="submit"]');
                     setLoadingState(button, false);
-                    showNotification(error.message || 'Invalid verification code', 'error');
+                    showNotification(error.userMessage || error.message || 'Invalid verification code', 'error');
                 }
             });
         }
@@ -626,16 +713,17 @@ document.addEventListener('DOMContentLoaded', function() {
                 try {
                     setLoadingState(this, true, 'Sending...');
 
-                    const result = await apiClient.sendEmailCode({ employeeCode: currentEmployeeCode });
+                    const result = await apiClient.sendEmailCode({ 
+                        employeeCode: passwordResetState.currentEmployeeCode 
+                    });
                     
                     setLoadingState(this, false);
-                    this.innerHTML = '<i class="fas fa-redo"></i> Resend Code';
                     
                     showNotification('Verification code sent successfully', 'success');
                     
                 } catch (error) {
                     setLoadingState(resendCodeBtn, false);
-                    showNotification(error.message || 'Failed to resend code', 'error');
+                    showNotification(error.userMessage || error.message || 'Failed to resend code', 'error');
                 }
             });
         }
@@ -663,8 +751,8 @@ document.addEventListener('DOMContentLoaded', function() {
                     setLoadingState(button, true, 'Resetting...');
 
                     await apiClient.resetPassword({
-                        employeeCode: currentEmployeeCode,
-                        resetToken: currentResetToken,
+                        employeeCode: passwordResetState.currentEmployeeCode,
+                        resetToken: passwordResetState.currentResetToken,
                         newPassword
                     });
                     
@@ -673,7 +761,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 } catch (error) {
                     const button = document.querySelector('#reset-password-form button[type="submit"]');
                     setLoadingState(button, false);
-                    showNotification(error.message || 'Password reset failed', 'error');
+                    showNotification(error.userMessage || error.message || 'Password reset failed', 'error');
                 }
             });
         }
@@ -684,6 +772,7 @@ document.addEventListener('DOMContentLoaded', function() {
             goToLoginBtn.addEventListener('click', function() {
                 hideAllModals();
                 resetPasswordResetForms();
+                resetPasswordResetState();
             });
         }
 
@@ -693,6 +782,7 @@ document.addEventListener('DOMContentLoaded', function() {
             closeContactModal.addEventListener('click', function() {
                 hideAllModals();
                 resetPasswordResetForms();
+                resetPasswordResetState();
             });
         }
     }
@@ -719,7 +809,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 const strength = checkPasswordStrength(this.value);
                 const strengthElement = document.getElementById('password-strength');
                 if (strengthElement) {
-                    strengthElement.textContent = strength.feedback ? `Password strength: ${strength.feedback}` : '';
+                    strengthElement.textContent = strength.feedback;
                     strengthElement.className = `password-strength ${strength.className}`;
                 }
             });
@@ -775,41 +865,94 @@ document.addEventListener('DOMContentLoaded', function() {
         showModal('method-selection-modal');
     }
 
-    async function handleMethodSelection(method, employeeCode) {
-        currentMethod = method;
+    async function handleMethodSelection(method) {
+        passwordResetState.currentMethod = method;
         
         if (method === 'security_question') {
             try {
-                const result = await apiClient.initiatePasswordReset({ employeeCode });
+                // FIXED: Send employee code as string
+                const result = await apiClient.initiatePasswordReset(passwordResetState.currentEmployeeCode);
                 document.getElementById('security-question-text').textContent = result.user.securityQuestion;
+                passwordResetState.securityQuestion = result.user.securityQuestion;
                 showModal('security-question-modal');
             } catch (error) {
-                showNotification(error.message || 'Failed to load security question', 'error');
+                showNotification(error.userMessage || error.message || 'Failed to load security question', 'error');
             }
         } else if (method === 'email') {
             try {
-                const result = await apiClient.sendEmailCode({ employeeCode });
+                const result = await apiClient.sendEmailCode({ 
+                    employeeCode: passwordResetState.currentEmployeeCode 
+                });
                 document.getElementById('user-email').textContent = result.maskedEmail;
+                passwordResetState.userEmail = result.maskedEmail;
                 showModal('email-verification-modal');
             } catch (error) {
-                showNotification(error.message || 'Failed to send verification code', 'error');
+                showNotification(error.userMessage || error.message || 'Failed to send verification code', 'error');
             }
         }
     }
 
     function resetPasswordResetForms() {
         // Clear all forms
-        document.querySelectorAll('form').forEach(form => form.reset());
+        const forms = [
+            'initiate-reset-form',
+            'security-question-form', 
+            'email-verification-form',
+            'reset-password-form'
+        ];
+        
+        forms.forEach(formId => {
+            const form = document.getElementById(formId);
+            if (form) form.reset();
+        });
         
         // Clear password strength indicators
         const strengthElement = document.getElementById('password-strength');
         const matchElement = document.getElementById('password-match');
-        if (strengthElement) strengthElement.textContent = '';
-        if (matchElement) matchElement.textContent = '';
-        
-        // Reset state variables
-        currentEmployeeCode = '';
-        currentResetToken = '';
-        currentMethod = '';
+        if (strengthElement) {
+            strengthElement.textContent = '';
+            strengthElement.className = 'password-strength';
+        }
+        if (matchElement) {
+            matchElement.textContent = '';
+            matchElement.className = 'password-match';
+        }
     }
+
+    // ==================== ADDITIONAL UTILITY FUNCTIONS ====================
+
+    // Clear stuck offline queue (for development)
+    window.clearStuckRequests = function() {
+        if (window.apiClient) {
+            window.apiClient.clearOfflineQueue();
+            showNotification('Cleared stuck requests', 'success');
+        }
+    };
+
+    // Test connection function
+    window.testConnection = async function() {
+        try {
+            const result = await apiClient.testConnection();
+            showNotification(result.message, result.success ? 'success' : 'error');
+        } catch (error) {
+            showNotification('Connection test failed', 'error');
+        }
+    };
+
+    // Debug function to show current state
+    window.showResetState = function() {
+        console.log('Password Reset State:', passwordResetState);
+        showNotification('Check console for state details', 'info');
+    };
 });
+
+// ==================== GLOBAL FUNCTIONS ====================
+
+// Make functions available globally
+window.setLoadingState = setLoadingState;
+window.showNotification = showNotification;
+window.showModal = showModal;
+window.hideAllModals = hideAllModals;
+window.redirectBasedOnRole = redirectBasedOnRole;
+
+console.log('✅ Login system initialized with password reset fixes');

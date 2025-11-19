@@ -1,4 +1,4 @@
-// ==================== COMPLETE ENHANCED API CLIENT (1700+ LINES) ====================
+// ==================== COMPLETE ENHANCED API CLIENT (2000+ LINES) ====================
 
 class ApiClient {
     constructor() {
@@ -551,6 +551,13 @@ class ApiClient {
             '/auth/me': this.getSafeUserData() || this.getMockUsers()[0],
             '/auth/profile': { success: true, message: 'Profile updated successfully' },
             
+            // Password reset endpoints - FIXED
+            '/auth/password/forgot': this.mockInitiatePasswordReset(options.body),
+            '/auth/password/verify-security': { success: true, resetToken: 'mock-reset-token' },
+            '/auth/password/verify-email': { success: true, resetToken: 'mock-reset-token' },
+            '/auth/password/reset': { success: true, message: 'Password reset successful' },
+            '/auth/password/send-code': { success: true, message: 'Verification code sent', maskedEmail: 't****@company.com' },
+            
             // Timesheet endpoints
             '/timesheets/my-timesheets': this.getMockTimesheets(),
             '/timesheets/submit': this.mockSubmitTimesheet(options.body),
@@ -567,6 +574,9 @@ class ApiClient {
             // Dashboard endpoints
             '/dashboard/stats': this.getMockDashboardStats(),
             '/dashboard/analytics': this.getMockAnalytics(),
+            
+            // User endpoints
+            '/users': { users: this.getMockUsers() },
             
             // Health check
             '/health': { status: 'OK', message: 'Mock server is running', timestamp: new Date().toISOString() }
@@ -590,10 +600,10 @@ class ApiClient {
     mockLogin(credentials) {
         const mockUser = {
             _id: 'mock-user-id',
-            employeeId: credentials.email.split('@')[0].toUpperCase(),
+            employeeId: credentials.username || 'T1166',
             firstName: 'Mock',
             lastName: 'User',
-            email: credentials.email,
+            email: `${credentials.username}@company.com`,
             department: 'IT',
             role: 'employee',
             status: 'active'
@@ -603,6 +613,26 @@ class ApiClient {
             token: 'mock-jwt-token-' + Date.now(),
             user: mockUser,
             message: 'Login successful (mock mode)'
+        };
+    }
+
+    mockInitiatePasswordReset(data) {
+        // Handle both string (email) and object formats
+        const email = typeof data === 'string' ? data : (data.email || 'T1166@company.com');
+        
+        return {
+            success: true,
+            message: 'Password reset initiated',
+            user: {
+                employeeId: email.split('@')[0].toUpperCase(),
+                maskedEmail: 't****@company.com',
+                securityQuestion: 'What is your favorite color?',
+                hasSecurityQuestion: true,
+                hasEmail: true
+            },
+            availableMethods: ['security_question', 'email'],
+            autoProceed: false,
+            contactAdmin: false
         };
     }
 
@@ -793,11 +823,11 @@ class ApiClient {
         return 1 + Math.round(((date.getTime() - week1.getTime()) / 86400000 - 3 + (week1.getDay() + 6) % 7) / 7);
     }
 
-    // ==================== AUTH ENDPOINTS ====================
+    // ==================== AUTH ENDPOINTS (FIXED) ====================
 
     async login(credentials) {
         this.logTimesheetOperation('LOGIN_ATTEMPT', {
-            username: credentials.email, // Don't log password
+            username: credentials.username,
             timestamp: new Date().toISOString()
         }, 'info');
         
@@ -827,6 +857,41 @@ class ApiClient {
             return response;
         } catch (error) {
             this.logTimesheetOperation('LOGIN_FAILED', {
+                error: error.message,
+                statusCode: error.status
+            }, 'error');
+            
+            throw error;
+        }
+    }
+
+    async loginAdmin(credentials) {
+        this.logTimesheetOperation('ADMIN_LOGIN_ATTEMPT', {
+            username: credentials.username,
+            timestamp: new Date().toISOString()
+        }, 'info');
+        
+        try {
+            const response = await this.request('/auth/admin/login', {
+                method: 'POST',
+                body: credentials
+            });
+            
+            if (response.token) {
+                this.setToken(response.token);
+                if (response.user) {
+                    localStorage.setItem('userData', JSON.stringify(response.user));
+                }
+            }
+            
+            this.logTimesheetOperation('ADMIN_LOGIN_SUCCESS', {
+                userId: response.user?._id,
+                role: response.user?.role
+            }, 'success');
+            
+            return response;
+        } catch (error) {
+            this.logTimesheetOperation('ADMIN_LOGIN_FAILED', {
                 error: error.message,
                 statusCode: error.status
             }, 'error');
@@ -872,23 +937,76 @@ class ApiClient {
         });
     }
 
-    async resetPassword(email) {
-        this.logTimesheetOperation('RESET_PASSWORD_REQUEST', {
-            email: email
+    // ==================== PASSWORD RESET ENDPOINTS (FIXED) ====================
+
+    async initiatePasswordReset(identifier) {
+        this.logTimesheetOperation('INITIATE_PASSWORD_RESET', {
+            identifier: identifier
         }, 'info');
         
-        return await this.request('/auth/reset-password', {
+        // FIXED: Handle both string and object formats
+        let requestBody;
+        
+        if (typeof identifier === 'string') {
+            // If it's a string, assume it's email/employeeCode
+            requestBody = { email: identifier };
+        } else if (typeof identifier === 'object' && identifier.employeeCode) {
+            // If it's an object with employeeCode, convert to email format
+            requestBody = { email: `${identifier.employeeCode}@company.com` };
+        } else if (typeof identifier === 'object' && identifier.email) {
+            // If it's an object with email, use it directly
+            requestBody = { email: identifier.email };
+        } else {
+            throw new Error('Invalid identifier format for password reset');
+        }
+        
+        return await this.request('/auth/password/forgot', {
             method: 'POST',
-            body: { email }
+            body: requestBody
         });
     }
 
-    async verifyResetToken(token) {
-        this.logTimesheetOperation('VERIFY_RESET_TOKEN', {}, 'info');
+    async verifySecurityAnswer(data) {
+        this.logTimesheetOperation('VERIFY_SECURITY_ANSWER', {
+            employeeCode: data.employeeCode
+        }, 'info');
         
-        return await this.request('/auth/verify-reset-token', {
+        return await this.request('/auth/password/verify-security', {
             method: 'POST',
-            body: { token }
+            body: data
+        });
+    }
+
+    async verifyEmailCode(data) {
+        this.logTimesheetOperation('VERIFY_EMAIL_CODE', {
+            employeeCode: data.employeeCode
+        }, 'info');
+        
+        return await this.request('/auth/password/verify-email', {
+            method: 'POST',
+            body: data
+        });
+    }
+
+    async sendEmailCode(data) {
+        this.logTimesheetOperation('SEND_EMAIL_CODE', {
+            employeeCode: data.employeeCode
+        }, 'info');
+        
+        return await this.request('/auth/password/send-code', {
+            method: 'POST',
+            body: data
+        });
+    }
+
+    async resetPassword(data) {
+        this.logTimesheetOperation('RESET_PASSWORD_FINAL', {
+            employeeCode: data.employeeCode
+        }, 'info');
+        
+        return await this.request('/auth/password/reset', {
+            method: 'POST',
+            body: data
         });
     }
 
@@ -2032,4 +2150,4 @@ if (typeof window !== 'undefined') {
     }, 1000);
 }
 
-console.log('✅ COMPLETE ENHANCED API CLIENT initialized (1700+ lines) - All features loaded');
+console.log('✅ COMPLETE ENHANCED API CLIENT initialized (2000+ lines) - All features loaded + Password reset FIXED');
