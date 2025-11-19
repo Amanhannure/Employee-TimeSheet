@@ -1,5 +1,4 @@
-// ==================== COMPLETE ENHANCED API CLIENT ====================
-// Combined features from both files with all endpoints and capabilities
+// ==================== COMPLETE ENHANCED API CLIENT (1700+ LINES) ====================
 
 class ApiClient {
     constructor() {
@@ -12,18 +11,23 @@ class ApiClient {
         this.requestTimeout = 30000; // 30 seconds
         this.offlineQueue = [];
         this.isProcessingQueue = false;
+        this.forceMockMode = window.FORCE_MOCK_MODE || false;
         
         console.log('🔗 API Client initialized with base URL:', this.baseURL);
         
         // Initialize offline support
         this.initOfflineSupport();
+        
+        // Initialize timesheet logging
+        this.initTimesheetLogging();
+        
+        // Auto-test connection
+        this.autoTestConnection();
     }
 
-    // ==================== CORE REQUEST METHODS ====================
+    // ==================== CONFIGURATION & INITIALIZATION ====================
 
-    // Get base URL with fallbacks
     getBaseURL() {
-        // Priority order: window config -> localStorage -> default
         if (window.APP_CONFIG && window.APP_CONFIG.API_BASE_URL) {
             return window.APP_CONFIG.API_BASE_URL;
         }
@@ -33,58 +37,290 @@ class ApiClient {
             return savedURL;
         }
         
-        // Try common backend ports
-        const ports = [3000, 5000, 8000, 8080];
-        const host = window.location.hostname === 'localhost' ? 'localhost' : window.location.hostname;
+        // Default to current origin with /api path
+        const protocol = window.location.protocol;
+        const host = window.location.hostname;
+        const port = window.location.port;
         
-        return `http://${host}:5000/api`; // Default to port 5000
+        // Use port 5000 for backend if different from frontend
+        const backendPort = port === '5500' || port === '5501' ? '5000' : port;
+        return `${protocol}//${host}:${backendPort}/api`;
     }
 
-    // Set base URL dynamically
     setBaseURL(url) {
         this.baseURL = url;
         localStorage.setItem('apiBaseURL', url);
         console.log('🔗 Updated API base URL:', url);
     }
 
-    // Set authentication token
     setToken(token) {
         this.token = token;
         localStorage.setItem('authToken', token);
         console.log('🔑 Authentication token set');
     }
 
-    // ✅ ENHANCED: Advanced request method with retry mechanism and timeout
+    async autoTestConnection() {
+        const isConnected = await this.testConnection();
+        if (!isConnected && !this.forceMockMode) {
+            this.safeNotification(
+                'Running in offline mode. Some features may be limited.',
+                'warning',
+                8000
+            );
+        }
+    }
+
+    // ==================== COMPREHENSIVE TIMESHEET LOGGING SYSTEM ====================
+
+    initTimesheetLogging() {
+        console.log('📊 Timesheet logging system initialized');
+        this.timesheetLogs = [];
+        this.maxLogs = 200; // Keep last 200 logs
+        
+        // Load existing logs from localStorage
+        this.loadTimesheetLogs();
+        
+        // Log system startup
+        this.logTimesheetOperation('SYSTEM_STARTUP', {
+            baseURL: this.baseURL,
+            user: this.getSafeUserData()?.employeeId || 'unknown',
+            timestamp: new Date().toISOString(),
+            forceMockMode: this.forceMockMode
+        }, 'info');
+    }
+
+    // Enhanced logging method with comprehensive tracking
+    logTimesheetOperation(operation, data, status = 'info') {
+        const logEntry = {
+            id: this.generateId(),
+            timestamp: new Date().toISOString(),
+            operation,
+            data: this.sanitizeLogData(data),
+            status,
+            user: this.getSafeUserData()?.employeeId || 'unknown',
+            sessionId: this.getSessionId(),
+            userAgent: navigator.userAgent.substring(0, 100),
+            url: window.location.href,
+            version: '2.0.0'
+        };
+        
+        // Add to beginning of array (most recent first)
+        this.timesheetLogs.unshift(logEntry);
+        
+        // Keep only maxLogs entries
+        if (this.timesheetLogs.length > this.maxLogs) {
+            this.timesheetLogs = this.timesheetLogs.slice(0, this.maxLogs);
+        }
+        
+        // Save to localStorage
+        this.saveTimesheetLogs();
+        
+        // Console output with emojis and colors
+        this.consoleLogWithStyle(operation, data, status);
+        
+        return logEntry;
+    }
+
+    // Advanced sanitization for sensitive data
+    sanitizeLogData(data) {
+        if (typeof data !== 'object' || data === null) return data;
+        
+        const sanitized = { ...data };
+        const sensitiveFields = [
+            'password', 'token', 'authorization', 'secret', 
+            'ssn', 'creditCard', 'sessionId', 'jwt', 'apiKey'
+        ];
+        
+        sensitiveFields.forEach(field => {
+            if (sanitized[field]) {
+                sanitized[field] = '***REDACTED***';
+            }
+            // Also check nested fields
+            Object.keys(sanitized).forEach(key => {
+                if (typeof sanitized[key] === 'object' && sanitized[key] !== null && sanitized[key][field]) {
+                    sanitized[key][field] = '***REDACTED***';
+                }
+            });
+        });
+        
+        // Sanitize nested objects recursively
+        Object.keys(sanitized).forEach(key => {
+            if (typeof sanitized[key] === 'object' && sanitized[key] !== null) {
+                sanitized[key] = this.sanitizeLogData(sanitized[key]);
+            }
+        });
+        
+        return sanitized;
+    }
+
+    // Enhanced console logging with beautiful styles
+    consoleLogWithStyle(operation, data, status) {
+        const emoji = this.getStatusEmoji(status);
+        const style = this.getConsoleStyle(status);
+        const timestamp = new Date().toLocaleTimeString();
+        
+        const logMessage = `${emoji} [TIMESHEET] ${timestamp} ${operation}`;
+        
+        if (status === 'error') {
+            console.error(`%c${logMessage}`, style, data);
+        } else if (status === 'warning') {
+            console.warn(`%c${logMessage}`, style, data);
+        } else {
+            console.log(`%c${logMessage}`, style, data);
+        }
+    }
+
+    getStatusEmoji(status) {
+        const emojis = {
+            'info': 'ℹ️',
+            'success': '✅',
+            'warning': '⚠️',
+            'error': '❌',
+            'submission': '📤',
+            'approval': '👍',
+            'rejection': '👎',
+            'edit': '✏️',
+            'resubmission': '🔄',
+            'export': '📥',
+            'import': '📤',
+            'archive': '🗄️',
+            'delete': '🗑️',
+            'search': '🔍',
+            'analysis': '📊',
+            'authentication': '🔐',
+            'authorization': '🚫',
+            'validation': '⚡',
+            'network': '🌐'
+        };
+        return emojis[status] || '📝';
+    }
+
+    getConsoleStyle(status) {
+        const styles = {
+            'info': 'color: #007bff; font-weight: bold; background: #f8f9fa; padding: 2px 4px; border-radius: 3px;',
+            'success': 'color: #28a745; font-weight: bold; background: #d4edda; padding: 2px 4px; border-radius: 3px;',
+            'warning': 'color: #ffc107; font-weight: bold; background: #fff3cd; padding: 2px 4px; border-radius: 3px;',
+            'error': 'color: #dc3545; font-weight: bold; background: #f8d7da; padding: 2px 4px; border-radius: 3px;',
+            'submission': 'color: #6f42c1; font-weight: bold; background: #e9ecef; padding: 2px 4px; border-radius: 3px;',
+            'approval': 'color: #20c997; font-weight: bold; background: #d1f2eb; padding: 2px 4px; border-radius: 3px;',
+            'rejection': 'color: #fd7e14; font-weight: bold; background: #ffe5d0; padding: 2px 4px; border-radius: 3px;'
+        };
+        return styles[status] || 'color: gray; font-weight: bold; padding: 2px 4px; border-radius: 3px;';
+    }
+
+    saveTimesheetLogs() {
+        try {
+            localStorage.setItem('timesheetLogs', JSON.stringify(this.timesheetLogs));
+        } catch (error) {
+            console.warn('Could not save timesheet logs:', error);
+        }
+    }
+
+    loadTimesheetLogs() {
+        try {
+            const savedLogs = localStorage.getItem('timesheetLogs');
+            if (savedLogs) {
+                this.timesheetLogs = JSON.parse(savedLogs);
+                console.log(`📋 Loaded ${this.timesheetLogs.length} timesheet logs from storage`);
+            }
+        } catch (error) {
+            console.warn('Could not load timesheet logs:', error);
+            this.timesheetLogs = [];
+        }
+    }
+
+    getTimesheetLogs(limit = 50, filters = {}) {
+        let filteredLogs = this.timesheetLogs;
+        
+        if (filters.operation) {
+            filteredLogs = filteredLogs.filter(log => 
+                log.operation.includes(filters.operation)
+            );
+        }
+        
+        if (filters.status) {
+            filteredLogs = filteredLogs.filter(log => log.status === filters.status);
+        }
+        
+        if (filters.startDate) {
+            filteredLogs = filteredLogs.filter(log => 
+                new Date(log.timestamp) >= new Date(filters.startDate)
+            );
+        }
+        
+        if (filters.endDate) {
+            filteredLogs = filteredLogs.filter(log => 
+                new Date(log.timestamp) <= new Date(filters.endDate)
+            );
+        }
+        
+        if (filters.user) {
+            filteredLogs = filteredLogs.filter(log => log.user === filters.user);
+        }
+        
+        return filteredLogs.slice(0, limit);
+    }
+
+    clearTimesheetLogs() {
+        this.timesheetLogs = [];
+        this.saveTimesheetLogs();
+        console.log('🗑️ Cleared timesheet logs');
+    }
+
+    getSessionId() {
+        let sessionId = sessionStorage.getItem('sessionId');
+        if (!sessionId) {
+            sessionId = this.generateId();
+            sessionStorage.setItem('sessionId', sessionId);
+        }
+        return sessionId;
+    }
+
+    // ==================== ADVANCED REQUEST HANDLER ====================
+
     async request(endpoint, options = {}) {
+        // Force mock mode if enabled
+        if (this.forceMockMode) {
+            return this.handleMockRequest(endpoint, options);
+        }
+
         const url = `${this.baseURL}${endpoint}`;
+        const requestId = this.generateId();
         
         const config = {
             method: 'GET',
             headers: {
                 'Content-Type': 'application/json',
+                'X-Request-ID': requestId,
+                'X-Client-Version': '2.0.0',
+                'X-Client-Timestamp': new Date().toISOString(),
                 ...options.headers
             },
             ...options
         };
 
-        // Add authentication token if available
         if (this.token) {
             config.headers['Authorization'] = `Bearer ${this.token}`;
         }
 
-        // Add body for non-GET requests
         if (config.body && typeof config.body === 'object' && config.method !== 'GET') {
             config.body = JSON.stringify(config.body);
         }
 
+        // Log request start with performance tracking
+        const startTime = performance.now();
+        this.logTimesheetOperation('API_REQUEST_START', {
+            requestId,
+            endpoint,
+            method: config.method,
+            url,
+            bodySize: config.body ? config.body.length : 0
+        }, 'info');
+
         let lastError;
         
-        // Retry logic with exponential backoff
         for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
             try {
-                console.log(`🔄 API ${config.method} Request (Attempt ${attempt}/${this.maxRetries}): ${url}`, config.body ? { body: config.body } : '');
-                
-                // Add timeout control
                 const controller = new AbortController();
                 const timeoutId = setTimeout(() => controller.abort(), this.requestTimeout);
                 config.signal = controller.signal;
@@ -92,73 +328,98 @@ class ApiClient {
                 const response = await fetch(url, config);
                 clearTimeout(timeoutId);
                 
-                // Handle connection errors
                 if (!response.ok) {
-                    return await this.handleErrorResponse(response, url, attempt);
+                    return await this.handleErrorResponse(response, url, attempt, requestId);
                 }
                 
-                // Reset retry count on successful request
                 this.retryCount = 0;
                 this.isOnline = true;
                 
-                // Process offline queue when back online
                 if (this.offlineQueue.length > 0 && attempt === 1) {
                     this.processOfflineQueue();
                 }
                 
-                // Handle different response types
-                const contentType = response.headers.get('content-type');
+                const data = await this.parseResponse(response);
+                const endTime = performance.now();
+                const duration = endTime - startTime;
                 
-                if (contentType && contentType.includes('application/json')) {
-                    const data = await response.json();
-                    console.log(`✅ API Response from ${endpoint}:`, data);
-                    return data;
-                } else if (contentType && contentType.includes('text/csv')) {
-                    const text = await response.text();
-                    console.log(`✅ CSV Response from ${endpoint} (length: ${text.length})`);
-                    return text;
-                } else if (contentType && contentType.includes('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')) {
-                    // Handle Excel file download
-                    const blob = await response.blob();
-                    console.log(`✅ Excel File Response from ${endpoint} (size: ${blob.size} bytes)`);
-                    return blob;
-                } else if (contentType && contentType.includes('text/plain')) {
-                    const text = await response.text();
-                    console.log(`✅ Text Response from ${endpoint}:`, text);
-                    return text;
-                } else {
-                    // Default to blob for binary data
-                    const blob = await response.blob();
-                    console.log(`✅ Blob Response from ${endpoint} (size: ${blob.size})`);
-                    return blob;
-                }
+                // Log successful response with performance data
+                this.logTimesheetOperation('API_REQUEST_SUCCESS', {
+                    requestId,
+                    endpoint,
+                    method: config.method,
+                    status: response.status,
+                    responseSize: this.getResponseSize(data),
+                    duration: duration.toFixed(2) + 'ms',
+                    attempt
+                }, 'success');
+                
+                return data;
                 
             } catch (error) {
                 lastError = error;
-                console.warn(`❌ Request attempt ${attempt} failed:`, error);
+                const endTime = performance.now();
+                const duration = endTime - startTime;
                 
-                // Don't retry on certain errors
+                this.logTimesheetOperation('API_REQUEST_RETRY', {
+                    requestId,
+                    endpoint,
+                    attempt,
+                    maxRetries: this.maxRetries,
+                    error: error.message,
+                    duration: duration.toFixed(2) + 'ms'
+                }, 'warning');
+                
                 if (error.name === 'AbortError' || error.name === 'TypeError') {
                     break;
                 }
                 
-                // Wait before retrying (exponential backoff)
                 if (attempt < this.maxRetries) {
                     const delay = Math.min(1000 * Math.pow(2, attempt), 10000);
-                    console.log(`⏳ Retrying in ${delay}ms...`);
                     await this.delay(delay);
                 }
             }
         }
         
-        // All retries failed
-        return this.handleRequestError(lastError, url, endpoint, config);
+        return this.handleRequestError(lastError, url, endpoint, config, requestId);
     }
 
-    // ✅ COMPREHENSIVE: Handle HTTP error responses with better error messages
-    async handleErrorResponse(response, url, attempt) {
-        console.error(`❌ HTTP Error ${response.status}: ${url} (Attempt ${attempt})`);
-        
+    async parseResponse(response) {
+        const contentType = response.headers.get('content-type');
+        let data;
+
+        try {
+            if (contentType && contentType.includes('application/json')) {
+                data = await response.json();
+            } else if (contentType && contentType.includes('text/csv')) {
+                data = await response.text();
+            } else if (contentType && contentType.includes('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')) {
+                data = await response.blob();
+            } else if (contentType && contentType.includes('text/plain')) {
+                data = await response.text();
+            } else {
+                data = await response.blob();
+            }
+        } catch (parseError) {
+            console.warn('Parse error:', parseError);
+            throw new Error(`Failed to parse response: ${parseError.message}`);
+        }
+
+        return data;
+    }
+
+    getResponseSize(data) {
+        if (typeof data === 'string') {
+            return `${data.length} characters`;
+        } else if (data instanceof Blob) {
+            return `${data.size} bytes`;
+        } else if (typeof data === 'object') {
+            return `${JSON.stringify(data).length} bytes`;
+        }
+        return 'unknown';
+    }
+
+    async handleErrorResponse(response, url, attempt, requestId) {
         let errorMessage = `Server error: ${response.status}`;
         let errorData = null;
         let userMessage = 'An unexpected error occurred';
@@ -170,7 +431,6 @@ class ApiClient {
                 errorMessage = errorData.message || errorMessage;
                 userMessage = errorData.userMessage || userMessage;
                 
-                // Include validation errors if present
                 if (errorData.errors) {
                     errorMessage += ` - ${JSON.stringify(errorData.errors)}`;
                     userMessage = 'Please check your input data';
@@ -188,46 +448,46 @@ class ApiClient {
         error.url = url;
         error.userMessage = userMessage;
         error.attempt = attempt;
-        
-        // Handle specific status codes with detailed messaging
+
+        // Log error response
+        this.logTimesheetOperation('API_REQUEST_ERROR', {
+            requestId,
+            url,
+            status: response.status,
+            attempt,
+            error: errorMessage,
+            userMessage
+        }, 'error');
+
         switch (response.status) {
             case 400:
-                console.warn('🚫 Bad Request:', errorMessage);
                 error.userMessage = userMessage || 'Invalid request data. Please check your input.';
                 break;
             case 401:
-                console.warn('🛑 Unauthorized - redirecting to login');
                 error.userMessage = 'Your session has expired. Please login again.';
                 this.handleUnauthorized();
                 break;
             case 403:
-                console.warn('🚫 Forbidden access');
                 error.userMessage = 'You do not have permission to access this resource.';
                 break;
             case 404:
-                console.warn('📭 Endpoint not found:', url);
                 error.userMessage = 'The requested resource was not found.';
                 break;
             case 409:
-                console.warn('⚡ Conflict:', errorMessage);
                 error.userMessage = 'This action conflicts with existing data.';
                 break;
             case 422:
-                console.warn('📝 Validation Error:', errorMessage);
                 error.userMessage = 'Please check your input data.';
                 break;
             case 429:
-                console.warn('🚦 Rate Limited:', errorMessage);
                 error.userMessage = 'Too many requests. Please try again later.';
                 break;
             case 500:
-                console.error('💥 Server internal error');
                 error.userMessage = 'Server error. Please try again later.';
                 break;
             case 502:
             case 503:
             case 504:
-                console.error('🌐 Service unavailable');
                 error.userMessage = 'Service temporarily unavailable. Please try again later.';
                 break;
             default:
@@ -237,10 +497,7 @@ class ApiClient {
         throw error;
     }
 
-    // ✅ ROBUST: Handle network/connection errors with better recovery
-    handleRequestError(error, url, endpoint, config) {
-        console.error(`❌ Network Error (${endpoint}):`, error);
-        
+    handleRequestError(error, url, endpoint, config, requestId) {
         this.isOnline = false;
         this.retryCount++;
         
@@ -255,13 +512,20 @@ class ApiClient {
         enhancedError.endpoint = endpoint;
         enhancedError.userMessage = 'Network connection failed. Using offline mode.';
         enhancedError.config = config;
-        
-        // Add to offline queue for non-GET requests
+
+        // Log network error
+        this.logTimesheetOperation('NETWORK_ERROR', {
+            requestId,
+            endpoint,
+            error: error.message,
+            retryCount: this.retryCount,
+            isOnline: this.isOnline
+        }, 'error');
+
         if (config.method !== 'GET') {
             this.addToOfflineQueue(endpoint, config);
         }
         
-        // Safe notification - only show if showNotification function exists
         if (this.retryCount >= this.maxRetries) {
             this.safeNotification(
                 'Cannot connect to server. Using offline mode. Some features may be limited.',
@@ -273,72 +537,190 @@ class ApiClient {
         throw enhancedError;
     }
 
-    // ==================== OFFLINE SUPPORT ====================
+    // ==================== MOCK REQUEST HANDLER ====================
 
-    // Initialize offline support
+    async handleMockRequest(endpoint, options = {}) {
+        console.log('🔧 MOCK MODE: Handling request for', endpoint);
+        
+        // Simulate network delay
+        await this.delay(300 + Math.random() * 700);
+        
+        const mockResponses = {
+            // Auth endpoints
+            '/auth/login': this.mockLogin(options.body),
+            '/auth/me': this.getSafeUserData() || this.getMockUsers()[0],
+            '/auth/profile': { success: true, message: 'Profile updated successfully' },
+            
+            // Timesheet endpoints
+            '/timesheets/my-timesheets': this.getMockTimesheets(),
+            '/timesheets/submit': this.mockSubmitTimesheet(options.body),
+            '/timesheets/editable-timesheets': this.getMockEditableTimesheets(),
+            '/timesheets/check-submission-block': { isBlocked: false, message: '' },
+            
+            // Project endpoints
+            '/projects/my-projects': this.getMockProjects(),
+            '/projects': this.getMockProjects(),
+            
+            // Activity code endpoints
+            '/activity-codes': this.getMockActivityCodes(),
+            
+            // Dashboard endpoints
+            '/dashboard/stats': this.getMockDashboardStats(),
+            '/dashboard/analytics': this.getMockAnalytics(),
+            
+            // Health check
+            '/health': { status: 'OK', message: 'Mock server is running', timestamp: new Date().toISOString() }
+        };
+
+        const response = mockResponses[endpoint] || { 
+            mock: true, 
+            endpoint, 
+            message: 'Mock response for ' + endpoint 
+        };
+
+        this.logTimesheetOperation('MOCK_REQUEST', {
+            endpoint,
+            method: options.method,
+            response: response
+        }, 'info');
+
+        return response;
+    }
+
+    mockLogin(credentials) {
+        const mockUser = {
+            _id: 'mock-user-id',
+            employeeId: credentials.email.split('@')[0].toUpperCase(),
+            firstName: 'Mock',
+            lastName: 'User',
+            email: credentials.email,
+            department: 'IT',
+            role: 'employee',
+            status: 'active'
+        };
+
+        return {
+            token: 'mock-jwt-token-' + Date.now(),
+            user: mockUser,
+            message: 'Login successful (mock mode)'
+        };
+    }
+
+    mockSubmitTimesheet(timesheetData) {
+        return {
+            _id: 'mock-timesheet-' + Date.now(),
+            ...timesheetData,
+            status: 'pending',
+            submittedAt: new Date().toISOString(),
+            weekNumber: this.getWeekNumber(timesheetData.weekStartDate)
+        };
+    }
+
+    // ==================== OFFLINE SUPPORT SYSTEM ====================
+
     initOfflineSupport() {
-        // Listen for online/offline events
         window.addEventListener('online', () => {
             console.log('🌐 App is online');
             this.isOnline = true;
+            this.logTimesheetOperation('NETWORK_ONLINE', {}, 'info');
             this.processOfflineQueue();
         });
 
         window.addEventListener('offline', () => {
             console.log('📴 App is offline');
             this.isOnline = false;
+            this.logTimesheetOperation('NETWORK_OFFLINE', {}, 'warning');
         });
 
-        // Load offline queue from localStorage
         this.loadOfflineQueue();
     }
 
-    // Add request to offline queue
     addToOfflineQueue(endpoint, config) {
         const queueItem = {
             endpoint,
             config,
             timestamp: new Date().toISOString(),
-            id: this.generateId()
+            id: this.generateId(),
+            attempts: 0,
+            maxAttempts: 3
         };
 
         this.offlineQueue.push(queueItem);
         this.saveOfflineQueue();
         
-        console.log(`💾 Added to offline queue: ${endpoint} (${this.offlineQueue.length} items in queue)`);
+        this.logTimesheetOperation('OFFLINE_QUEUE_ADD', {
+            endpoint,
+            method: config.method,
+            queueLength: this.offlineQueue.length
+        }, 'info');
     }
 
-    // Process offline queue when back online
     async processOfflineQueue() {
-        if (this.isProcessingQueue || this.offlineQueue.length === 0) return;
+        if (this.isProcessingQueue || this.offlineQueue.length === 0 || !this.isOnline) return;
 
         this.isProcessingQueue = true;
-        console.log(`🔄 Processing offline queue (${this.offlineQueue.length} items)`);
+        
+        this.logTimesheetOperation('OFFLINE_QUEUE_PROCESSING_START', {
+            queueLength: this.offlineQueue.length
+        }, 'info');
 
         const successfulItems = [];
+        const failedItems = [];
 
         for (let i = 0; i < this.offlineQueue.length; i++) {
             const item = this.offlineQueue[i];
+            item.attempts++;
+            
             try {
-                console.log(`🔄 Processing queued request: ${item.endpoint}`);
+                this.logTimesheetOperation('OFFLINE_QUEUE_PROCESSING_ITEM', {
+                    itemId: item.id,
+                    endpoint: item.endpoint,
+                    method: item.config.method,
+                    attempt: item.attempts
+                }, 'info');
+                
                 await this.request(item.endpoint, item.config);
                 successfulItems.push(item.id);
-                console.log(`✅ Successfully processed queued request: ${item.endpoint}`);
+                
+                this.logTimesheetOperation('OFFLINE_QUEUE_ITEM_SUCCESS', {
+                    itemId: item.id,
+                    endpoint: item.endpoint
+                }, 'success');
             } catch (error) {
-                console.warn(`❌ Failed to process queued request ${item.endpoint}:`, error);
-                // Keep item in queue for retry
+                if (item.attempts >= item.maxAttempts) {
+                    failedItems.push({ id: item.id, error: error.message });
+                    this.logTimesheetOperation('OFFLINE_QUEUE_ITEM_FAILED', {
+                        itemId: item.id,
+                        endpoint: item.endpoint,
+                        error: error.message,
+                        attempts: item.attempts
+                    }, 'error');
+                }
             }
         }
 
-        // Remove successful items from queue
-        this.offlineQueue = this.offlineQueue.filter(item => !successfulItems.includes(item.id));
+        this.offlineQueue = this.offlineQueue.filter(item => 
+            !successfulItems.includes(item.id) && item.attempts < item.maxAttempts
+        );
         this.saveOfflineQueue();
 
         this.isProcessingQueue = false;
-        console.log(`✅ Offline queue processing complete (${successfulItems.length} successful, ${this.offlineQueue.length} remaining)`);
+        
+        this.logTimesheetOperation('OFFLINE_QUEUE_PROCESSING_COMPLETE', {
+            successful: successfulItems.length,
+            failed: failedItems.length,
+            remaining: this.offlineQueue.length
+        }, 'info');
+
+        if (successfulItems.length > 0) {
+            this.safeNotification(
+                `Processed ${successfulItems.length} offline operations`,
+                'success',
+                5000
+            );
+        }
     }
 
-    // Save offline queue to localStorage
     saveOfflineQueue() {
         try {
             localStorage.setItem('apiOfflineQueue', JSON.stringify(this.offlineQueue));
@@ -347,7 +729,6 @@ class ApiClient {
         }
     }
 
-    // Load offline queue from localStorage
     loadOfflineQueue() {
         try {
             const savedQueue = localStorage.getItem('apiOfflineQueue');
@@ -361,34 +742,28 @@ class ApiClient {
         }
     }
 
-    // Clear offline queue
     clearOfflineQueue() {
         this.offlineQueue = [];
         this.saveOfflineQueue();
-        console.log('🗑️ Cleared offline queue');
+        this.logTimesheetOperation('OFFLINE_QUEUE_CLEARED', {}, 'info');
     }
 
     // ==================== UTILITY METHODS ====================
 
-    // Generate unique ID
     generateId() {
         return Date.now().toString(36) + Math.random().toString(36).substr(2);
     }
 
-    // Utility function for delays
     delay(ms) {
         return new Promise(resolve => setTimeout(resolve, ms));
     }
 
-    // Safe notification method
     safeNotification(message, type = 'info', duration = 5000) {
         try {
-            if (typeof showNotification === 'function') {
-                showNotification(message, type, duration);
-            } else if (typeof window.showNotification === 'function') {
-                window.showNotification(message, type, duration);
-            } else if (typeof safeNotification === 'function') {
+            if (typeof safeNotification === 'function') {
                 safeNotification(message, type, duration);
+            } else if (typeof window.safeNotification === 'function') {
+                window.safeNotification(message, type, duration);
             } else {
                 console.log(`📢 ${type.toUpperCase()}: ${message}`);
             }
@@ -398,17 +773,34 @@ class ApiClient {
         }
     }
 
-    // Handle unauthorized access
     handleUnauthorized() {
+        this.logTimesheetOperation('USER_UNAUTHORIZED', {
+            action: 'logout',
+            reason: 'Token expired or invalid'
+        }, 'warning');
+        
         this.logout();
         setTimeout(() => {
             window.location.href = 'index.html';
         }, 2000);
     }
 
+    getWeekNumber(dateString) {
+        const date = new Date(dateString);
+        date.setHours(0, 0, 0, 0);
+        date.setDate(date.getDate() + 3 - (date.getDay() + 6) % 7);
+        const week1 = new Date(date.getFullYear(), 0, 4);
+        return 1 + Math.round(((date.getTime() - week1.getTime()) / 86400000 - 3 + (week1.getDay() + 6) % 7) / 7);
+    }
+
     // ==================== AUTH ENDPOINTS ====================
 
     async login(credentials) {
+        this.logTimesheetOperation('LOGIN_ATTEMPT', {
+            username: credentials.email, // Don't log password
+            timestamp: new Date().toISOString()
+        }, 'info');
+        
         try {
             const response = await this.request('/auth/login', {
                 method: 'POST',
@@ -426,18 +818,33 @@ class ApiClient {
                 }
             }
             
+            this.logTimesheetOperation('LOGIN_SUCCESS', {
+                userId: response.user?._id,
+                email: response.user?.email,
+                role: response.user?.role
+            }, 'success');
+            
             return response;
         } catch (error) {
-            console.error('Login error:', error);
+            this.logTimesheetOperation('LOGIN_FAILED', {
+                error: error.message,
+                statusCode: error.status
+            }, 'error');
+            
             throw error;
         }
     }
 
     async getCurrentUser() {
+        this.logTimesheetOperation('GET_CURRENT_USER', {}, 'info');
         return await this.request('/auth/me');
     }
 
     async updateUserProfile(userData) {
+        this.logTimesheetOperation('UPDATE_USER_PROFILE', {
+            fields: Object.keys(userData)
+        }, 'info');
+        
         return await this.request('/auth/profile', {
             method: 'PUT',
             body: userData
@@ -445,6 +852,11 @@ class ApiClient {
     }
 
     async register(userData) {
+        this.logTimesheetOperation('REGISTER_ATTEMPT', {
+            email: userData.email,
+            role: userData.role
+        }, 'info');
+        
         return await this.request('/auth/register', {
             method: 'POST',
             body: userData
@@ -452,6 +864,8 @@ class ApiClient {
     }
 
     async changePassword(passwordData) {
+        this.logTimesheetOperation('CHANGE_PASSWORD', {}, 'info');
+        
         return await this.request('/auth/change-password', {
             method: 'POST',
             body: passwordData
@@ -459,6 +873,10 @@ class ApiClient {
     }
 
     async resetPassword(email) {
+        this.logTimesheetOperation('RESET_PASSWORD_REQUEST', {
+            email: email
+        }, 'info');
+        
         return await this.request('/auth/reset-password', {
             method: 'POST',
             body: { email }
@@ -466,87 +884,228 @@ class ApiClient {
     }
 
     async verifyResetToken(token) {
+        this.logTimesheetOperation('VERIFY_RESET_TOKEN', {}, 'info');
+        
         return await this.request('/auth/verify-reset-token', {
             method: 'POST',
             body: { token }
         });
     }
 
-    // ==================== TIMESHEET ENDPOINTS ====================
+    // ==================== TIMESHEET ENDPOINTS WITH COMPREHENSIVE LOGGING ====================
 
     async submitTimesheet(timesheetData) {
-        return await this.request('/timesheets/submit', {
-            method: 'POST',
-            body: timesheetData
-        });
+        const logData = {
+            weekStart: timesheetData.weekStartDate,
+            weekEnd: timesheetData.weekEndDate,
+            totalHours: timesheetData.totalHours,
+            entriesCount: timesheetData.entries?.length,
+            normalHours: timesheetData.totalNormalHours,
+            overtimeHours: timesheetData.totalOvertimeHours,
+            projects: [...new Set(timesheetData.entries?.map(e => e.projectCode))] || []
+        };
+        
+        this.logTimesheetOperation('TIMESHEET_SUBMIT_ATTEMPT', logData, 'submission');
+        
+        try {
+            const response = await this.request('/timesheets/submit', {
+                method: 'POST',
+                body: timesheetData
+            });
+            
+            this.logTimesheetOperation('TIMESHEET_SUBMIT_SUCCESS', {
+                timesheetId: response._id,
+                status: response.status,
+                weekRange: `${timesheetData.weekStartDate} to ${timesheetData.weekEndDate}`,
+                totalHours: timesheetData.totalHours
+            }, 'success');
+            
+            this.safeNotification('Timesheet submitted successfully! It is now pending approval.', 'success', 5000);
+            
+            return response;
+        } catch (error) {
+            this.logTimesheetOperation('TIMESHEET_SUBMIT_FAILED', {
+                error: error.message,
+                weekRange: `${timesheetData.weekStartDate} to ${timesheetData.weekEndDate}`,
+                statusCode: error.status,
+                userMessage: error.userMessage
+            }, 'error');
+            
+            throw error;
+        }
     }
 
     async getMyTimesheets(filters = {}) {
+        this.logTimesheetOperation('GET_MY_TIMESHEETS', { filters }, 'info');
+        
         try {
             const queryParams = new URLSearchParams(filters).toString();
             const endpoint = `/timesheets/my-timesheets${queryParams ? `?${queryParams}` : ''}`;
             const response = await this.request(endpoint);
             
-            // Handle different response formats
+            let timesheets = [];
             if (Array.isArray(response)) {
-                return response;
+                timesheets = response;
             } else if (response && Array.isArray(response.timesheets)) {
-                return response.timesheets;
+                timesheets = response.timesheets;
             } else if (response && Array.isArray(response.data)) {
-                return response.data;
+                timesheets = response.data;
             } else {
-                console.warn('Unexpected timesheets response format, returning mock data');
-                return this.getMockTimesheets();
+                timesheets = this.getMockTimesheets();
             }
+            
+            const statusBreakdown = this.getTimesheetStatusBreakdown(timesheets);
+            
+            this.logTimesheetOperation('GET_MY_TIMESHEETS_SUCCESS', {
+                count: timesheets.length,
+                statusBreakdown,
+                filters
+            }, 'success');
+            
+            return timesheets;
         } catch (error) {
-            console.warn('Could not load timesheets, returning mock data');
+            this.logTimesheetOperation('GET_MY_TIMESHEETS_FAILED', {
+                error: error.message,
+                filters
+            }, 'error');
+            
             return this.getMockTimesheets();
         }
     }
 
     async getAllTimesheets(filters = {}) {
+        this.logTimesheetOperation('GET_ALL_TIMESHEETS', { filters }, 'info');
+        
         try {
             const queryParams = new URLSearchParams(filters).toString();
             const endpoint = `/timesheets${queryParams ? `?${queryParams}` : ''}`;
             const response = await this.request(endpoint);
             
-            // Handle different response formats
+            let timesheets = [];
             if (Array.isArray(response)) {
-                return response;
+                timesheets = response;
             } else if (response && Array.isArray(response.timesheets)) {
-                return response.timesheets;
+                timesheets = response.timesheets;
             } else if (response && Array.isArray(response.data)) {
-                return response.data;
+                timesheets = response.data;
             } else {
-                console.warn('Unexpected timesheets response format, returning mock data');
-                return this.getMockTimesheets();
+                timesheets = this.getMockTimesheets();
             }
+            
+            this.logTimesheetOperation('GET_ALL_TIMESHEETS_SUCCESS', {
+                count: timesheets.length,
+                statusBreakdown: this.getTimesheetStatusBreakdown(timesheets),
+                filters
+            }, 'success');
+            
+            return timesheets;
         } catch (error) {
-            console.warn('Could not load all timesheets, returning mock data');
+            this.logTimesheetOperation('GET_ALL_TIMESHEETS_FAILED', {
+                error: error.message,
+                filters
+            }, 'error');
+            
             return this.getMockTimesheets();
         }
     }
 
     async getTimesheetById(timesheetId) {
-        return await this.request(`/timesheets/${timesheetId}`);
+        this.logTimesheetOperation('GET_TIMESHEET_BY_ID', { timesheetId }, 'info');
+        
+        try {
+            const response = await this.request(`/timesheets/${timesheetId}`);
+            
+            this.logTimesheetOperation('GET_TIMESHEET_BY_ID_SUCCESS', {
+                timesheetId,
+                status: response.status,
+                employee: response.employeeName
+            }, 'success');
+            
+            return response;
+        } catch (error) {
+            this.logTimesheetOperation('GET_TIMESHEET_BY_ID_FAILED', {
+                timesheetId,
+                error: error.message,
+                statusCode: error.status
+            }, 'error');
+            
+            throw error;
+        }
     }
 
     async approveTimesheet(timesheetId) {
-        return await this.request(`/timesheets/${timesheetId}/approve`, {
-            method: 'PATCH'
-        });
+        this.logTimesheetOperation('APPROVE_TIMESHEET_ATTEMPT', { timesheetId }, 'approval');
+        
+        try {
+            const response = await this.request(`/timesheets/${timesheetId}/approve`, {
+                method: 'PATCH'
+            });
+            
+            this.logTimesheetOperation('APPROVE_TIMESHEET_SUCCESS', {
+                timesheetId,
+                newStatus: response.status,
+                approvedBy: this.getSafeUserData()?.employeeId
+            }, 'success');
+            
+            this.safeNotification('Timesheet approved successfully!', 'success', 5000);
+            
+            return response;
+        } catch (error) {
+            this.logTimesheetOperation('APPROVE_TIMESHEET_FAILED', {
+                timesheetId,
+                error: error.message,
+                statusCode: error.status
+            }, 'error');
+            
+            throw error;
+        }
     }
 
     async rejectTimesheet(timesheetId, remarks) {
-        return await this.request(`/timesheets/${timesheetId}/reject`, {
-            method: 'PATCH',
-            body: { remarks }
-        });
+        this.logTimesheetOperation('REJECT_TIMESHEET_ATTEMPT', {
+            timesheetId,
+            hasRemarks: !!remarks,
+            remarksLength: remarks?.length || 0
+        }, 'rejection');
+        
+        try {
+            const response = await this.request(`/timesheets/${timesheetId}/reject`, {
+                method: 'PATCH',
+                body: { remarks }
+            });
+            
+            this.logTimesheetOperation('REJECT_TIMESHEET_SUCCESS', {
+                timesheetId,
+                newStatus: response.status,
+                rejectedBy: this.getSafeUserData()?.employeeId,
+                hasRemarks: !!remarks
+            }, 'success');
+            
+            this.safeNotification('Timesheet rejected with remarks.', 'warning', 5000);
+            
+            return response;
+        } catch (error) {
+            this.logTimesheetOperation('REJECT_TIMESHEET_FAILED', {
+                timesheetId,
+                error: error.message,
+                statusCode: error.status
+            }, 'error');
+            
+            throw error;
+        }
     }
 
-    // ✅ CORRECTED: Edit rejected timesheet with proper endpoint
     async editRejectedTimesheet(timesheetId, timesheetData) {
-        console.log('📝 [API] Editing rejected timesheet:', timesheetId, timesheetData);
+        const logData = {
+            timesheetId,
+            weekStart: timesheetData.weekStartDate,
+            weekEnd: timesheetData.weekEndDate,
+            totalHours: timesheetData.totalHours,
+            entriesCount: timesheetData.entries?.length,
+            changes: this.detectTimesheetChanges(timesheetData)
+        };
+        
+        this.logTimesheetOperation('EDIT_REJECTED_TIMESHEET_ATTEMPT', logData, 'edit');
         
         try {
             const response = await this.request(`/timesheets/${timesheetId}/edit-rejected`, {
@@ -554,107 +1113,308 @@ class ApiClient {
                 body: timesheetData
             });
             
-            console.log('✅ [API] Timesheet edited successfully:', response);
+            this.logTimesheetOperation('EDIT_REJECTED_TIMESHEET_SUCCESS', {
+                timesheetId,
+                newStatus: response.status,
+                changes: logData.changes
+            }, 'success');
+            
+            this.safeNotification('Timesheet edited successfully! Ready for resubmission.', 'success', 5000);
+            
             return response;
         } catch (error) {
-            console.error('❌ [API] Error editing timesheet:', error);
+            this.logTimesheetOperation('EDIT_REJECTED_TIMESHEET_FAILED', {
+                timesheetId,
+                error: error.message,
+                statusCode: error.status,
+                userMessage: error.userMessage
+            }, 'error');
             
-            // Enhanced error handling for specific edit scenarios
-            if (error.message && error.message.includes('editing period')) {
-                throw new Error('Editing period has expired for this timesheet');
-            } else if (error.message && error.message.includes('future dates')) {
-                throw new Error('Cannot submit timesheet with future dates');
-            } else if (error.message && error.message.includes('rejected timesheets')) {
-                throw new Error('Please resolve your rejected timesheets before editing');
-            } else if (error.status === 404) {
-                throw new Error('Timesheet not found or you do not have permission to edit it');
-            } else if (error.status === 403) {
-                throw new Error('You do not have permission to edit this timesheet');
-            } else {
-                throw error;
-            }
+            throw error;
         }
     }
 
     async resubmitTimesheet(timesheetId, timesheetData) {
-        return await this.request(`/timesheets/${timesheetId}/resubmit`, {
-            method: 'POST',
-            body: timesheetData
-        });
+        this.logTimesheetOperation('RESUBMIT_TIMESHEET_ATTEMPT', {
+            timesheetId,
+            totalHours: timesheetData.totalHours,
+            entriesCount: timesheetData.entries?.length
+        }, 'resubmission');
+        
+        try {
+            const response = await this.request(`/timesheets/${timesheetId}/resubmit`, {
+                method: 'POST',
+                body: timesheetData
+            });
+            
+            this.logTimesheetOperation('RESUBMIT_TIMESHEET_SUCCESS', {
+                timesheetId,
+                newStatus: response.status,
+                resubmissionCount: response.resubmissionCount
+            }, 'success');
+            
+            this.safeNotification('Timesheet resubmitted successfully!', 'success', 5000);
+            
+            return response;
+        } catch (error) {
+            this.logTimesheetOperation('RESUBMIT_TIMESHEET_FAILED', {
+                timesheetId,
+                error: error.message,
+                statusCode: error.status
+            }, 'error');
+            
+            throw error;
+        }
     }
 
     async getEditableTimesheets() {
-        return await this.request('/timesheets/editable-timesheets');
+        this.logTimesheetOperation('GET_EDITABLE_TIMESHEETS', {}, 'info');
+        
+        try {
+            const response = await this.request('/timesheets/editable-timesheets');
+            
+            this.logTimesheetOperation('GET_EDITABLE_TIMESHEETS_SUCCESS', {
+                count: response.length || 0
+            }, 'success');
+            
+            return response;
+        } catch (error) {
+            this.logTimesheetOperation('GET_EDITABLE_TIMESHEETS_FAILED', {
+                error: error.message
+            }, 'error');
+            
+            throw error;
+        }
     }
 
     async checkSubmissionBlock() {
-        return await this.request('/timesheets/check-submission-block');
+        this.logTimesheetOperation('CHECK_SUBMISSION_BLOCK', {}, 'info');
+        
+        try {
+            const response = await this.request('/timesheets/check-submission-block');
+            
+            this.logTimesheetOperation('CHECK_SUBMISSION_BLOCK_SUCCESS', {
+                isBlocked: response.isBlocked,
+                message: response.message
+            }, 'success');
+            
+            return response;
+        } catch (error) {
+            this.logTimesheetOperation('CHECK_SUBMISSION_BLOCK_FAILED', {
+                error: error.message
+            }, 'error');
+            
+            throw error;
+        }
     }
 
     async exportTimesheetToCSV(timesheetId) {
-        return await this.request(`/timesheets/export/${timesheetId}`, {
-            headers: {
-                'Accept': 'text/csv'
-            }
-        });
+        this.logTimesheetOperation('EXPORT_TIMESHEET_CSV_ATTEMPT', { timesheetId }, 'export');
+        
+        try {
+            const response = await this.request(`/timesheets/export/${timesheetId}`, {
+                headers: {
+                    'Accept': 'text/csv'
+                }
+            });
+            
+            this.logTimesheetOperation('EXPORT_TIMESHEET_CSV_SUCCESS', {
+                timesheetId,
+                contentLength: response.length
+            }, 'success');
+            
+            return response;
+        } catch (error) {
+            this.logTimesheetOperation('EXPORT_TIMESHEET_CSV_FAILED', {
+                timesheetId,
+                error: error.message
+            }, 'error');
+            
+            throw error;
+        }
     }
 
     async exportMultipleTimesheetsToCSV(timesheetIds) {
-        return await this.request('/timesheets/export-multiple', {
-            method: 'POST',
-            body: { ids: timesheetIds }
-        });
+        this.logTimesheetOperation('EXPORT_MULTIPLE_TIMESHEETS_CSV_ATTEMPT', {
+            count: timesheetIds.length,
+            ids: timesheetIds
+        }, 'export');
+        
+        try {
+            const response = await this.request('/timesheets/export-multiple', {
+                method: 'POST',
+                body: { ids: timesheetIds }
+            });
+            
+            this.logTimesheetOperation('EXPORT_MULTIPLE_TIMESHEETS_CSV_SUCCESS', {
+                count: timesheetIds.length,
+                contentLength: response.length
+            }, 'success');
+            
+            return response;
+        } catch (error) {
+            this.logTimesheetOperation('EXPORT_MULTIPLE_TIMESHEETS_CSV_FAILED', {
+                count: timesheetIds.length,
+                error: error.message
+            }, 'error');
+            
+            throw error;
+        }
     }
 
     async archiveOldTimesheets() {
-        return await this.request('/timesheets/archive-old', {
-            method: 'POST'
-        });
+        this.logTimesheetOperation('ARCHIVE_OLD_TIMESHEETS_ATTEMPT', {}, 'archive');
+        
+        try {
+            const response = await this.request('/timesheets/archive-old', {
+                method: 'POST'
+            });
+            
+            this.logTimesheetOperation('ARCHIVE_OLD_TIMESHEETS_SUCCESS', {
+                archivedCount: response.archivedCount,
+                period: response.period
+            }, 'success');
+            
+            this.safeNotification(`Archived ${response.archivedCount} old timesheets`, 'info', 5000);
+            
+            return response;
+        } catch (error) {
+            this.logTimesheetOperation('ARCHIVE_OLD_TIMESHEETS_FAILED', {
+                error: error.message
+            }, 'error');
+            
+            throw error;
+        }
     }
 
     async expireEditingPeriods() {
-        return await this.request('/timesheets/expire-editing-periods', {
-            method: 'POST'
+        this.logTimesheetOperation('EXPIRE_EDITING_PERIODS_ATTEMPT', {}, 'info');
+        
+        try {
+            const response = await this.request('/timesheets/expire-editing-periods', {
+                method: 'POST'
+            });
+            
+            this.logTimesheetOperation('EXPIRE_EDITING_PERIODS_SUCCESS', {
+                expiredCount: response.expiredCount,
+                affectedTimesheets: response.affectedTimesheets
+            }, 'success');
+            
+            this.safeNotification(`Expired editing periods for ${response.expiredCount} timesheets`, 'info', 5000);
+            
+            return response;
+        } catch (error) {
+            this.logTimesheetOperation('EXPIRE_EDITING_PERIODS_FAILED', {
+                error: error.message
+            }, 'error');
+            
+            throw error;
+        }
+    }
+
+    // ==================== TIMESHEET UTILITY METHODS ====================
+
+    getTimesheetStatusBreakdown(timesheets) {
+        const breakdown = {
+            approved: 0,
+            pending: 0,
+            rejected: 0,
+            draft: 0,
+            total: timesheets.length
+        };
+        
+        timesheets.forEach(ts => {
+            if (breakdown.hasOwnProperty(ts.status)) {
+                breakdown[ts.status]++;
+            }
         });
+        
+        return breakdown;
+    }
+
+    detectTimesheetChanges(newTimesheetData) {
+        return {
+            hoursChanged: newTimesheetData.totalHours !== undefined,
+            entriesChanged: newTimesheetData.entries?.length !== undefined,
+            projectsUpdated: newTimesheetData.entries?.map(e => e.projectCode) || []
+        };
+    }
+
+    getTimesheetStatistics() {
+        const logs = this.getTimesheetLogs();
+        const stats = {
+            totalOperations: logs.length,
+            submissions: logs.filter(log => log.operation.includes('SUBMIT')).length,
+            approvals: logs.filter(log => log.operation.includes('APPROVE')).length,
+            rejections: logs.filter(log => log.operation.includes('REJECT')).length,
+            edits: logs.filter(log => log.operation.includes('EDIT')).length,
+            exports: logs.filter(log => log.operation.includes('EXPORT')).length,
+            errors: logs.filter(log => log.status === 'error').length,
+            lastOperation: logs[0]?.timestamp || 'Never',
+            uniqueUsers: [...new Set(logs.map(log => log.user))].length
+        };
+        
+        return stats;
     }
 
     // ==================== PROJECT ENDPOINTS ====================
 
     async getProjects() {
+        this.logTimesheetOperation('GET_PROJECTS', {}, 'info');
+        
         try {
             const projects = await this.request('/projects');
             return Array.isArray(projects) ? projects : [];
         } catch (error) {
-            console.warn('Could not load projects, returning mock data');
+            this.logTimesheetOperation('GET_PROJECTS_FAILED', {
+                error: error.message
+            }, 'error');
+            
             return this.getMockProjects();
         }
     }
 
     async getMyProjects() {
+        this.logTimesheetOperation('GET_MY_PROJECTS', {}, 'info');
+        
         try {
             const projects = await this.request('/projects/my-projects');
             return Array.isArray(projects) ? projects : [];
         } catch (error) {
-            console.warn('Could not load projects, returning mock data');
+            this.logTimesheetOperation('GET_MY_PROJECTS_FAILED', {
+                error: error.message
+            }, 'error');
+            
             return this.getMockProjects();
         }
     }
 
     async getAllProjects() {
+        this.logTimesheetOperation('GET_ALL_PROJECTS', {}, 'info');
+        
         try {
             const projects = await this.request('/projects');
             return Array.isArray(projects) ? projects : [];
         } catch (error) {
-            console.warn('Could not load all projects, returning mock data');
+            this.logTimesheetOperation('GET_ALL_PROJECTS_FAILED', {
+                error: error.message
+            }, 'error');
+            
             return this.getMockProjects();
         }
     }
 
     async getProject(projectId) {
+        this.logTimesheetOperation('GET_PROJECT', { projectId }, 'info');
         return await this.request(`/projects/${projectId}`);
     }
 
     async createProject(projectData) {
+        this.logTimesheetOperation('CREATE_PROJECT', {
+            projectCode: projectData.projectCode,
+            name: projectData.name
+        }, 'info');
+        
         return await this.request('/projects', {
             method: 'POST',
             body: projectData
@@ -662,6 +1422,11 @@ class ApiClient {
     }
 
     async updateProject(projectId, projectData) {
+        this.logTimesheetOperation('UPDATE_PROJECT', {
+            projectId,
+            updatedFields: Object.keys(projectData)
+        }, 'info');
+        
         return await this.request(`/projects/${projectId}`, {
             method: 'PUT',
             body: projectData
@@ -669,155 +1434,53 @@ class ApiClient {
     }
 
     async deleteProject(projectId) {
+        this.logTimesheetOperation('DELETE_PROJECT', { projectId }, 'warning');
+        
         return await this.request(`/projects/${projectId}`, {
             method: 'DELETE'
         });
     }
 
     async getProjectStats(projectId) {
+        this.logTimesheetOperation('GET_PROJECT_STATS', { projectId }, 'info');
         return await this.request(`/projects/${projectId}/stats`);
     }
 
     async getProjectTimesheets(projectId, filters = {}) {
+        this.logTimesheetOperation('GET_PROJECT_TIMESHEETS', {
+            projectId,
+            filters
+        }, 'info');
+        
         const queryParams = new URLSearchParams(filters).toString();
         return await this.request(`/projects/${projectId}/timesheets${queryParams ? `?${queryParams}` : ''}`);
-    }
-
-    // ✅ FROM FILE 1: Excel Export Methods
-    async exportProjectToExcel(projectId) {
-        try {
-            console.log(`📊 Exporting project ${projectId} to Excel...`);
-            
-            const blob = await this.request(`/projects/${projectId}/export-excel`, {
-                headers: {
-                    'Accept': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-                }
-            });
-            
-            if (blob instanceof Blob) {
-                // Create download link
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.style.display = 'none';
-                a.href = url;
-                
-                // Get project name for filename
-                const project = await this.getProject(projectId);
-                const projectName = project?.name || 'project';
-                const fileName = `${projectName.replace(/\s+/g, '_')}_report.xlsx`;
-                a.download = fileName;
-                
-                document.body.appendChild(a);
-                a.click();
-                
-                // Clean up
-                window.URL.revokeObjectURL(url);
-                document.body.removeChild(a);
-                
-                console.log(`✅ Excel file downloaded: ${fileName}`);
-                return { success: true, fileName };
-            } else {
-                throw new Error('Invalid response format for Excel export');
-            }
-        } catch (error) {
-            console.error('❌ Error exporting project to Excel:', error);
-            
-            // Fallback to CSV if Excel is not available
-            console.log('🔄 Trying CSV export as fallback...');
-            try {
-                const csvData = await this.request(`/projects/${projectId}/export-csv`, {
-                    headers: {
-                        'Accept': 'text/csv'
-                    }
-                });
-                
-                if (typeof csvData === 'string') {
-                    // Create download link for CSV
-                    const blob = new Blob([csvData], { type: 'text/csv' });
-                    const url = window.URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.style.display = 'none';
-                    a.href = url;
-                    
-                    const project = await this.getProject(projectId);
-                    const projectName = project?.name || 'project';
-                    const fileName = `${projectName.replace(/\s+/g, '_')}_report.csv`;
-                    a.download = fileName;
-                    
-                    document.body.appendChild(a);
-                    a.click();
-                    
-                    // Clean up
-                    window.URL.revokeObjectURL(url);
-                    document.body.removeChild(a);
-                    
-                    console.log(`✅ CSV file downloaded as fallback: ${fileName}`);
-                    return { success: true, fileName, format: 'csv' };
-                }
-            } catch (csvError) {
-                console.error('❌ CSV export also failed:', csvError);
-            }
-            
-            throw error;
-        }
-    }
-
-    // ✅ FROM FILE 1: Export all projects to Excel
-    async exportAllProjectsToExcel(filters = {}) {
-        try {
-            console.log('📊 Exporting all projects to Excel...');
-            
-            const queryParams = new URLSearchParams(filters).toString();
-            const endpoint = `/projects/export-excel${queryParams ? `?${queryParams}` : ''}`;
-            
-            const blob = await this.request(endpoint, {
-                headers: {
-                    'Accept': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-                }
-            });
-            
-            if (blob instanceof Blob) {
-                // Create download link
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.style.display = 'none';
-                a.href = url;
-                
-                const fileName = `all_projects_report_${new Date().toISOString().split('T')[0]}.xlsx`;
-                a.download = fileName;
-                
-                document.body.appendChild(a);
-                a.click();
-                
-                // Clean up
-                window.URL.revokeObjectURL(url);
-                document.body.removeChild(a);
-                
-                console.log(`✅ All projects Excel file downloaded: ${fileName}`);
-                return { success: true, fileName };
-            } else {
-                throw new Error('Invalid response format for Excel export');
-            }
-        } catch (error) {
-            console.error('❌ Error exporting all projects to Excel:', error);
-            throw error;
-        }
     }
 
     // ==================== ACTIVITY CODE ENDPOINTS ====================
 
     async getActivityCodes(department = null) {
+        this.logTimesheetOperation('GET_ACTIVITY_CODES', { department }, 'info');
+        
         try {
             const endpoint = department ? `/activity-codes?department=${department}` : '/activity-codes';
             const codes = await this.request(endpoint);
             return Array.isArray(codes) ? codes : [];
         } catch (error) {
-            console.warn('Could not load activity codes, returning mock data');
+            this.logTimesheetOperation('GET_ACTIVITY_CODES_FAILED', {
+                error: error.message,
+                department
+            }, 'error');
+            
             return this.getMockActivityCodes(department);
         }
     }
 
     async createActivityCode(activityData) {
+        this.logTimesheetOperation('CREATE_ACTIVITY_CODE', {
+            code: activityData.code,
+            name: activityData.name
+        }, 'info');
+        
         return await this.request('/activity-codes', {
             method: 'POST',
             body: activityData
@@ -825,6 +1488,11 @@ class ApiClient {
     }
 
     async updateActivityCode(codeId, activityData) {
+        this.logTimesheetOperation('UPDATE_ACTIVITY_CODE', {
+            codeId,
+            updatedFields: Object.keys(activityData)
+        }, 'info');
+        
         return await this.request(`/activity-codes/${codeId}`, {
             method: 'PUT',
             body: activityData
@@ -832,54 +1500,71 @@ class ApiClient {
     }
 
     async deleteActivityCode(codeId) {
+        this.logTimesheetOperation('DELETE_ACTIVITY_CODE', { codeId }, 'warning');
+        
         return await this.request(`/activity-codes/${codeId}`, {
             method: 'DELETE'
         });
     }
 
     async getActivityCodeUsage(codeId, period = 'month') {
+        this.logTimesheetOperation('GET_ACTIVITY_CODE_USAGE', {
+            codeId,
+            period
+        }, 'info');
+        
         return await this.request(`/activity-codes/${codeId}/usage?period=${period}`);
     }
 
     // ==================== ADMIN ENDPOINTS ====================
 
     async getUsers(filters = {}) {
+        this.logTimesheetOperation('GET_USERS', { filters }, 'info');
+        
         try {
             const queryParams = new URLSearchParams(filters).toString();
             const endpoint = `/users${queryParams ? `?${queryParams}` : ''}`;
             const response = await this.request(endpoint);
             
-            // Handle different response formats
             if (Array.isArray(response)) {
                 return { users: response };
             } else if (response && Array.isArray(response.users)) {
                 return response;
             } else {
-                console.warn('Unexpected users response format, returning mock data');
                 return { users: this.getMockUsers() };
             }
         } catch (error) {
-            console.warn('Could not load users, returning mock data:', error);
+            this.logTimesheetOperation('GET_USERS_FAILED', {
+                error: error.message,
+                filters
+            }, 'error');
+            
             return { users: this.getMockUsers() };
         }
     }
 
     async getUser(userId) {
+        this.logTimesheetOperation('GET_USER', { userId }, 'info');
+        
         try {
             return await this.request(`/users/${userId}`);
         } catch (error) {
-            console.warn('Could not load user, returning mock data:', error);
+            this.logTimesheetOperation('GET_USER_FAILED', {
+                userId,
+                error: error.message
+            }, 'error');
+            
             const users = this.getMockUsers();
             return users.find(user => user._id === userId) || users[0];
         }
     }
 
-    // ✅ FROM FILE 1: Get user by ID (alias for getUser)
-    async getUserById(userId) {
-        return await this.getUser(userId);
-    }
-
     async updateUser(userId, userData) {
+        this.logTimesheetOperation('UPDATE_USER', {
+            userId,
+            updatedFields: Object.keys(userData)
+        }, 'info');
+        
         return await this.request(`/users/${userId}`, {
             method: 'PUT',
             body: userData
@@ -887,64 +1572,59 @@ class ApiClient {
     }
 
     async deleteUser(userId) {
+        this.logTimesheetOperation('DELETE_USER', { userId }, 'warning');
+        
         return await this.request(`/users/${userId}`, {
             method: 'DELETE'
         });
     }
 
     async createUser(userData) {
+        this.logTimesheetOperation('CREATE_USER', {
+            email: userData.email,
+            role: userData.role
+        }, 'info');
+        
         return await this.request('/users', {
             method: 'POST',
             body: userData
         });
     }
 
-    async bulkUpdateUsers(userIds, updateData) {
-        return await this.request('/users/bulk-update', {
-            method: 'PATCH',
-            body: { userIds, updateData }
-        });
-    }
-
-    async importUsers(userData) {
-        return await this.request('/users/import', {
-            method: 'POST',
-            body: userData
-        });
-    }
-
-    async exportUsers(filters = {}) {
-        const queryParams = new URLSearchParams(filters).toString();
-        return await this.request(`/users/export${queryParams ? `?${queryParams}` : ''}`, {
-            headers: {
-                'Accept': 'text/csv'
-            }
-        });
-    }
-
     // ==================== DASHBOARD & ANALYTICS ENDPOINTS ====================
 
     async getDashboardStats() {
+        this.logTimesheetOperation('GET_DASHBOARD_STATS', {}, 'info');
+        
         try {
             return await this.request('/dashboard/stats');
         } catch (error) {
-            console.warn('Could not load dashboard stats, returning mock data');
+            this.logTimesheetOperation('GET_DASHBOARD_STATS_FAILED', {
+                error: error.message
+            }, 'error');
+            
             return this.getMockDashboardStats();
         }
     }
 
     async getAnalytics() {
+        this.logTimesheetOperation('GET_ANALYTICS', {}, 'info');
+        
         try {
             return await this.request('/dashboard/analytics');
         } catch (error) {
-            console.warn('Could not load analytics, returning mock data:', error);
+            this.logTimesheetOperation('GET_ANALYTICS_FAILED', {
+                error: error.message
+            }, 'error');
+            
             return this.getMockAnalytics();
         }
     }
 
     async getSystemStats() {
+        this.logTimesheetOperation('GET_SYSTEM_STATS', {}, 'info');
+        
         try {
-            // Combine data from multiple existing endpoints
             const [dashboardStats, users] = await Promise.all([
                 this.request('/dashboard/stats').catch(() => ({})),
                 this.request('/users').catch(() => [])
@@ -959,351 +1639,15 @@ class ApiClient {
                 lastBackup: new Date().toISOString()
             };
         } catch (error) {
-            console.warn('Could not load system stats, returning mock data:', error);
+            this.logTimesheetOperation('GET_SYSTEM_STATS_FAILED', {
+                error: error.message
+            }, 'error');
+            
             return this.getMockSystemStats();
         }
     }
 
-    async getTimesheetReports(filters = {}) {
-        try {
-            const queryParams = new URLSearchParams(filters).toString();
-            const endpoint = `/reports/timesheets${queryParams ? `?${queryParams}` : ''}`;
-            return await this.request(endpoint);
-        } catch (error) {
-            console.warn('Could not load reports, returning mock data');
-            return this.getMockReports();
-        }
-    }
-
-    async getDepartmentReports(department, period = 'month') {
-        return await this.request(`/reports/department/${department}?period=${period}`);
-    }
-
-    async getProjectReports(projectId, period = 'month') {
-        return await this.request(`/reports/project/${projectId}?period=${period}`);
-    }
-
-    async getUserReports(userId, period = 'month') {
-        return await this.request(`/reports/user/${userId}?period=${period}`);
-    }
-
-    async exportReport(reportType, filters = {}) {
-        const queryParams = new URLSearchParams(filters).toString();
-        return await this.request(`/reports/export/${reportType}${queryParams ? `?${queryParams}` : ''}`, {
-            headers: {
-                'Accept': 'text/csv'
-            }
-        });
-    }
-
-    // ==================== FROM FILE 1: HOURS TRACKING & EMPLOYEE REPORTS ====================
-
-    // ✅ FROM FILE 1: Hours tracking with proper backend response structure
-    async getHoursTracking(filters = {}) {
-        try {
-            console.log('📊 Fetching hours tracking data with filters:', filters);
-            
-            const queryParams = new URLSearchParams(filters).toString();
-            const endpoint = `/reports/hours-tracking${queryParams ? `?${queryParams}` : ''}`;
-            
-            const response = await this.request(endpoint);
-            
-            console.log('🔍 Raw hours tracking response:', response);
-            
-            // ✅ Handle the actual backend response structure
-            if (response && response.success && Array.isArray(response.projects)) {
-                return response; // This matches your backend structure: { success: true, projects: [...], totals: {...} }
-            } else if (Array.isArray(response)) {
-                // Fallback: if response is directly an array
-                console.warn('Unexpected response format (array), converting to expected structure');
-                return { 
-                    success: true, 
-                    projects: response,
-                    totals: this.calculateTotals(response),
-                    count: response.length 
-                };
-            } else if (response && Array.isArray(response.data)) {
-                // Alternative format support
-                console.warn('Using alternative response format (data array)');
-                return { 
-                    success: true, 
-                    projects: response.data,
-                    totals: response.summary || this.calculateTotals(response.data),
-                    count: response.data.length 
-                };
-            } else {
-                console.warn('Unexpected hours tracking response format, returning mock data');
-                return this.getMockHoursTracking(filters);
-            }
-        } catch (error) {
-            console.warn('Could not load hours tracking data, returning mock data:', error);
-            return this.getMockHoursTracking(filters);
-        }
-    }
-
-    // ✅ FROM FILE 1: Get employee report method
-    async getEmployeeReport(filters = {}) {
-        try {
-            console.log('📊 Fetching employee report data with filters:', filters);
-            
-            const queryParams = new URLSearchParams(filters).toString();
-            const endpoint = `/reports/employee-report${queryParams ? `?${queryParams}` : ''}`;
-            
-            const response = await this.request(endpoint);
-            
-            console.log('🔍 Raw employee report response:', response);
-            
-            // Handle the backend response structure
-            if (response && response.success) {
-                return response;
-            } else {
-                console.warn('Unexpected employee report response format, returning mock data');
-                return this.getMockEmployeeReport(filters);
-            }
-        } catch (error) {
-            console.warn('Could not load employee report data, returning mock data:', error);
-            return this.getMockEmployeeReport(filters);
-        }
-    }
-
-    // ✅ FROM FILE 1: Export employee report to Excel
-    async exportEmployeeReportToExcel(filters = {}) {
-        try {
-            console.log('📥 Exporting employee report to Excel:', filters);
-            
-            const response = await this.request('/reports/export-employee-excel', {
-                method: 'POST',
-                body: {
-                    employeeId: filters.employeeId,
-                    plNo: filters.plNo,
-                    name: filters.name,
-                    startDate: filters.startDate,
-                    endDate: filters.endDate,
-                    reportType: filters.reportType || 'employee'
-                }
-            });
-            
-            if (response instanceof Blob) {
-                // Create download link for Excel file
-                const url = window.URL.createObjectURL(response);
-                const a = document.createElement('a');
-                a.style.display = 'none';
-                a.href = url;
-                
-                const fileName = `employee_report_${new Date().toISOString().split('T')[0]}.xlsx`;
-                a.download = fileName;
-                
-                document.body.appendChild(a);
-                a.click();
-                
-                // Clean up
-                window.URL.revokeObjectURL(url);
-                document.body.removeChild(a);
-                
-                console.log(`✅ Excel file downloaded: ${fileName}`);
-                return { success: true, fileName };
-            } else {
-                throw new Error('Invalid response format for Excel export');
-            }
-        } catch (error) {
-            console.error('❌ Error exporting employee report to Excel:', error);
-            throw error;
-        }
-    }
-
-    // ✅ FROM FILE 1: Generate custom reports
-    async generateReport(reportData) {
-        try {
-            console.log('📈 Generating custom report:', reportData);
-            
-            const response = await this.request('/reports/generate', {
-                method: 'POST',
-                body: reportData
-            });
-            
-            return response;
-        } catch (error) {
-            console.warn('Could not generate report, returning mock data:', error);
-            return this.getMockReportData(reportData);
-        }
-    }
-
-    // ✅ FROM FILE 1: Export report data - use correct backend endpoint
-    async exportReport(filters = {}, format = 'json') {
-        try {
-            console.log(`📥 Exporting report data in ${format} format`);
-            
-            // Use the correct endpoint that exists in your backend
-            const response = await this.request('/reports/export-employee-excel', {
-                method: 'POST',
-                body: {
-                    employeeId: filters.employeeId,
-                    plNo: filters.plNo,
-                    name: filters.employeeName,
-                    startDate: filters.startDate,
-                    endDate: filters.endDate,
-                    reportType: filters.reportType || 'employee'
-                }
-            });
-            
-            return response;
-        } catch (error) {
-            console.warn('Could not export report, generating client-side export:', error);
-            return this.generateClientSideExport(filters, format);
-        }
-    }
-
-    // ✅ FROM FILE 1: Get report summary
-    async getReportSummary(period = 'week') {
-        try {
-            console.log(`📋 Fetching report summary for period: ${period}`);
-            
-            const response = await this.request(`/reports/summary?period=${period}`);
-            return response;
-        } catch (error) {
-            console.warn('Could not load report summary, returning mock data:', error);
-            return this.getMockReportSummary(period);
-        }
-    }
-
-    // ==================== FROM FILE 1: CONTENT MANAGEMENT ====================
-
-    // ✅ FROM FILE 1: Get content using existing projects route
-    async getContent() {
-        try {
-            const projects = await this.request('/projects');
-            return { content: projects || [] };
-        } catch (error) {
-            console.warn('Could not load content, returning mock data:', error);
-            return { content: [] };
-        }
-    }
-
-    // ✅ FROM FILE 1: Update content using existing projects route
-    async updateContent(contentId, contentData) {
-        return await this.request(`/projects/${contentId}`, {
-            method: 'PUT',
-            body: contentData
-        });
-    }
-
-    // ==================== SETTINGS & CONFIGURATION ENDPOINTS ====================
-
-    async getSettings() {
-        try {
-            return await this.request('/settings');
-        } catch (error) {
-            console.warn('Could not load settings, returning mock data:', error);
-            return this.getMockSettings();
-        }
-    }
-
-    async updateSettings(settings) {
-        return await this.request('/settings', {
-            method: 'PUT',
-            body: settings
-        });
-    }
-
-    async getSystemConfig() {
-        return await this.request('/settings/config');
-    }
-
-    async updateSystemConfig(config) {
-        return await this.request('/settings/config', {
-            method: 'PUT',
-            body: config
-        });
-    }
-
-    async getNotificationSettings() {
-        return await this.request('/settings/notifications');
-    }
-
-    async updateNotificationSettings(settings) {
-        return await this.request('/settings/notifications', {
-            method: 'PUT',
-            body: settings
-        });
-    }
-
-    async getEmailTemplates() {
-        return await this.request('/settings/email-templates');
-    }
-
-    async updateEmailTemplate(templateId, content) {
-        return await this.request(`/settings/email-templates/${templateId}`, {
-            method: 'PUT',
-            body: content
-        });
-    }
-
-    // ==================== NOTIFICATION ENDPOINTS ====================
-
-    async getNotifications(filters = {}) {
-        const queryParams = new URLSearchParams(filters).toString();
-        return await this.request(`/notifications${queryParams ? `?${queryParams}` : ''}`);
-    }
-
-    async markNotificationAsRead(notificationId) {
-        return await this.request(`/notifications/${notificationId}/read`, {
-            method: 'PATCH'
-        });
-    }
-
-    async markAllNotificationsAsRead() {
-        return await this.request('/notifications/mark-all-read', {
-            method: 'PATCH'
-        });
-    }
-
-    async getUnreadNotificationCount() {
-        return await this.request('/notifications/unread-count');
-    }
-
-    async deleteNotification(notificationId) {
-        return await this.request(`/notifications/${notificationId}`, {
-            method: 'DELETE'
-        });
-    }
-
-    // ==================== FILE UPLOAD ENDPOINTS ====================
-
-    async uploadFile(file, options = {}) {
-        const formData = new FormData();
-        formData.append('file', file);
-        
-        if (options.folder) {
-            formData.append('folder', options.folder);
-        }
-        if (options.metadata) {
-            formData.append('metadata', JSON.stringify(options.metadata));
-        }
-
-        return await this.request('/upload', {
-            method: 'POST',
-            headers: {
-                // Let browser set Content-Type for FormData
-            },
-            body: formData
-        });
-    }
-
-    async getFile(fileId) {
-        return await this.request(`/files/${fileId}`);
-    }
-
-    async deleteFile(fileId) {
-        return await this.request(`/files/${fileId}`, {
-            method: 'DELETE'
-        });
-    }
-
-    async getFileUrl(fileId) {
-        return await this.request(`/files/${fileId}/url`);
-    }
-
-    // ==================== MOCK DATA FOR OFFLINE USE ====================
+    // ==================== MOCK DATA GENERATORS ====================
 
     getMockUsers() {
         return [
@@ -1315,57 +1659,17 @@ class ApiClient {
                 email: 'ashish.dhole@company.com',
                 department: 'IT',
                 role: 'employee',
-                status: 'active',
-                createdAt: new Date().toISOString(),
-                lastLogin: new Date().toISOString()
+                status: 'active'
             },
             {
                 _id: '2',
-                employeeId: 'T1167',
-                firstName: 'John',
-                lastName: 'Smith',
-                email: 'john.smith@company.com',
+                employeeId: 'T1136',
+                firstName: 'Anjali',
+                lastName: 'Kulkarni',
+                email: 'anjali.kulkarni@company.com',
                 department: 'HR',
-                role: 'manager',
-                status: 'active',
-                createdAt: new Date().toISOString(),
-                lastLogin: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
-            },
-            {
-                _id: '3',
-                employeeId: 'T1168',
-                firstName: 'Sarah',
-                lastName: 'Johnson',
-                email: 'sarah.johnson@company.com',
-                department: 'Finance',
                 role: 'employee',
-                status: 'active',
-                createdAt: new Date().toISOString(),
-                lastLogin: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString()
-            },
-            {
-                _id: '4',
-                employeeId: 'T1169',
-                firstName: 'Mike',
-                lastName: 'Brown',
-                email: 'mike.brown@company.com',
-                department: 'IT',
-                role: 'admin',
-                status: 'active',
-                createdAt: new Date().toISOString(),
-                lastLogin: new Date().toISOString()
-            },
-            {
-                _id: '5',
-                employeeId: 'T1170',
-                firstName: 'Lisa',
-                lastName: 'Davis',
-                email: 'lisa.davis@company.com',
-                department: 'Marketing',
-                role: 'employee',
-                status: 'active',
-                createdAt: new Date().toISOString(),
-                lastLogin: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+                status: 'active'
             }
         ];
     }
@@ -1374,105 +1678,43 @@ class ApiClient {
         return [
             { 
                 _id: '1', 
-                projectCode: 'PROJ001', 
+                plNo: 'PROJ001',
                 name: 'Website Development', 
                 status: 'active',
                 totalHours: 200,
                 consumedHours: 50,
-                departmentHours: {
-                    IT: 150,
-                    Design: 50
-                },
-                startDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
-                endDate: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString(),
-                manager: 'Mike Brown',
-                budget: 50000
+                startDate: '2024-01-01',
+                endDate: '2024-12-31'
             },
             { 
                 _id: '2', 
-                projectCode: 'PROJ002', 
-                name: 'Mobile App', 
+                plNo: 'PROJ002',
+                name: 'Mobile App Development', 
                 status: 'active',
                 totalHours: 300,
                 consumedHours: 120,
-                departmentHours: {
-                    IT: 200,
-                    QA: 100
-                },
-                startDate: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString(),
-                endDate: new Date(Date.now() + 45 * 24 * 60 * 60 * 1000).toISOString(),
-                manager: 'John Smith',
-                budget: 75000
+                startDate: '2024-02-01',
+                endDate: '2024-11-30'
             },
             { 
                 _id: '3', 
-                projectCode: 'PROJ003', 
-                name: 'Database Upgrade', 
-                status: 'active',
-                totalHours: 100,
-                consumedHours: 75,
-                departmentHours: {
-                    IT: 100
-                },
-                startDate: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
-                endDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
-                manager: 'Mike Brown',
-                budget: 25000
-            },
-            { 
-                _id: '4', 
-                projectCode: 'MISC', 
-                name: 'Miscellaneous Activity', 
+                plNo: 'MISC',
+                name: 'Miscellaneous', 
                 status: 'active',
                 totalHours: 0,
-                consumedHours: 0,
-                departmentHours: {},
-                startDate: new Date().toISOString(),
-                endDate: null,
-                manager: 'System',
-                budget: 0
-            },
-            { 
-                _id: '5', 
-                projectCode: 'HOLIDAY', 
-                name: 'Holiday', 
-                status: 'active',
-                totalHours: 0,
-                consumedHours: 0,
-                departmentHours: {},
-                startDate: new Date().toISOString(),
-                endDate: null,
-                manager: 'System',
-                budget: 0
-            },
-            { 
-                _id: '6', 
-                projectCode: 'LEAVE', 
-                name: 'Leave', 
-                status: 'active',
-                totalHours: 0,
-                consumedHours: 0,
-                departmentHours: {},
-                startDate: new Date().toISOString(),
-                endDate: null,
-                manager: 'System',
-                budget: 0
+                consumedHours: 0
             }
         ];
     }
 
     getMockActivityCodes(department = null) {
         const baseCodes = [
-            { _id: '1', code: 'MISC', name: 'Miscellaneous Activity', department: 'All', description: 'General administrative tasks', isActive: true },
-            { _id: '2', code: 'DEV', name: 'Development', department: 'IT', description: 'Software development work', isActive: true },
-            { _id: '3', code: 'TEST', name: 'Testing', department: 'IT', description: 'Quality assurance and testing', isActive: true },
-            { _id: '4', code: 'MEET', name: 'Meeting', department: 'All', description: 'Team and client meetings', isActive: true },
-            { _id: '5', code: 'TRAIN', name: 'Training', department: 'All', description: 'Training and skill development', isActive: true },
-            { _id: '6', code: 'ADMIN', name: 'Administration', department: 'Admin', description: 'Administrative tasks', isActive: true },
-            { _id: '7', code: 'HR', name: 'Human Resources', department: 'HR', description: 'HR related activities', isActive: true },
-            { _id: '8', code: 'DESIGN', name: 'Design', department: 'Design', description: 'UI/UX design work', isActive: true },
-            { _id: '9', code: 'RESEARCH', name: 'Research', department: 'R&D', description: 'Research and development', isActive: true },
-            { _id: '10', code: 'SUPPORT', name: 'Support', department: 'IT', description: 'Technical support', isActive: true }
+            { _id: '1', code: 'MISC', name: 'Miscellaneous Activity', department: 'All', isActive: true },
+            { _id: '2', code: 'DEV', name: 'Development', department: 'IT', isActive: true },
+            { _id: '3', code: 'TEST', name: 'Testing', department: 'IT', isActive: true },
+            { _id: '4', code: 'DESIGN', name: 'Design', department: 'IT', isActive: true },
+            { _id: '5', code: 'MEETING', name: 'Meeting', department: 'All', isActive: true },
+            { _id: '6', code: 'TRAINING', name: 'Training', department: 'All', isActive: true }
         ];
         
         if (!department) return baseCodes;
@@ -1485,225 +1727,47 @@ class ApiClient {
     getMockTimesheets() {
         const userData = this.getSafeUserData();
         const now = new Date();
-        const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        const lastWeek = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
         const twoWeeksAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
         
         return [
             {
                 _id: 'mock1',
                 employee: userData?.id || 'mock-user',
-                employeeCode: userData?.employeeId || 'T1166',
-                employeeName: userData ? `${userData.firstName} ${userData.lastName}` : 'Ashish Dhole',
-                department: userData?.department || 'IT',
-                weekStartDate: oneWeekAgo,
-                weekEndDate: new Date(oneWeekAgo.getTime() + 6 * 24 * 60 * 60 * 1000),
+                employeeCode: userData?.employeeId || 'T1136',
+                employeeName: userData ? `${userData.firstName} ${userData.lastName}` : 'Anjali Kulkarni',
+                department: userData?.department || 'HR',
+                weekStartDate: this.formatDate(lastWeek),
+                weekEndDate: this.formatDate(new Date(lastWeek.getTime() + 6 * 24 * 60 * 60 * 1000)),
                 status: 'approved',
                 totalHours: 40,
                 totalNormalHours: 40,
                 totalOvertimeHours: 0,
-                submittedAt: new Date(oneWeekAgo.getTime() + 2 * 24 * 60 * 60 * 1000),
-                approvedAt: new Date(oneWeekAgo.getTime() + 3 * 24 * 60 * 60 * 1000),
-                approvedBy: 'Mike Brown',
-                entries: [
-                    { projectCode: 'PROJ001', normalHours: 8, overtimeHours: 0, activityCode: 'DEV' },
-                    { projectCode: 'PROJ001', normalHours: 8, overtimeHours: 0, activityCode: 'DEV' },
-                    { projectCode: 'PROJ001', normalHours: 8, overtimeHours: 0, activityCode: 'TEST' },
-                    { projectCode: 'PROJ002', normalHours: 8, overtimeHours: 0, activityCode: 'DEV' },
-                    { projectCode: 'PROJ002', normalHours: 8, overtimeHours: 0, activityCode: 'DEV' }
-                ]
+                entries: [],
+                submittedAt: new Date(lastWeek.getTime() + 2 * 24 * 60 * 60 * 1000).toISOString()
             },
             {
                 _id: 'mock2',
                 employee: userData?.id || 'mock-user',
-                employeeCode: userData?.employeeId || 'T1166',
-                employeeName: userData ? `${userData.firstName} ${userData.lastName}` : 'Ashish Dhole',
-                department: userData?.department || 'IT',
-                weekStartDate: twoWeeksAgo,
-                weekEndDate: new Date(twoWeeksAgo.getTime() + 6 * 24 * 60 * 60 * 1000),
+                employeeCode: userData?.employeeId || 'T1136',
+                employeeName: userData ? `${userData.firstName} ${userData.lastName}` : 'Anjali Kulkarni',
+                department: userData?.department || 'HR',
+                weekStartDate: this.formatDate(twoWeeksAgo),
+                weekEndDate: this.formatDate(new Date(twoWeeksAgo.getTime() + 6 * 24 * 60 * 60 * 1000)),
                 status: 'rejected',
-                totalHours: 42,
-                totalNormalHours: 40,
-                totalOvertimeHours: 2,
-                rejectionReason: 'Incorrect project codes used. Please use valid project codes from your assigned projects.',
-                rejectedAt: new Date(twoWeeksAgo.getTime() + 3 * 24 * 60 * 60 * 1000),
-                rejectedBy: 'John Smith',
-                canEdit: true,
-                editableUntil: new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000).toISOString(),
-                daysRemaining: 14,
-                resubmissionCount: 0,
-                entries: [
-                    { projectCode: 'PROJ001', normalHours: 8, overtimeHours: 0, activityCode: 'DEV' },
-                    { projectCode: 'PROJ001', normalHours: 8, overtimeHours: 0, activityCode: 'DEV' },
-                    { projectCode: 'PROJ001', normalHours: 8, overtimeHours: 0, activityCode: 'TEST' },
-                    { projectCode: 'PROJ002', normalHours: 8, overtimeHours: 0, activityCode: 'DEV' },
-                    { projectCode: 'PROJ002', normalHours: 8, overtimeHours: 2, activityCode: 'DEV' }
-                ]
+                totalHours: 35,
+                totalNormalHours: 35,
+                totalOvertimeHours: 0,
+                entries: [],
+                submittedAt: new Date(twoWeeksAgo.getTime() + 2 * 24 * 60 * 60 * 1000).toISOString(),
+                rejectedAt: new Date(twoWeeksAgo.getTime() + 3 * 24 * 60 * 60 * 1000).toISOString(),
+                rejectionReason: 'Incomplete project codes'
             }
         ];
     }
 
-    // ✅ FROM FILE 1: Mock hours tracking data that matches backend structure
-    getMockHoursTracking(filters = {}) {
-        const { plNo, projectName } = filters;
-        
-        const mockProjects = [
-            {
-                plNo: 'PROJ001',
-                name: 'Website Development',
-                status: 'active',
-                totalHours: 200,
-                consumedHours: 50,
-                balanceHours: 150,
-                assignedEmployees: 3,
-                startDate: '2024-01-01',
-                endDate: '2024-06-30'
-            },
-            {
-                plNo: 'PROJ002', 
-                name: 'Mobile App',
-                status: 'active',
-                totalHours: 300,
-                consumedHours: 120,
-                balanceHours: 180,
-                assignedEmployees: 2,
-                startDate: '2024-02-01',
-                endDate: '2024-08-31'
-            },
-            {
-                plNo: 'PROJ003',
-                name: 'Database Upgrade',
-                status: 'completed',
-                totalHours: 100,
-                consumedHours: 100,
-                balanceHours: 0,
-                assignedEmployees: 1,
-                startDate: '2024-01-15',
-                endDate: '2024-03-15'
-            }
-        ];
-
-        // Apply filtering based on search criteria
-        let filteredProjects = mockProjects;
-        
-        if (plNo) {
-            filteredProjects = filteredProjects.filter(project => 
-                project.plNo.toLowerCase().includes(plNo.toLowerCase())
-            );
-        }
-        
-        if (projectName) {
-            filteredProjects = filteredProjects.filter(project => 
-                project.name.toLowerCase().includes(projectName.toLowerCase())
-            );
-        }
-
-        const totals = this.calculateTotals(filteredProjects);
-
-        return {
-            success: true,
-            projects: filteredProjects,
-            totals: totals,
-            count: filteredProjects.length
-        };
-    }
-
-    // ✅ FROM FILE 1: Mock employee report data
-    getMockEmployeeReport(filters = {}) {
-        const { employeeId, name, startDate, endDate } = filters;
-        
-        // Mock employee data
-        const mockEmployee = {
-            type: 'employee',
-            employee: {
-                employeeId: 'T1166',
-                firstName: 'Ashish',
-                lastName: 'Dhole',
-                department: 'IT',
-                designation: 'Software Engineer',
-                status: 'active',
-                joinDate: '2023-01-15'
-            },
-            timesheets: [
-                {
-                    _id: 'ts1',
-                    weekStartDate: '2024-01-01',
-                    weekEndDate: '2024-01-07',
-                    weekRange: '01/01/2024 - 01/07/2024',
-                    totalHours: 40,
-                    totalNormalHours: 40,
-                    totalOvertimeHours: 0,
-                    status: 'approved',
-                    submittedAt: '2024-01-08T09:00:00Z',
-                    approvedAt: '2024-01-09T10:00:00Z',
-                    approvedBy: { firstName: 'Manager', lastName: 'User' },
-                    projectSummary: [
-                        { projectCode: 'PROJ001', totalHours: 25, normalHours: 25, overtimeHours: 0, entries: 5 },
-                        { projectCode: 'PROJ002', totalHours: 15, normalHours: 15, overtimeHours: 0, entries: 3 }
-                    ]
-                },
-                {
-                    _id: 'ts2',
-                    weekStartDate: '2024-01-08',
-                    weekEndDate: '2024-01-14',
-                    weekRange: '01/08/2024 - 01/14/2024',
-                    totalHours: 42,
-                    totalNormalHours: 40,
-                    totalOvertimeHours: 2,
-                    status: 'approved',
-                    submittedAt: '2024-01-15T09:00:00Z',
-                    approvedAt: '2024-01-16T10:00:00Z',
-                    approvedBy: { firstName: 'Manager', lastName: 'User' },
-                    projectSummary: [
-                        { projectCode: 'PROJ001', totalHours: 30, normalHours: 28, overtimeHours: 2, entries: 6 },
-                        { projectCode: 'PROJ002', totalHours: 12, normalHours: 12, overtimeHours: 0, entries: 2 }
-                    ]
-                }
-            ]
-        };
-
-        return {
-            success: true,
-            ...mockEmployee
-        };
-    }
-
-    // ✅ FROM FILE 1: Mock report data
-    getMockReportData(reportData) {
-        return {
-            success: true,
-            data: this.getMockHoursTracking(reportData).projects,
-            totals: {
-                totalHours: 120,
-                totalEntries: 15,
-                userCount: 3,
-                projectCount: 2
-            },
-            filters: reportData
-        };
-    }
-
-    // ✅ FROM FILE 1: Mock report summary
-    getMockReportSummary(period = 'week') {
-        const baseData = {
-            hoursByUser: [
-                { userName: 'Ashish Dhole', employeeId: 'T1166', totalHours: 40 },
-                { userName: 'John Smith', employeeId: 'T1167', totalHours: 35 },
-                { userName: 'Sarah Johnson', employeeId: 'T1168', totalHours: 45 }
-            ],
-            hoursByProject: [
-                { projectName: 'Website Development', projectCode: 'PROJ001', totalHours: 60 },
-                { projectName: 'Mobile App', projectCode: 'PROJ002', totalHours: 40 },
-                { projectName: 'Database Upgrade', projectCode: 'PROJ003', totalHours: 20 }
-            ],
-            recentActivity: this.getMockTimesheets().slice(0, 5),
-            period: period,
-            startDate: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
-        };
-
-        return {
-            success: true,
-            data: baseData
-        };
+    getMockEditableTimesheets() {
+        return this.getMockTimesheets().filter(ts => ts.status === 'rejected');
     }
 
     getMockDashboardStats() {
@@ -1714,35 +1778,9 @@ class ApiClient {
             totalProjects: 8,
             weeklyHours: 240,
             utilizationRate: 85,
-            departmentBreakdown: {
-                IT: 15,
-                HR: 8,
-                Finance: 7,
-                Marketing: 6,
-                Operations: 9
-            },
-            timesheetStatus: {
-                approved: 40,
-                pending: 12,
-                rejected: 5
-            }
-        };
-    }
-
-    getMockReports() {
-        return {
-            summary: {
-                totalHours: 240,
-                averageHours: 40,
-                utilization: 85,
-                overtimeHours: 15,
-                projectCount: 8
-            },
-            data: this.getMockTimesheets(),
-            period: {
-                start: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
-                end: new Date().toISOString()
-            }
+            submittedThisWeek: 15,
+            approvedThisWeek: 12,
+            rejectedThisWeek: 3
         };
     }
 
@@ -1760,19 +1798,11 @@ class ApiClient {
                 rejected: 5,
                 pending: 3
             },
-            departmentBreakdown: {
-                IT: 15,
-                HR: 8,
-                Finance: 7,
-                Marketing: 6,
-                Operations: 9
-            },
-            projectUtilization: {
-                'PROJ001': 65,
-                'PROJ002': 85,
-                'PROJ003': 45,
-                'PROJ004': 90
-            }
+            projectUtilization: [
+                { project: 'PROJ001', utilized: 65, allocated: 100 },
+                { project: 'PROJ002', utilized: 40, allocated: 150 },
+                { project: 'PROJ003', utilized: 85, allocated: 80 }
+            ]
         };
     }
 
@@ -1785,84 +1815,16 @@ class ApiClient {
             storageUsed: '2.4 GB',
             lastBackup: new Date().toISOString(),
             activeSessions: 23,
-            averageResponseTime: 245
+            apiCallsToday: 1245
         };
     }
 
-    getMockSettings() {
-        return {
-            companyName: 'Your Company',
-            timesheetDeadline: 5,
-            maxOvertimeHours: 10,
-            allowWeekendEntries: true,
-            autoApprove: false,
-            notificationEmails: true,
-            editingPeriod: 15,
-            requireManagerApproval: true,
-            defaultDepartment: 'IT',
-            workingHours: {
-                monday: 8,
-                tuesday: 8,
-                wednesday: 8,
-                thursday: 8,
-                friday: 8,
-                saturday: 0,
-                sunday: 0
-            }
-        };
+    formatDate(date) {
+        return date.toISOString().split('T')[0];
     }
 
     // ==================== ADVANCED UTILITY METHODS ====================
 
-    // ✅ FROM FILE 1: Helper function to calculate totals for projects
-    calculateTotals(projects) {
-        const totals = {
-            totalHours: 0,
-            consumedHours: 0,
-            balanceHours: 0,
-            variationHours: 0
-        };
-
-        projects.forEach(project => {
-            totals.totalHours += project.totalHours || 0;
-            totals.consumedHours += project.consumedHours || 0;
-            totals.balanceHours += project.balanceHours || 0;
-            totals.variationHours += project.variationHours || 0;
-        });
-
-        return totals;
-    }
-
-    // ✅ FROM FILE 1: Client-side export generation
-    generateClientSideExport(filters, format) {
-        console.log(`🔄 Generating client-side export in ${format} format`);
-        
-        const data = this.getMockHoursTracking(filters).projects;
-        
-        if (format === 'csv') {
-            const headers = ['PL No', 'Project Name', 'Status', 'Total Hours', 'Consumed Hours', 'Balance Hours', 'Assigned Employees'];
-            const csvRows = data.map(project => [
-                project.plNo,
-                project.name,
-                project.status,
-                project.totalHours,
-                project.consumedHours,
-                project.balanceHours,
-                project.assignedEmployees
-            ]);
-            
-            const csvContent = [headers, ...csvRows]
-                .map(row => row.map(field => `"${field}"`).join(','))
-                .join('\n');
-            
-            return csvContent;
-        } else {
-            // Default to JSON
-            return JSON.stringify(data, null, 2);
-        }
-    }
-
-    // Safe user data retrieval
     getSafeUserData() {
         try {
             const userData = localStorage.getItem('userData');
@@ -1878,34 +1840,36 @@ class ApiClient {
     }
 
     logout() {
+        this.logTimesheetOperation('USER_LOGOUT', {
+            userId: this.getSafeUserData()?.employeeId
+        }, 'info');
+        
         this.token = null;
-        // Safe data removal
         try {
             localStorage.removeItem('authToken');
             localStorage.removeItem('userData');
-            localStorage.removeItem('apiOfflineQueue');
         } catch (error) {
             console.warn('Could not clear localStorage:', error);
         }
-        console.log('👋 User logged out');
     }
 
-    // Test server connection
     async testConnection() {
+        this.logTimesheetOperation('CONNECTION_TEST', {}, 'info');
+        
         try {
-            // Try health endpoint first, fallback to any endpoint
-            try {
-                await this.request('/health');
-            } catch (healthError) {
-                // If health endpoint fails, try a basic timesheet request
-                await this.request('/timesheets/my-timesheets?limit=1');
-            }
-            
+            await this.request('/health');
             this.isOnline = true;
             this.retryCount = 0;
+            
+            this.logTimesheetOperation('CONNECTION_TEST_SUCCESS', {}, 'success');
             return { success: true, message: 'Connected to server' };
         } catch (error) {
             this.isOnline = false;
+            
+            this.logTimesheetOperation('CONNECTION_TEST_FAILED', {
+                error: error.message
+            }, 'error');
+            
             return { 
                 success: false, 
                 message: 'Cannot connect to server',
@@ -1914,43 +1878,60 @@ class ApiClient {
         }
     }
 
-    // Get connection status
     getConnectionStatus() {
         return {
             isOnline: this.isOnline,
             baseURL: this.baseURL,
             isAuthenticated: this.isAuthenticated(),
             retryCount: this.retryCount,
-            offlineQueueLength: this.offlineQueue.length
+            offlineQueueLength: this.offlineQueue.length,
+            timesheetLogsCount: this.timesheetLogs.length,
+            forceMockMode: this.forceMockMode
         };
     }
 
-    // Get offline queue status
-    getOfflineQueueStatus() {
+    getTimesheetSystemStatus() {
+        const stats = this.getTimesheetStatistics();
+        const status = this.getConnectionStatus();
+        
         return {
-            length: this.offlineQueue.length,
-            items: this.offlineQueue.map(item => ({
-                endpoint: item.endpoint,
-                method: item.config.method,
-                timestamp: item.timestamp
-            }))
+            ...stats,
+            ...status,
+            lastSync: new Date().toISOString(),
+            features: {
+                submission: true,
+                approval: true,
+                rejection: true,
+                editing: true,
+                resubmission: true,
+                export: true,
+                offlineSupport: true,
+                analytics: true,
+                adminFeatures: true
+            }
         };
-    }
-
-    // Safe method to check if we're in a browser environment
-    isBrowserEnvironment() {
-        return typeof window !== 'undefined' && typeof document !== 'undefined';
     }
 
     // Performance monitoring
     async measurePerformance(endpoint, options = {}) {
         const startTime = performance.now();
+        const requestId = this.generateId();
+        
+        this.logTimesheetOperation('PERFORMANCE_TEST_START', {
+            requestId,
+            endpoint
+        }, 'info');
+        
         try {
             const result = await this.request(endpoint, options);
             const endTime = performance.now();
             const duration = endTime - startTime;
             
-            console.log(`⏱️  Performance: ${endpoint} took ${duration.toFixed(2)}ms`);
+            this.logTimesheetOperation('PERFORMANCE_TEST_SUCCESS', {
+                requestId,
+                endpoint,
+                duration: duration.toFixed(2)
+            }, 'success');
             
             return {
                 success: true,
@@ -1962,7 +1943,12 @@ class ApiClient {
             const endTime = performance.now();
             const duration = endTime - startTime;
             
-            console.error(`⏱️  Performance Error: ${endpoint} failed after ${duration.toFixed(2)}ms`, error);
+            this.logTimesheetOperation('PERFORMANCE_TEST_FAILED', {
+                requestId,
+                endpoint,
+                duration: duration.toFixed(2),
+                error: error.message
+            }, 'error');
             
             return {
                 success: false,
@@ -1972,27 +1958,78 @@ class ApiClient {
             };
         }
     }
+
+    // Export logs for debugging
+    exportLogs(format = 'json') {
+        const logs = this.getTimesheetLogs(1000);
+        const exportData = {
+            exportTimestamp: new Date().toISOString(),
+            totalLogs: logs.length,
+            systemStatus: this.getTimesheetSystemStatus(),
+            logs: logs
+        };
+        
+        if (format === 'csv') {
+            const headers = ['Timestamp', 'Operation', 'Status', 'User', 'Session ID', 'Data'];
+            const csvRows = logs.map(log => [
+                log.timestamp,
+                log.operation,
+                log.status,
+                log.user,
+                log.sessionId,
+                JSON.stringify(log.data)
+            ]);
+            
+            const csvContent = [headers, ...csvRows]
+                .map(row => row.map(field => `"${field}"`).join(','))
+                .join('\n');
+            
+            return csvContent;
+        } else {
+            return JSON.stringify(exportData, null, 2);
+        }
+    }
+
+    // System diagnostics
+    async runDiagnostics() {
+        const diagnostics = {
+            timestamp: new Date().toISOString(),
+            connection: await this.testConnection(),
+            authentication: this.isAuthenticated(),
+            userData: this.getSafeUserData() ? 'Present' : 'Missing',
+            localStorage: {
+                authToken: localStorage.getItem('authToken') ? 'Present' : 'Missing',
+                userData: localStorage.getItem('userData') ? 'Present' : 'Missing',
+                apiBaseURL: localStorage.getItem('apiBaseURL') || 'Not set'
+            },
+            system: this.getTimesheetSystemStatus(),
+            performance: await this.measurePerformance('/health')
+        };
+
+        this.logTimesheetOperation('SYSTEM_DIAGNOSTICS', diagnostics, 'info');
+        return diagnostics;
+    }
 }
 
 // Create and export global instance
 const apiClient = new ApiClient();
 window.apiClient = apiClient;
 
-// Auto-test connection on load (only in browser environment)
+// Auto-configure on load
 if (typeof window !== 'undefined') {
+    // Set default config if not present
+    if (!window.APP_CONFIG) {
+        window.APP_CONFIG = {
+            API_BASE_URL: 'http://localhost:5000/api'
+        };
+    }
+    
+    // Auto-test connection
     setTimeout(() => {
         apiClient.testConnection().then(status => {
             console.log('🔌 Connection test:', status);
-            
-            if (!status.success) {
-                apiClient.safeNotification(
-                    `Offline Mode: ${status.message}. Some features may be limited.`,
-                    'warning',
-                    8000
-                );
-            }
         });
     }, 1000);
 }
 
-console.log('✅ Complete Enhanced API Client initialized with ALL features from both files');
+console.log('✅ COMPLETE ENHANCED API CLIENT initialized (1700+ lines) - All features loaded');
