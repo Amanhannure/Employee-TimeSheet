@@ -2,6 +2,8 @@
 
 class ApiClient {
     constructor() {
+        this.clearProblematicStorage();
+       
         // Dynamic base URL - supports different environments
         this.baseURL = this.getBaseURL();
         this.token = localStorage.getItem('authToken');
@@ -23,8 +25,60 @@ class ApiClient {
         
         // Auto-test connection
         this.autoTestConnection();
-    }
 
+         this.safeAutoTest();
+    }
+      clearProblematicStorage() {
+        try {
+            // Clear the massive offline queue that causes loops
+            localStorage.removeItem('apiOfflineQueue');
+            
+            // Clear old failed attempts
+            sessionStorage.removeItem('login_attempts');
+            sessionStorage.removeItem('admin_login_attempts');
+            
+            // Limit timesheet logs to prevent storage bloat
+            const savedLogs = localStorage.getItem('timesheetLogs');
+            if (savedLogs) {
+                const logs = JSON.parse(savedLogs);
+                if (logs.length > 100) {
+                    localStorage.setItem('timesheetLogs', JSON.stringify(logs.slice(0, 100)));
+                    console.log('📋 Trimmed timesheet logs from', logs.length, 'to 100');
+                }
+            }
+        } catch (error) {
+            console.warn('Storage cleanup warning:', error);
+        }
+    }
+    safeAutoTest() {
+        // Non-blocking, single health check
+        setTimeout(() => {
+            this.testConnection().then(status => {
+                console.log('🔌 Connection test:', status);
+            }).catch(error => {
+                console.log('🔌 Connection test failed (non-critical):', error.message);
+            });
+        }, 2000); // Delay to let page load first
+    }
+     clearAllQueues() {
+    console.log('🧹 Clearing all queues and storage...');
+    
+    // Clear offline queue
+    this.offlineQueue = [];
+    this.saveOfflineQueue();
+    
+    // Clear timesheet logs if they're too big
+    if (this.timesheetLogs.length > 100) {
+        this.timesheetLogs = this.timesheetLogs.slice(0, 100);
+        this.saveTimesheetLogs();
+    }
+    
+    // Clear localStorage items
+    localStorage.removeItem('apiOfflineQueue');
+    sessionStorage.clear();
+    
+    console.log('✅ All queues cleared');
+}
     // ==================== CONFIGURATION & INITIALIZATION ====================
 
     getBaseURL() {
@@ -545,42 +599,45 @@ class ApiClient {
         // Simulate network delay
         await this.delay(300 + Math.random() * 700);
         
-        const mockResponses = {
-            // Auth endpoints
-            '/auth/login': this.mockLogin(options.body),
-            '/auth/me': this.getSafeUserData() || this.getMockUsers()[0],
-            '/auth/profile': { success: true, message: 'Profile updated successfully' },
-            
-            // Password reset endpoints - FIXED
-            '/auth/password/forgot': this.mockInitiatePasswordReset(options.body),
-            '/auth/password/verify-security': { success: true, resetToken: 'mock-reset-token' },
-            '/auth/password/verify-email': { success: true, resetToken: 'mock-reset-token' },
-            '/auth/password/reset': { success: true, message: 'Password reset successful' },
-            '/auth/password/send-code': { success: true, message: 'Verification code sent', maskedEmail: 't****@company.com' },
-            
-            // Timesheet endpoints
-            '/timesheets/my-timesheets': this.getMockTimesheets(),
-            '/timesheets/submit': this.mockSubmitTimesheet(options.body),
-            '/timesheets/editable-timesheets': this.getMockEditableTimesheets(),
-            '/timesheets/check-submission-block': { isBlocked: false, message: '' },
-            
-            // Project endpoints
-            '/projects/my-projects': this.getMockProjects(),
-            '/projects': this.getMockProjects(),
-            
-            // Activity code endpoints
-            '/activity-codes': this.getMockActivityCodes(),
-            
-            // Dashboard endpoints
-            '/dashboard/stats': this.getMockDashboardStats(),
-            '/dashboard/analytics': this.getMockAnalytics(),
-            
-            // User endpoints
-            '/users': { users: this.getMockUsers() },
-            
-            // Health check
-            '/health': { status: 'OK', message: 'Mock server is running', timestamp: new Date().toISOString() }
-        };
+       const mockResponses = {
+    // Auth endpoints
+    '/auth/login': this.mockLogin(options.body),
+    '/auth/me': this.getSafeUserData() || this.getMockUsers()[0],
+    '/auth/profile': { success: true, message: 'Profile updated successfully' },
+    
+    // Password reset endpoints
+    '/auth/password/forgot': this.mockInitiatePasswordReset(options.body),
+    '/auth/password/verify-security': { success: true, resetToken: 'mock-reset-token' },
+    '/auth/password/verify-email': { success: true, resetToken: 'mock-reset-token' },
+    '/auth/password/reset': { success: true, message: 'Password reset successful' },
+    '/auth/password/send-code': { success: true, message: 'Verification code sent', maskedEmail: 't****@company.com' },
+    
+    // Timesheet endpoints
+    '/timesheets/my-timesheets': this.getMockTimesheets(),
+    '/timesheets/submit': this.mockSubmitTimesheet(options.body),
+    '/timesheets/editable-timesheets': this.getMockEditableTimesheets(),
+    '/timesheets/check-submission-block': { isBlocked: false, message: '' },
+    
+    // ✅ ADD THIS LINE for CSV export:
+    '/timesheets/export/mock-timesheet-id': this.generateMockCSVResponse('mock-timesheet-id'),
+    
+    // Project endpoints
+    '/projects/my-projects': this.getMockProjects(),
+    '/projects': this.getMockProjects(),
+    
+    // Activity code endpoints
+    '/activity-codes': this.getMockActivityCodes(),
+    
+    // Dashboard endpoints
+    '/dashboard/stats': this.getMockDashboardStats(),
+    '/dashboard/analytics': this.getMockAnalytics(),
+    
+    // User endpoints
+    '/users': { users: this.getMockUsers() },
+    
+    // Health check
+    '/health': { status: 'OK', message: 'Mock server is running', timestamp: new Date().toISOString() }
+};
 
         const response = mockResponses[endpoint] || { 
             mock: true, 
@@ -1326,31 +1383,68 @@ class ApiClient {
         }
     }
 
-    async exportTimesheetToCSV(timesheetId) {
-        this.logTimesheetOperation('EXPORT_TIMESHEET_CSV_ATTEMPT', { timesheetId }, 'export');
+   async exportTimesheetToCSV(timesheetId) {
+    this.logTimesheetOperation('EXPORT_TIMESHEET_CSV_ATTEMPT', { timesheetId }, 'export');
+    
+    try {
+        const response = await this.request(`/timesheets/export/${timesheetId}`, {
+            headers: {
+                'Accept': 'text/csv'
+            }
+        });
         
-        try {
-            const response = await this.request(`/timesheets/export/${timesheetId}`, {
-                headers: {
-                    'Accept': 'text/csv'
-                }
-            });
-            
-            this.logTimesheetOperation('EXPORT_TIMESHEET_CSV_SUCCESS', {
-                timesheetId,
-                contentLength: response.length
-            }, 'success');
-            
-            return response;
-        } catch (error) {
-            this.logTimesheetOperation('EXPORT_TIMESHEET_CSV_FAILED', {
-                timesheetId,
-                error: error.message
-            }, 'error');
-            
-            throw error;
+        // Create and trigger download
+        const blob = new Blob([response], { type: 'text/csv' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `timesheet-${timesheetId}-${new Date().toISOString().split('T')[0]}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+        
+        this.logTimesheetOperation('EXPORT_TIMESHEET_CSV_SUCCESS', {
+            timesheetId,
+            contentLength: response.length
+        }, 'success');
+        
+        this.safeNotification('Timesheet exported successfully!', 'success', 3000);
+        
+        return { success: true, message: 'Download started' };
+        
+    } catch (error) {
+        this.logTimesheetOperation('EXPORT_TIMESHEET_CSV_FAILED', {
+            timesheetId,
+            error: error.message
+        }, 'error');
+        
+        // If the endpoint doesn't exist, provide a mock CSV
+        if (error.status === 404) {
+            this.safeNotification('Export feature coming soon! Generating sample CSV...', 'info', 3000);
+            return this.generateMockCSV(timesheetId);
         }
+        
+        throw error;
     }
+}
+
+// Add this helper method for mock CSV generation
+generateMockCSV(timesheetId) {
+    const csvContent = `Timesheet ID,Employee,Week Start,Week End,Total Hours,Status\n${timesheetId},Mock User,2024-01-01,2024-01-07,40.0,approved\n`;
+    
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `timesheet-${timesheetId}-sample.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+    
+    return { success: true, message: 'Sample CSV generated' };
+}
 
     async exportMultipleTimesheetsToCSV(timesheetIds) {
         this.logTimesheetOperation('EXPORT_MULTIPLE_TIMESHEETS_CSV_ATTEMPT', {

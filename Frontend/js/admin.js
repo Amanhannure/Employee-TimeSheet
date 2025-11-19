@@ -637,7 +637,7 @@ function updateRecentTimesheets(timesheets) {
         if (recentTimesheets.length === 0) {
             tbody.innerHTML = `
                 <tr>
-                    <td colspan="6" style="text-align: center; padding: 20px;">
+                    <td colspan="7" style="text-align: center; padding: 20px;">
                         <i class="fas fa-inbox"></i> No timesheets found
                     </td>
                 </tr>
@@ -657,17 +657,23 @@ function updateRecentTimesheets(timesheets) {
             const totalHours = timesheet.totalHours || 
                 ((timesheet.totalNormalHours || 0) + (timesheet.totalOvertimeHours || 0));
             
+            // ✅ ENHANCED: Calculate miscellaneous hours (only show for approved timesheets)
+            const miscHours = calculateMiscellaneousHours(timesheet);
+            const miscHoursDisplay = timesheet.status === 'approved' ? 
+                `<span class="misc-hours ${miscHours > 0 ? 'has-misc' : 'no-misc'}">${miscHours.toFixed(1)}</span>` : 
+                '<span class="misc-hours na">-</span>';
+            
             // Status display formatting
             const status = timesheet.status ? 
                 timesheet.status.charAt(0).toUpperCase() + timesheet.status.slice(1) : 'Unknown';
             
-            // ✅ ENHANCED: Editing deadline information for rejected timesheets
+            // Editing deadline information for rejected timesheets
             const editingInfo = timesheet.status === 'rejected' ? formatEditingDeadline(timesheet) : '';
             
             // Show action buttons for 'pending' status
             const isPending = timesheet.status === 'pending';
             
-            // ✅ NEW: Blocking indicator
+            // Blocking indicator
             const isBlocking = isTimesheetBlocking(timesheet);
             const blockingIndicator = isBlocking ? 
                 `<span class="blocking-indicator" title="Blocking new submissions">🚫</span>` : '';
@@ -680,6 +686,9 @@ function updateRecentTimesheets(timesheets) {
                     </td>
                     <td>${weekStart} - ${weekEnd}</td>
                     <td>${totalHours.toFixed(1)}</td>
+                    <td class="misc-hours-cell">
+                        ${miscHoursDisplay}
+                    </td>
                     <td>
                         <span class="status ${timesheet.status}">${sanitizeHTML(status)}</span>
                         ${editingInfo}
@@ -715,7 +724,7 @@ function updateRecentTimesheets(timesheets) {
         console.error('❌ [DEBUG] Error updating recent timesheets:', error);
         tbody.innerHTML = `
             <tr>
-                <td colspan="6" style="text-align: center; color: #e74c3c;">
+                <td colspan="7" style="text-align: center; color: #e74c3c;">
                     <i class="fas fa-exclamation-triangle"></i> Error loading timesheets: ${error.message}
                 </td>
             </tr>
@@ -766,6 +775,7 @@ function setupActionButtons() {
 }
 
 // ENHANCED: View timesheet details with 15-day editing info
+// ENHANCED: View timesheet details with 15-day editing info and misc hours breakdown
 async function viewTimesheetDetails(timesheetId) {
     if (isLoading) return;
     
@@ -833,6 +843,80 @@ async function viewTimesheetDetails(timesheetId) {
             `;
         }
         
+        // ✅ ENHANCED: Miscellaneous hours breakdown
+        const miscHours = calculateMiscellaneousHours(timesheet);
+        const miscEntries = timesheet.entries ? timesheet.entries.filter(entry => {
+            const isMiscActivity = entry.activityCode === 'MISC' || 
+                                  entry.activityCode === 'MISCELLANEOUS' ||
+                                  (entry.activityCode && entry.activityCode.includes('MISC'));
+            
+            const isMiscProject = entry.projectCode === 'MISC' || 
+                                 entry.projectCode === 'Miscellaneous Activity' ||
+                                 (entry.projectCode && entry.projectCode.includes('Misc')) ||
+                                 entry.projectCode === 'MISCELLANEOUS';
+            
+            return isMiscActivity || isMiscProject;
+        }) : [];
+
+        let miscBreakdownHTML = '';
+        if (miscEntries.length > 0) {
+            miscBreakdownHTML = `
+                <div class="misc-summary">
+                    <h4>Miscellaneous Hours Breakdown</h4>
+                    <div class="misc-stats">
+                        <p><strong>Total Misc Hours:</strong> ${miscHours.toFixed(1)}</p>
+                        <p><strong>Misc Entries:</strong> ${miscEntries.length}</p>
+                    </div>
+                    <div class="misc-entries">
+                        <h5>Miscellaneous Entries:</h5>
+                        <div class="table-container">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Project</th>
+                                        <th>Activity</th>
+                                        <th>Normal Hours</th>
+                                        <th>Overtime Hours</th>
+                                        <th>Total</th>
+                                        <th>Remarks</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${miscEntries.map(entry => {
+                                        const entryDate = new Date(entry.date);
+                                        const dayName = entryDate.toLocaleDateString('en-US', { weekday: 'short' });
+                                        const totalEntryHours = (entry.normalHours || 0) + (entry.overtimeHours || 0);
+                                        
+                                        return `
+                                            <tr>
+                                                <td>${formatDate(entry.date)} (${dayName})</td>
+                                                <td>${sanitizeHTML(entry.projectCode)}</td>
+                                                <td>${sanitizeHTML(entry.activityCode)}</td>
+                                                <td>${entry.normalHours || 0}</td>
+                                                <td>${entry.overtimeHours || 0}</td>
+                                                <td><strong>${totalEntryHours.toFixed(1)}</strong></td>
+                                                <td>${sanitizeHTML(entry.remarks || '-')}</td>
+                                            </tr>
+                                        `;
+                                    }).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            `;
+        } else {
+            miscBreakdownHTML = `
+                <div class="misc-summary">
+                    <h4>Miscellaneous Hours</h4>
+                    <div class="no-misc-entries">
+                        <p><i class="fas fa-info-circle"></i> No miscellaneous hours recorded for this timesheet.</p>
+                    </div>
+                </div>
+            `;
+        }
+        
         // Create detailed view in modal
         const modal = document.getElementById('timesheetDetailsModal');
         const content = document.getElementById('timesheetDetailsContent');
@@ -860,6 +944,7 @@ async function viewTimesheetDetails(timesheetId) {
                     </div>
                     ${editingInfo}
                 </div>
+                ${miscBreakdownHTML}
         `;
 
         if (timesheet.entries && Array.isArray(timesheet.entries) && timesheet.entries.length > 0) {
@@ -1383,7 +1468,31 @@ function openMiscellaneousHoursModal() {
         if (resultDiv) resultDiv.innerHTML = '';
     }
 }
-
+function calculateMiscellaneousHours(timesheet) {
+    if (!timesheet.entries || !Array.isArray(timesheet.entries)) {
+        return 0;
+    }
+    
+    const miscEntries = timesheet.entries.filter(entry => {
+        // Check for miscellaneous activity codes and project codes
+        const isMiscActivity = entry.activityCode === 'MISC' || 
+                              entry.activityCode === 'MISCELLANEOUS' ||
+                              (entry.activityCode && entry.activityCode.includes('MISC'));
+        
+        const isMiscProject = entry.projectCode === 'MISC' || 
+                             entry.projectCode === 'Miscellaneous Activity' ||
+                             (entry.projectCode && entry.projectCode.includes('Misc')) ||
+                             entry.projectCode === 'MISCELLANEOUS';
+        
+        return isMiscActivity || isMiscProject;
+    });
+    
+    return miscEntries.reduce((total, entry) => {
+        const normalHours = entry.normalHours || 0;
+        const overtimeHours = entry.overtimeHours || 0;
+        return total + normalHours + overtimeHours;
+    }, 0);
+}
 function closeMiscellaneousHoursModal() {
     document.getElementById('miscHoursModal').style.display = 'none';
 }
