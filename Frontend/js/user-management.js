@@ -1,121 +1,205 @@
-// User Management JavaScript - Fixed Version
+// ==================== ENHANCED USER MANAGEMENT SCRIPT ====================
+// Combined features from both files with better error handling and safety
+
 document.addEventListener('DOMContentLoaded', async function() {
+    try {
+        await initializeUserManagement();
+    } catch (error) {
+        console.error('Failed to initialize user management:', error);
+        showNotification('Failed to initialize user management system', 'error');
+    }
+});
+
+async function initializeUserManagement() {
     try {
         await loadAllUsers();
         updateOverviewCards();
+        setupEventListeners();
+        console.log('✅ User management system initialized');
     } catch (error) {
-        console.error('Failed to load users:', error);
-        showNotification('Failed to load users data', 'error');
-    }
-    
-    document.getElementById('addUserForm').addEventListener('submit', function(e) {
-        e.preventDefault();
-        addUser();
-    });
-    
-    document.getElementById('editUserForm').addEventListener('submit', function(e) {
-        e.preventDefault();
-        updateUser();
-    });
-    
-    document.getElementById('searchUsers').addEventListener('input', filterUsers);
-    document.getElementById('filterRole').addEventListener('change', filterUsers);
-    document.getElementById('filterStatus').addEventListener('change', filterUsers);
-});
-
-async function loadAllUsers() {
-    try {
-        console.log('Starting to load all users...');
-        
-        console.log('Fetching users...');
-        const response = await apiClient.getUsers({ page: 1, pageSize: 1000 });
-        
-        // ✅ FIXED: Handle the response format correctly
-        let users = [];
-        if (Array.isArray(response)) {
-            // If response is directly an array
-            users = response;
-        } else if (response && Array.isArray(response.users)) {
-            // If response is { users: [...] }
-            users = response.users;
-        } else if (response && Array.isArray(response.data)) {
-            // If response is { data: [...] }
-            users = response.data;
-        }
-        
-        console.log('API Response:', users.length, 'users');
-        console.log('First user sample:', users[0]);
-        
-        // Remove duplicates based on _id since pagination might return same data
-        const uniqueUsers = [];
-        const seenIds = new Set();
-        
-        if (users && users.length > 0) {
-            users.forEach(user => {
-                if (user._id && !seenIds.has(user._id)) {
-                    seenIds.add(user._id);
-                    uniqueUsers.push(user);
-                }
-            });
-        }
-        
-        window.users = uniqueUsers;
-        
-        console.log(`✅ Successfully loaded ${uniqueUsers.length} unique users`);
-        
-        const grid = document.getElementById('usersGrid');
-        grid.innerHTML = '';
-        
-        if (uniqueUsers.length === 0) {
-            grid.innerHTML = '<div class="no-users">No users found</div>';
-            return;
-        }
-        
-        uniqueUsers.forEach(user => {
-            const card = createUserCard(user);
-            grid.appendChild(card);
-        });
-        
-    } catch (error) {
-        console.error('Error loading users:', error);
+        console.error('Error initializing user management:', error);
         throw error;
     }
 }
 
+function setupEventListeners() {
+    // Safe event listener binding with null checks
+    const addUserForm = getElementSafely('addUserForm');
+    const editUserForm = getElementSafely('editUserForm');
+    const searchUsers = getElementSafely('searchUsers');
+    const filterRole = getElementSafely('filterRole');
+    const filterStatus = getElementSafely('filterStatus');
+    const toggleSidebar = getElementSafely('toggle-sidebar');
+    
+    if (addUserForm) {
+        addUserForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            addUser();
+        });
+    }
+    
+    if (editUserForm) {
+        editUserForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            updateUser();
+        });
+    }
+    
+    if (searchUsers) {
+        searchUsers.addEventListener('input', debounce(filterUsers, 300));
+    }
+    
+    if (filterRole) {
+        filterRole.addEventListener('change', filterUsers);
+    }
+    
+    if (filterStatus) {
+        filterStatus.addEventListener('change', filterUsers);
+    }
+    
+    if (toggleSidebar) {
+        toggleSidebar.addEventListener('click', function() {
+            const dashboardContainer = document.querySelector('.dashboard-container');
+            if (dashboardContainer) {
+                dashboardContainer.classList.toggle('sidebar-collapsed');
+            }
+        });
+    }
+    
+    // Global click handler for modal dismissal
+    window.onclick = function(event) {
+        if (event.target.classList.contains('modal')) {
+            event.target.style.display = 'none';
+        }
+    };
+}
+
+// ==================== USER DATA MANAGEMENT ====================
+
+async function loadAllUsers() {
+    try {
+        console.log('🔄 Starting to load all users...');
+        
+        showLoadingState(true);
+        
+        const response = await apiClient.getUsers({ page: 1, pageSize: 1000 });
+        
+        // ✅ ENHANCED: Handle multiple response formats
+        let users = extractUsersFromResponse(response);
+        
+        console.log('📊 API Response:', users.length, 'users');
+        
+        if (users.length > 0) {
+            console.log('👤 First user sample:', users[0]);
+        }
+        
+        // Remove duplicates based on _id
+        const uniqueUsers = removeDuplicateUsers(users);
+        
+        window.users = uniqueUsers;
+        window.filteredUsers = [...uniqueUsers]; // Initialize filtered users
+        
+        console.log(`✅ Successfully loaded ${uniqueUsers.length} unique users`);
+        
+        renderUserGrid(uniqueUsers);
+        updateOverviewCards();
+        
+    } catch (error) {
+        console.error('❌ Error loading users:', error);
+        showNotification('Failed to load users. Please check your connection.', 'error');
+        renderEmptyState('Unable to load users. Please try again.');
+        throw error;
+    } finally {
+        showLoadingState(false);
+    }
+}
+
+function extractUsersFromResponse(response) {
+    if (Array.isArray(response)) {
+        return response;
+    } else if (response && Array.isArray(response.users)) {
+        return response.users;
+    } else if (response && Array.isArray(response.data)) {
+        return response.data;
+    } else if (response && response.users && Array.isArray(response.users)) {
+        return response.users;
+    }
+    return [];
+}
+
+function removeDuplicateUsers(users) {
+    const uniqueUsers = [];
+    const seenIds = new Set();
+    
+    users.forEach(user => {
+        if (user._id && !seenIds.has(user._id)) {
+            seenIds.add(user._id);
+            uniqueUsers.push(user);
+        }
+    });
+    
+    return uniqueUsers;
+}
+
+function renderUserGrid(users) {
+    const grid = getElementSafely('usersGrid');
+    if (!grid) return;
+    
+    grid.innerHTML = '';
+    
+    if (users.length === 0) {
+        renderEmptyState('No users found');
+        return;
+    }
+    
+    users.forEach(user => {
+        const card = createUserCard(user);
+        grid.appendChild(card);
+    });
+}
+
+function renderEmptyState(message) {
+    const grid = getElementSafely('usersGrid');
+    if (!grid) return;
+    
+    grid.innerHTML = `
+        <div class="empty-state">
+            <div class="empty-icon">👥</div>
+            <h3>${message}</h3>
+            <p>Try adjusting your search or add a new user</p>
+            <button class="btn-primary" onclick="openAddUserModal()">
+                <i class="fas fa-plus"></i> Add New User
+            </button>
+        </div>
+    `;
+}
+
+function showLoadingState(show) {
+    const grid = getElementSafely('usersGrid');
+    const loadingIndicator = getElementSafely('loadingIndicator');
+    
+    if (show) {
+        if (grid) grid.style.opacity = '0.6';
+        if (loadingIndicator) loadingIndicator.style.display = 'block';
+    } else {
+        if (grid) grid.style.opacity = '1';
+        if (loadingIndicator) loadingIndicator.style.display = 'none';
+    }
+}
+
+// ==================== USER CARD CREATION ====================
+
 function createUserCard(user) {
     const card = document.createElement('div');
     card.className = 'user-card';
+    card.dataset.userId = user._id;
     
-    // Ensure all properties have fallbacks to prevent undefined errors
-    const safeUser = {
-        _id: user._id || '',
-        employeeId: user.employeeId || 'N/A',
-        firstName: user.firstName || 'Unknown',
-        lastName: user.lastName || 'User',
-        email: user.email || 'No email',
-        username: user.username || 'N/A',
-        role: user.role || 'employee',
-        designation: user.designation || 'Not specified',
-        department: user.department || 'Not assigned',
-        status: user.status || 'active',
-        phone: user.phone || 'N/A',
-        joinDate: user.joinDate || ''
-    };
-    
-    // Format join date if available
-    let formattedDate = 'Not set';
-    if (safeUser.joinDate) {
-        try {
-            const date = new Date(safeUser.joinDate);
-            formattedDate = date.toLocaleDateString();
-        } catch (e) {
-            formattedDate = safeUser.joinDate;
-        }
-    }
+    const safeUser = createSafeUserObject(user);
+    const formattedDate = formatJoinDate(safeUser.joinDate);
     
     card.innerHTML = `
         <div class="user-header">
-            <div>
+            <div class="user-basic-info">
                 <h3 class="user-name">${safeUser.firstName} ${safeUser.lastName}</h3>
                 <p class="user-email">${safeUser.email}</p>
                 <p class="user-employee-id"><strong>ID:</strong> ${safeUser.employeeId}</p>
@@ -142,16 +226,22 @@ function createUserCard(user) {
             </div>
             <div class="stat-item">
                 <div class="stat-label">Status</div>
-                <div class="stat-value status-${safeUser.status}">${safeUser.status}</div>
+                <div class="stat-value status-${safeUser.status}">
+                    <span class="status-indicator ${safeUser.status}"></span>
+                    ${safeUser.status}
+                </div>
             </div>
         </div>
         
         <div class="user-actions-card">
-            <button class="btn-small btn-edit" onclick="openEditUserModal('${safeUser._id}')">
+            <button class="btn-small btn-edit" onclick="openEditUserModal('${safeUser._id}')" title="Edit User">
                 <i class="fas fa-edit"></i> Edit
             </button>
-            <button class="btn-small btn-delete" onclick="openDeleteUserModal('${safeUser._id}')">
+            <button class="btn-small btn-delete" onclick="openDeleteUserModal('${safeUser._id}')" title="Delete User">
                 <i class="fas fa-trash"></i> Delete
+            </button>
+            <button class="btn-small btn-view" onclick="viewUserDetails('${safeUser._id}')" title="View Details">
+                <i class="fas fa-eye"></i> View
             </button>
         </div>
     `;
@@ -159,287 +249,418 @@ function createUserCard(user) {
     return card;
 }
 
+function createSafeUserObject(user) {
+    return {
+        _id: user._id || '',
+        employeeId: user.employeeId || 'N/A',
+        firstName: user.firstName || 'Unknown',
+        lastName: user.lastName || 'User',
+        email: user.email || 'No email',
+        username: user.username || 'N/A',
+        role: user.role || 'employee',
+        designation: user.designation || 'Not specified',
+        department: user.department || 'Not assigned',
+        status: user.status || 'active',
+        phone: user.phone || 'N/A',
+        joinDate: user.joinDate || ''
+    };
+}
+
+function formatJoinDate(joinDate) {
+    if (!joinDate) return 'Not set';
+    
+    try {
+        const date = new Date(joinDate);
+        return date.toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric'
+        });
+    } catch (e) {
+        return joinDate;
+    }
+}
+
+// ==================== OVERVIEW AND STATISTICS ====================
+
 function updateOverviewCards() {
     const users = window.users || [];
     const totalUsers = users.length;
     const activeUsers = users.filter(u => u.status === 'active').length;
     const inactiveUsers = users.filter(u => u.status === 'inactive').length;
     
-    document.getElementById('totalUsers').textContent = totalUsers;
-    document.getElementById('activeUsers').textContent = activeUsers;
-    document.getElementById('InactiveUsers').textContent = inactiveUsers;
+    // Safe element updates
+    setElementTextSafely('totalUsers', totalUsers);
+    setElementTextSafely('activeUsers', activeUsers);
+    setElementTextSafely('InactiveUsers', inactiveUsers);
     
-    console.log(`Overview updated: ${totalUsers} total, ${activeUsers} active, ${inactiveUsers} inactive`);
+    console.log(`📈 Overview updated: ${totalUsers} total, ${activeUsers} active, ${inactiveUsers} inactive`);
 }
+
+// ==================== USER OPERATIONS ====================
 
 async function addUser() {
     try {
-        const form = document.getElementById('addUserForm');
-        const formData = new FormData(form);
-        
-        const userData = {
-            employeeId: formData.get('employeeId'),
-            firstName: formData.get('firstName'),
-            lastName: formData.get('lastName'),
-            username: formData.get('username'),
-            email: formData.get('email'),
-            phone: formData.get('phone'),
-            password: formData.get('password'),
-            role: formData.get('role'),
-            designation: formData.get('designation'),
-            department: formData.get('department'),
-            joinDate: formData.get('joinDate'),
-            status: formData.get('status') || 'active'
-        };
-        
-        // Validate required fields
-        const requiredFields = ['employeeId', 'firstName', 'lastName', 'username', 'email', 'password', 'role'];
-        const missingFields = requiredFields.filter(field => !userData[field]);
-        
-        if (missingFields.length > 0) {
-            showNotification(`Please fill in all required fields: ${missingFields.join(', ')}`, 'error');
+        const form = getElementSafely('addUserForm');
+        if (!form) {
+            showNotification('Add user form not found', 'error');
             return;
         }
         
-        // Validate employee ID format
-        if (!/^T\d+$/.test(userData.employeeId)) {
-            showNotification('Employee ID must start with T followed by numbers (e.g., T1040)', 'error');
+        const userData = extractFormData(form);
+        const validation = validateUserData(userData, 'add');
+        
+        if (!validation.isValid) {
+            showNotification(validation.message, 'error');
             return;
         }
         
-        // Validate password length
-        if (userData.password.length < 4) {
-            showNotification('Password must be at least 4 characters long', 'error');
-            return;
-        }
+        console.log('➕ Adding new user:', userData);
         
-        console.log('Adding new user:', userData);
+        showLoadingState(true);
         await apiClient.createUser(userData);
+        
         await loadAllUsers();
-        updateOverviewCards();
         closeAddUserModal();
-        showNotification('User added successfully!');
+        showNotification('User added successfully! 🎉');
+        
     } catch (error) {
-        console.error('Error adding user:', error);
+        console.error('❌ Error adding user:', error);
         showNotification(error.message || 'Failed to add user', 'error');
+    } finally {
+        showLoadingState(false);
     }
 }
 
 async function openEditUserModal(userId) {
     try {
-        console.log('Loading user for edit:', userId);
+        console.log('📝 Loading user for edit:', userId);
         
-        let user;
-        try {
-            // ✅ FIXED: Use the correct API client method name
-            user = await apiClient.getUser(userId);
-        } catch (error) {
-            console.log('getUser failed, trying alternative method...');
-            // If API fails, find user in loaded data
-            user = window.users.find(u => u._id === userId);
-        }
+        let user = await fetchUserData(userId);
         
         if (!user) {
             showNotification('User not found', 'error');
             return;
         }
 
-        console.log('User data for edit:', user);
-
-        // Populate all form fields according to schema
-        document.getElementById('editUserId').value = user._id;
-        document.getElementById('editEmployeeId').value = user.employeeId || '';
-        document.getElementById('editUsername').value = user.username || '';
-        document.getElementById('editFirstName').value = user.firstName || '';
-        document.getElementById('editLastName').value = user.lastName || '';
-        document.getElementById('editEmail').value = user.email || '';
-        document.getElementById('editPhone').value = user.phone || '';
-        document.getElementById('editRole').value = user.role || 'employee';
-        document.getElementById('editDesignation').value = user.designation || '';
-        document.getElementById('editDepartment').value = user.department || '';
+        console.log('👤 User data for edit:', user);
+        populateEditForm(user);
         
-        // Handle join date formatting
-        let joinDateValue = '';
-        if (user.joinDate) {
-            try {
-                const date = new Date(user.joinDate);
-                joinDateValue = date.toISOString().split('T')[0];
-            } catch (e) {
-                joinDateValue = user.joinDate;
-            }
-        }
-        document.getElementById('editJoinDate').value = joinDateValue;
+        const modal = getElementSafely('editUserModal');
+        if (modal) modal.style.display = 'block';
         
-        document.getElementById('editStatus').value = user.status || 'active';
+        console.log('✅ Edit modal opened successfully');
         
-        document.getElementById('editUserModal').style.display = 'block';
-        console.log('Edit modal opened successfully');
     } catch (error) {
-        console.error('Error loading user for edit:', error);
+        console.error('❌ Error loading user for edit:', error);
         showNotification('Failed to load user data', 'error');
     }
 }
 
+async function fetchUserData(userId) {
+    try {
+        // Try API first
+        return await apiClient.getUser(userId);
+    } catch (apiError) {
+        console.log('🔍 API failed, searching in local data...');
+        // Fallback to local data
+        return window.users.find(u => u._id === userId);
+    }
+}
+
+function populateEditForm(user) {
+    const safeUser = createSafeUserObject(user);
+    
+    // Populate form fields
+    setElementValueSafely('editUserId', safeUser._id);
+    setElementValueSafely('editEmployeeId', safeUser.employeeId);
+    setElementValueSafely('editUsername', safeUser.username);
+    setElementValueSafely('editFirstName', safeUser.firstName);
+    setElementValueSafely('editLastName', safeUser.lastName);
+    setElementValueSafely('editEmail', safeUser.email);
+    setElementValueSafely('editPhone', safeUser.phone);
+    setElementValueSafely('editRole', safeUser.role);
+    setElementValueSafely('editDesignation', safeUser.designation);
+    setElementValueSafely('editDepartment', safeUser.department);
+    setElementValueSafely('editJoinDate', formatDateForInput(safeUser.joinDate));
+    setElementValueSafely('editStatus', safeUser.status);
+}
+
 async function updateUser() {
     try {
-        const form = document.getElementById('editUserForm');
-        const formData = new FormData(form);
+        const form = getElementSafely('editUserForm');
+        const userId = getElementValueSafely('editUserId');
         
-        const userId = document.getElementById('editUserId').value;
-        
-        if (!userId) {
-            throw new Error('User ID is required');
+        if (!form || !userId) {
+            showNotification('Form or User ID not found', 'error');
+            return;
         }
         
-        const userData = {
-            employeeId: formData.get('employeeId'),
-            firstName: formData.get('firstName'),
-            lastName: formData.get('lastName'),
-            username: formData.get('username'),
-            email: formData.get('email'),
-            phone: formData.get('phone'),
-            role: formData.get('role'),
-            designation: formData.get('designation'),
-            department: formData.get('department'),
-            joinDate: formData.get('joinDate'),
-            status: formData.get('status')
-        };
+        const userData = extractFormData(form);
+        const validation = validateUserData(userData, 'edit');
         
-        console.log('Updating user with ID:', userId);
-        console.log('Update data:', userData);
+        if (!validation.isValid) {
+            showNotification(validation.message, 'error');
+            return;
+        }
         
-        // Use the correct API client method
+        console.log('✏️ Updating user with ID:', userId);
+        console.log('📋 Update data:', userData);
+        
+        showLoadingState(true);
         const result = await apiClient.updateUser(userId, userData);
         
-        console.log('Update result:', result);
+        console.log('✅ Update result:', result);
         
         await loadAllUsers();
-        updateOverviewCards();
         closeEditUserModal();
-        showNotification('User updated successfully!');
+        showNotification('User updated successfully! ✅');
+        
     } catch (error) {
-        console.error('Error updating user:', error);
+        console.error('❌ Error updating user:', error);
         showNotification(error.message || 'Failed to update user', 'error');
+    } finally {
+        showLoadingState(false);
     }
 }
 
 async function openDeleteUserModal(userId) {
     try {
-        let user;
-        try {
-            // ✅ FIXED: Use the correct API client method name
-            user = await apiClient.getUser(userId);
-        } catch (error) {
-            user = window.users.find(u => u._id === userId);
-        }
+        const user = await fetchUserData(userId);
         
         if (!user) {
             showNotification('User not found', 'error');
             return;
         }
 
-        const userName = `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Unknown User';
-        const userEmployeeId = user.employeeId || 'No ID';
+        const safeUser = createSafeUserObject(user);
+        const userName = `${safeUser.firstName} ${safeUser.lastName}`.trim() || 'Unknown User';
+        const userEmployeeId = safeUser.employeeId || 'No ID';
         
-        document.getElementById('deleteUserName').textContent = `${userName} (${userEmployeeId})`;
-        document.getElementById('deleteUserModal').dataset.userId = userId;
-        document.getElementById('deleteUserModal').style.display = 'block';
+        setElementTextSafely('deleteUserName', `${userName} (${userEmployeeId})`);
+        
+        const modal = getElementSafely('deleteUserModal');
+        if (modal) {
+            modal.dataset.userId = userId;
+            modal.style.display = 'block';
+        }
+        
     } catch (error) {
-        console.error('Error loading user for delete:', error);
+        console.error('❌ Error loading user for delete:', error);
         showNotification('Failed to load user data', 'error');
     }
 }
 
 async function confirmDeleteUser() {
     try {
-        const userId = document.getElementById('deleteUserModal').dataset.userId;
+        const modal = getElementSafely('deleteUserModal');
+        const userId = modal ? modal.dataset.userId : null;
+        
         if (!userId) {
             throw new Error('No user ID provided for deletion');
         }
         
-        console.log('Deleting user with ID:', userId);
+        console.log('🗑️ Deleting user with ID:', userId);
+        
+        showLoadingState(true);
         await apiClient.deleteUser(userId);
+        
         await loadAllUsers();
-        updateOverviewCards();
         closeDeleteUserModal();
-        showNotification('User deleted successfully!');
+        showNotification('User deleted successfully! 🗑️');
+        
     } catch (error) {
-        console.error('Error deleting user:', error);
+        console.error('❌ Error deleting user:', error);
         showNotification(error.message || 'Failed to delete user', 'error');
+    } finally {
+        showLoadingState(false);
     }
 }
 
+// ==================== USER FILTERING AND SEARCH ====================
+
 function filterUsers() {
-    const searchTerm = document.getElementById('searchUsers').value.toLowerCase();
-    const roleFilter = document.getElementById('filterRole').value;
-    const statusFilter = document.getElementById('filterStatus').value;
+    const searchTerm = getElementValueSafely('searchUsers').toLowerCase();
+    const roleFilter = getElementValueSafely('filterRole');
+    const statusFilter = getElementValueSafely('filterStatus');
     
     const users = window.users || [];
     const filteredUsers = users.filter(user => {
-        const searchFields = [
-            user.firstName || '',
-            user.lastName || '',
-            user.employeeId || '',
-            user.email || '',
-            user.username || '',
-            user.designation || '',
-            user.department || ''
-        ];
-        
-        const matchesSearch = searchTerm === '' || searchFields.some(field => 
-            field.toLowerCase().includes(searchTerm)
-        );
-        const matchesRole = roleFilter === 'all' || user.role === roleFilter;
-        const matchesStatus = statusFilter === 'all' || user.status === statusFilter;
-        
-        return matchesSearch && matchesRole && matchesStatus;
+        return matchesSearch(user, searchTerm) && 
+               matchesFilter(user, 'role', roleFilter) && 
+               matchesFilter(user, 'status', statusFilter);
     });
     
-    const grid = document.getElementById('usersGrid');
-    grid.innerHTML = '';
+    window.filteredUsers = filteredUsers;
+    renderUserGrid(filteredUsers);
     
-    if (filteredUsers.length === 0) {
-        grid.innerHTML = '<div class="no-users">No users match your search criteria</div>';
-        return;
-    }
-    
-    filteredUsers.forEach(user => {
-        const card = createUserCard(user);
-        grid.appendChild(card);
-    });
-    
-    console.log(`Filtered ${filteredUsers.length} users from ${users.length} total`);
+    console.log(`🔍 Filtered ${filteredUsers.length} users from ${users.length} total`);
 }
 
+function matchesSearch(user, searchTerm) {
+    if (!searchTerm) return true;
+    
+    const searchFields = [
+        user.firstName || '',
+        user.lastName || '',
+        user.employeeId || '',
+        user.email || '',
+        user.username || '',
+        user.designation || '',
+        user.department || ''
+    ];
+    
+    return searchFields.some(field => 
+        field.toLowerCase().includes(searchTerm)
+    );
+}
+
+function matchesFilter(user, field, filterValue) {
+    if (filterValue === 'all') return true;
+    return user[field] === filterValue;
+}
+
+// ==================== VALIDATION UTILITIES ====================
+
+function extractFormData(form) {
+    const formData = new FormData(form);
+    
+    return {
+        employeeId: formData.get('employeeId') || '',
+        firstName: formData.get('firstName') || '',
+        lastName: formData.get('lastName') || '',
+        username: formData.get('username') || '',
+        email: formData.get('email') || '',
+        phone: formData.get('phone') || '',
+        password: formData.get('password') || '',
+        role: formData.get('role') || '',
+        designation: formData.get('designation') || '',
+        department: formData.get('department') || '',
+        joinDate: formData.get('joinDate') || '',
+        status: formData.get('status') || 'active'
+    };
+}
+
+function validateUserData(userData, operation) {
+    const requiredFields = ['employeeId', 'firstName', 'lastName', 'username', 'email', 'role'];
+    
+    if (operation === 'add') {
+        requiredFields.push('password');
+    }
+    
+    const missingFields = requiredFields.filter(field => !userData[field]);
+    
+    if (missingFields.length > 0) {
+        return {
+            isValid: false,
+            message: `Please fill in all required fields: ${missingFields.join(', ')}`
+        };
+    }
+    
+    // Validate employee ID format
+    if (!/^T\d+$/.test(userData.employeeId)) {
+        return {
+            isValid: false,
+            message: 'Employee ID must start with T followed by numbers (e.g., T1040)'
+        };
+    }
+    
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (userData.email && !emailRegex.test(userData.email)) {
+        return {
+            isValid: false,
+            message: 'Please enter a valid email address'
+        };
+    }
+    
+    // Validate password for new users
+    if (operation === 'add' && userData.password.length < 4) {
+        return {
+            isValid: false,
+            message: 'Password must be at least 4 characters long'
+        };
+    }
+    
+    return { isValid: true, message: '' };
+}
+
+// ==================== MODAL MANAGEMENT ====================
+
 function openAddUserModal() {
-    document.getElementById('addUserModal').style.display = 'block';
+    const modal = getElementSafely('addUserModal');
+    if (modal) modal.style.display = 'block';
 }
 
 function closeAddUserModal() {
-    document.getElementById('addUserModal').style.display = 'none';
-    document.getElementById('addUserForm').reset();
+    const modal = getElementSafely('addUserModal');
+    const form = getElementSafely('addUserForm');
+    
+    if (modal) modal.style.display = 'none';
+    if (form) form.reset();
 }
 
 function closeEditUserModal() {
-    document.getElementById('editUserModal').style.display = 'none';
+    const modal = getElementSafely('editUserModal');
+    if (modal) modal.style.display = 'none';
 }
 
 function closeDeleteUserModal() {
-    document.getElementById('deleteUserModal').style.display = 'none';
-    document.getElementById('deleteUserModal').dataset.userId = '';
+    const modal = getElementSafely('deleteUserModal');
+    if (modal) {
+        modal.style.display = 'none';
+        modal.dataset.userId = '';
+    }
 }
 
-// ✅ FIXED: Show notification without recursion issues
+// ==================== UTILITY FUNCTIONS ====================
+
+function getElementSafely(id) {
+    return document.getElementById(id);
+}
+
+function getElementValueSafely(id) {
+    const element = getElementSafely(id);
+    return element ? element.value : '';
+}
+
+function setElementValueSafely(id, value) {
+    const element = getElementSafely(id);
+    if (element) element.value = value;
+}
+
+function setElementTextSafely(id, text) {
+    const element = getElementSafely(id);
+    if (element) element.textContent = text;
+}
+
+function formatDateForInput(dateString) {
+    if (!dateString) return '';
+    
+    try {
+        const date = new Date(dateString);
+        return date.toISOString().split('T')[0];
+    } catch (e) {
+        return dateString;
+    }
+}
+
+function debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+        const later = () => {
+            clearTimeout(timeout);
+            func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+    };
+}
+
+// ==================== NOTIFICATION SYSTEM ====================
+
 function showNotification(message, type = 'success') {
     try {
-        // Use the global showNotification if available and different from this one
-        if (typeof window.showNotification === 'function' && window.showNotification !== showNotification) {
-            window.showNotification(message, type);
-            return;
-        }
-        
-        console.log(`📢 ${type.toUpperCase()}: ${message}`);
-        
         // Remove existing notifications
         const existingNotifications = document.querySelectorAll('.user-management-notification');
         existingNotifications.forEach(notification => notification.remove());
@@ -447,10 +668,24 @@ function showNotification(message, type = 'success') {
         // Create new notification
         const notification = document.createElement('div');
         notification.className = `user-management-notification notification-${type}`;
-        notification.textContent = message;
+        
+        const icons = {
+            success: '✅',
+            error: '❌',
+            warning: '⚠️',
+            info: 'ℹ️'
+        };
+        
+        notification.innerHTML = `
+            <div class="notification-content">
+                <span class="notification-icon">${icons[type] || icons.info}</span>
+                <span class="notification-message">${message}</span>
+            </div>
+        `;
         
         const backgroundColor = type === 'error' ? '#ef4444' : 
-                              type === 'warning' ? '#f59e0b' : '#10b981';
+                              type === 'warning' ? '#f59e0b' : 
+                              type === 'info' ? '#3b82f6' : '#10b981';
         
         notification.style.cssText = `
             position: fixed;
@@ -460,22 +695,24 @@ function showNotification(message, type = 'success') {
             color: white;
             padding: 1rem 1.5rem;
             border-radius: 0.5rem;
-            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
-            z-index: 1000;
-            animation: slideIn 0.3s ease;
+            box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+            z-index: 10000;
+            animation: slideInRight 0.3s ease;
             font-weight: 500;
             max-width: 400px;
             word-wrap: break-word;
+            border-left: 4px solid rgba(255,255,255,0.3);
         `;
         
         document.body.appendChild(notification);
         
-        // Auto remove after 3 seconds
+        // Auto remove after 4 seconds
         setTimeout(() => {
             if (notification.parentNode) {
-                notification.remove();
+                notification.style.animation = 'slideOutRight 0.3s ease';
+                setTimeout(() => notification.remove(), 300);
             }
-        }, 3000);
+        }, 4000);
         
     } catch (error) {
         console.error('Error showing notification:', error);
@@ -483,17 +720,91 @@ function showNotification(message, type = 'success') {
     }
 }
 
-document.getElementById('toggle-sidebar').addEventListener('click', function() {
-    document.querySelector('.dashboard-container').classList.toggle('sidebar-collapsed');
-});
+// ==================== ADDITIONAL FEATURES ====================
 
-window.onclick = function(event) {
-    if (event.target.classList.contains('modal')) {
-        event.target.style.display = 'none';
+async function viewUserDetails(userId) {
+    try {
+        const user = await fetchUserData(userId);
+        if (!user) {
+            showNotification('User not found', 'error');
+            return;
+        }
+        
+        const safeUser = createSafeUserObject(user);
+        const modal = getElementSafely('userDetailsModal');
+        
+        if (modal) {
+            // Populate details modal
+            setElementTextSafely('detailUserName', `${safeUser.firstName} ${safeUser.lastName}`);
+            setElementTextSafely('detailUserEmail', safeUser.email);
+            setElementTextSafely('detailUserEmployeeId', safeUser.employeeId);
+            setElementTextSafely('detailUserRole', safeUser.role);
+            setElementTextSafely('detailUserDepartment', safeUser.department);
+            setElementTextSafely('detailUserDesignation', safeUser.designation);
+            setElementTextSafely('detailUserStatus', safeUser.status);
+            setElementTextSafely('detailUserJoinDate', formatJoinDate(safeUser.joinDate));
+            
+            modal.style.display = 'block';
+        }
+        
+    } catch (error) {
+        console.error('Error viewing user details:', error);
+        showNotification('Failed to load user details', 'error');
     }
-};
+}
 
-// Make functions globally available
+function exportUsers() {
+    try {
+        const users = window.filteredUsers || window.users || [];
+        if (users.length === 0) {
+            showNotification('No users to export', 'warning');
+            return;
+        }
+        
+        const csvContent = convertToCSV(users);
+        downloadCSV(csvContent, `users_export_${new Date().toISOString().split('T')[0]}.csv`);
+        
+        showNotification(`Exported ${users.length} users successfully`, 'success');
+        
+    } catch (error) {
+        console.error('Error exporting users:', error);
+        showNotification('Failed to export users', 'error');
+    }
+}
+
+function convertToCSV(users) {
+    const headers = ['Employee ID', 'First Name', 'Last Name', 'Email', 'Role', 'Department', 'Status', 'Join Date'];
+    const rows = users.map(user => [
+        user.employeeId || '',
+        user.firstName || '',
+        user.lastName || '',
+        user.email || '',
+        user.role || '',
+        user.department || '',
+        user.status || '',
+        formatJoinDate(user.joinDate)
+    ]);
+    
+    return [headers, ...rows]
+        .map(row => row.map(field => `"${field}"`).join(','))
+        .join('\n');
+}
+
+function downloadCSV(content, filename) {
+    const blob = new Blob([content], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.style.display = 'none';
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+}
+
+// ==================== GLOBAL FUNCTION EXPORTS ====================
+
 window.openEditUserModal = openEditUserModal;
 window.openDeleteUserModal = openDeleteUserModal;
 window.confirmDeleteUser = confirmDeleteUser;
@@ -503,3 +814,7 @@ window.closeEditUserModal = closeEditUserModal;
 window.closeDeleteUserModal = closeDeleteUserModal;
 window.filterUsers = filterUsers;
 window.loadAllUsers = loadAllUsers;
+window.viewUserDetails = viewUserDetails;
+window.exportUsers = exportUsers;
+
+console.log('✅ Enhanced User Management Script loaded successfully');
