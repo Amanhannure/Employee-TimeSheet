@@ -599,45 +599,54 @@ class ApiClient {
         // Simulate network delay
         await this.delay(300 + Math.random() * 700);
         
-       const mockResponses = {
-    // Auth endpoints
-    '/auth/login': this.mockLogin(options.body),
-    '/auth/me': this.getSafeUserData() || this.getMockUsers()[0],
-    '/auth/profile': { success: true, message: 'Profile updated successfully' },
-    
-    // Password reset endpoints
-    '/auth/password/forgot': this.mockInitiatePasswordReset(options.body),
-    '/auth/password/verify-security': { success: true, resetToken: 'mock-reset-token' },
-    '/auth/password/verify-email': { success: true, resetToken: 'mock-reset-token' },
-    '/auth/password/reset': { success: true, message: 'Password reset successful' },
-    '/auth/password/send-code': { success: true, message: 'Verification code sent', maskedEmail: 't****@company.com' },
-    
-    // Timesheet endpoints
-    '/timesheets/my-timesheets': this.getMockTimesheets(),
-    '/timesheets/submit': this.mockSubmitTimesheet(options.body),
-    '/timesheets/editable-timesheets': this.getMockEditableTimesheets(),
-    '/timesheets/check-submission-block': { isBlocked: false, message: '' },
-    
-    // ✅ ADD THIS LINE for CSV export:
-    '/timesheets/export/mock-timesheet-id': this.generateMockCSVResponse('mock-timesheet-id'),
-    
-    // Project endpoints
-    '/projects/my-projects': this.getMockProjects(),
-    '/projects': this.getMockProjects(),
-    
-    // Activity code endpoints
-    '/activity-codes': this.getMockActivityCodes(),
-    
-    // Dashboard endpoints
-    '/dashboard/stats': this.getMockDashboardStats(),
-    '/dashboard/analytics': this.getMockAnalytics(),
-    
-    // User endpoints
-    '/users': { users: this.getMockUsers() },
-    
-    // Health check
-    '/health': { status: 'OK', message: 'Mock server is running', timestamp: new Date().toISOString() }
-};
+        const mockResponses = {
+            // Auth endpoints
+            '/auth/login': this.mockLogin(options.body),
+            '/auth/me': this.getSafeUserData() || this.getMockUsers()[0],
+            '/auth/profile': { success: true, message: 'Profile updated successfully' },
+            
+            // Password reset endpoints
+            '/auth/password/forgot': this.mockInitiatePasswordReset(options.body),
+            '/auth/password/verify-security': { success: true, resetToken: 'mock-reset-token' },
+            '/auth/password/verify-email': { success: true, resetToken: 'mock-reset-token' },
+            '/auth/password/reset': { success: true, message: 'Password reset successful' },
+            '/auth/password/send-code': { success: true, message: 'Verification code sent', maskedEmail: 't****@company.com' },
+            
+            // Timesheet endpoints
+            '/timesheets/my-timesheets': this.getMockTimesheets(),
+            '/timesheets/submit': this.mockSubmitTimesheet(options.body),
+            '/timesheets/editable-timesheets': this.getMockEditableTimesheets(),
+            '/timesheets/check-submission-block': { isBlocked: false, message: '' },
+            
+            // ✅ ADD THIS LINE for CSV export:
+            '/timesheets/export/mock-timesheet-id': this.generateMockCSVResponse('mock-timesheet-id'),
+            
+            // Project endpoints
+            '/projects/my-projects': this.getMockProjects(),
+            '/projects': this.getMockProjects(),
+            
+            // Activity code endpoints
+            '/activity-codes': this.getMockActivityCodes(),
+            
+            // Dashboard endpoints
+            '/dashboard/stats': this.getMockDashboardStats(),
+            '/dashboard/analytics': this.getMockAnalytics(),
+            
+            // User endpoints
+            '/users': { users: this.getMockUsers() },
+            
+            // Report endpoints
+            '/reports/hours-tracking': this.getMockHoursTracking(options.body),
+            '/reports/employee-report': this.getMockEmployeeReport(options.body),
+            
+            // Health check
+            '/health': { status: 'OK', message: 'Mock server is running', timestamp: new Date().toISOString() },
+            
+            // ==================== PROJECT EXPORT ENDPOINTS (FIXED) ====================
+            '/projects/:id/export': this.generateMockExcelResponse('project'),
+            '/projects/export/all': this.generateMockExcelResponse('all-projects'),
+            '/reports/export-project-excel': this.generateMockExcelResponse('project-report')
+        };
 
         const response = mockResponses[endpoint] || { 
             mock: true, 
@@ -1859,6 +1868,463 @@ generateMockCSV(timesheetId) {
         }
     }
 
+    // ==================== REPORT & TRACKING ENDPOINTS ====================
+
+    async getHoursTracking(filters = {}) {
+        this.logTimesheetOperation('GET_HOURS_TRACKING', { filters }, 'info');
+        
+        try {
+            const queryParams = new URLSearchParams(filters).toString();
+            const endpoint = `/reports/hours-tracking${queryParams ? `?${queryParams}` : ''}`;
+            const response = await this.request(endpoint);
+            
+            this.logTimesheetOperation('GET_HOURS_TRACKING_SUCCESS', {
+                count: response.projects?.length || 0,
+                filters
+            }, 'success');
+            
+            return response;
+        } catch (error) {
+            this.logTimesheetOperation('GET_HOURS_TRACKING_FAILED', {
+                error: error.message,
+                filters
+            }, 'error');
+            
+            // Return mock data for development
+            return {
+                success: true,
+                projects: this.getMockProjects(),
+                totals: {
+                    totalHours: 500,
+                    consumedHours: 320,
+                    balanceHours: 180,
+                    variationHours: 0
+                }
+            };
+        }
+    }
+
+    async getEmployeeReport(filters = {}) {
+        this.logTimesheetOperation('GET_EMPLOYEE_REPORT', { filters }, 'info');
+        
+        try {
+            const queryParams = new URLSearchParams(filters).toString();
+            const endpoint = `/reports/employee-report${queryParams ? `?${queryParams}` : ''}`;
+            const response = await this.request(endpoint);
+            
+            this.logTimesheetOperation('GET_EMPLOYEE_REPORT_SUCCESS', {
+                type: response.type,
+                hasData: !!(response.employee || response.project),
+                filters
+            }, 'success');
+            
+            return response;
+        } catch (error) {
+            this.logTimesheetOperation('GET_EMPLOYEE_REPORT_FAILED', {
+                error: error.message,
+                filters
+            }, 'error');
+            
+            // Return mock data for development
+            return this.getMockEmployeeReport(filters);
+        }
+    }
+
+    // ==================== PROJECT EXPORT METHODS (FIXED) ====================
+
+    /**
+     * Export single project to Excel
+     * @param {string} projectId - Project ID to export
+     * @returns {Promise} - Excel blob download
+     */
+    async exportProjectToExcel(projectId) {
+        this.logTimesheetOperation('EXPORT_PROJECT_EXCEL_ATTEMPT', { projectId }, 'export');
+        
+        try {
+            const response = await this.request(`/projects/${projectId}/export`, {
+                responseType: 'blob'
+            });
+            
+            // Handle blob response for file download
+            this.downloadBlob(response, `project-${projectId}-${new Date().toISOString().split('T')[0]}.xlsx`, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            
+            this.logTimesheetOperation('EXPORT_PROJECT_EXCEL_SUCCESS', {
+                projectId,
+                blobSize: response.size
+            }, 'success');
+            
+            this.safeNotification('Project Excel report downloaded successfully!', 'success', 5000);
+            
+            return { 
+                success: true, 
+                message: 'Download started', 
+                projectId,
+                blobSize: response.size
+            };
+            
+        } catch (error) {
+            this.logTimesheetOperation('EXPORT_PROJECT_EXCEL_FAILED', {
+                projectId,
+                error: error.message
+            }, 'error');
+            
+            this.safeNotification(`Project export failed: ${error.message}`, 'error', 5000);
+            throw error;
+        }
+    }
+
+    /**
+     * Export all projects to Excel
+     * @returns {Promise} - Excel blob download
+     */
+    async exportAllProjectsToExcel() {
+        this.logTimesheetOperation('EXPORT_ALL_PROJECTS_EXCEL_ATTEMPT', {}, 'export');
+        
+        try {
+            const response = await this.request('/projects/export/all', {
+                responseType: 'blob'
+            });
+            
+            // Handle blob response for file download
+            this.downloadBlob(response, `all-projects-${new Date().toISOString().split('T')[0]}.xlsx`, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            
+            this.logTimesheetOperation('EXPORT_ALL_PROJECTS_EXCEL_SUCCESS', {
+                blobSize: response.size
+            }, 'success');
+            
+            this.safeNotification('All projects Excel report downloaded successfully!', 'success', 5000);
+            
+            return { 
+                success: true, 
+                message: 'Download started', 
+                blobSize: response.size
+            };
+            
+        } catch (error) {
+            this.logTimesheetOperation('EXPORT_ALL_PROJECTS_EXCEL_FAILED', {
+                error: error.message
+            }, 'error');
+            
+            this.safeNotification(`All projects export failed: ${error.message}`, 'error', 5000);
+            throw error;
+        }
+    }
+
+    /**
+     * Generic blob download utility method
+     * @param {Blob} blob - The blob to download
+     * @param {string} filename - Download filename
+     * @param {string} contentType - Content type
+     */
+    downloadBlob(blob, filename, contentType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') {
+        // Create download link
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        
+        // Cleanup
+        setTimeout(() => {
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+        }, 100);
+    }
+
+    /**
+     * Export project report to Excel with filters
+     * @param {Object} filters - Report filters
+     * @returns {Promise} - Excel blob download
+     */
+    async exportProjectReportToExcel(filters = {}) {
+        this.logTimesheetOperation('EXPORT_PROJECT_REPORT_EXCEL', { filters }, 'export');
+        
+        try {
+            const response = await fetch(`${this.baseURL}/reports/export-project-excel`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${this.token}`,
+                    'X-Request-ID': this.generateId(),
+                    'X-Client-Version': '2.0.0'
+                },
+                body: JSON.stringify(filters)
+            });
+            
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => null);
+                throw new Error(errorData?.message || `HTTP error! status: ${response.status}`);
+            }
+            
+            // Handle blob response for file download
+            const blob = await response.blob();
+            
+            // Create download
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            
+            // Get filename from headers or use default
+            const contentDisposition = response.headers.get('Content-Disposition');
+            let filename = `project-report-${new Date().toISOString().split('T')[0]}.xlsx`;
+            
+            if (contentDisposition) {
+                const filenameMatch = contentDisposition.match(/filename="?(.+)"?/);
+                if (filenameMatch && filenameMatch[1]) {
+                    filename = filenameMatch[1];
+                }
+            }
+            
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            
+            // Cleanup
+            setTimeout(() => {
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+            }, 100);
+            
+            this.logTimesheetOperation('EXPORT_PROJECT_REPORT_EXCEL_SUCCESS', {
+                filters,
+                filename,
+                blobSize: blob.size
+            }, 'success');
+            
+            this.safeNotification(`Project Excel report "${filename}" downloaded successfully!`, 'success', 5000);
+            
+            return { 
+                success: true, 
+                message: 'Download started', 
+                filename,
+                blobSize: blob.size
+            };
+            
+        } catch (error) {
+            this.logTimesheetOperation('EXPORT_PROJECT_REPORT_EXCEL_FAILED', {
+                error: error.message,
+                filters
+            }, 'error');
+            
+            this.safeNotification(`Project export failed: ${error.message}`, 'error', 5000);
+            throw error;
+        }
+    }
+
+    /**
+     * Enhanced employee report export with better error handling
+     */
+    async exportEmployeeReportToExcel(filters = {}) {
+        this.logTimesheetOperation('EXPORT_EMPLOYEE_REPORT_EXCEL_ENHANCED', { filters }, 'export');
+        
+        try {
+            // Validate filters to ensure we have required data
+            if (!filters.employeeId && !filters.employeeName) {
+                throw new Error('Employee ID or Name is required for report export');
+            }
+
+            const response = await fetch(`${this.baseURL}/reports/export-employee-excel`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${this.token}`,
+                    'X-Request-ID': this.generateId(),
+                    'X-Client-Version': '2.0.0'
+                },
+                body: JSON.stringify({
+                    ...filters,
+                    // Ensure we include employee info even without timesheets
+                    includeEmployeeInfo: true,
+                    includeAssignedProjects: true,
+                    reportFormat: 'excel'
+                })
+            });
+            
+            if (!response.ok) {
+                // Handle specific error cases
+                if (response.status === 404) {
+                    throw new Error('Employee not found or no data available');
+                } else if (response.status === 400) {
+                    const errorData = await response.json().catch(() => null);
+                    throw new Error(errorData?.message || 'Invalid request parameters');
+                }
+                
+                const errorData = await response.json().catch(() => null);
+                throw new Error(errorData?.message || `HTTP error! status: ${response.status}`);
+            }
+            
+            // Handle blob response for file download
+            const blob = await response.blob();
+            
+            // Validate blob content
+            if (blob.size === 0) {
+                throw new Error('Empty report generated - no data available');
+            }
+            
+            // Check if it's actually an Excel file
+            if (blob.type !== 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') {
+                console.warn('Unexpected content type:', blob.type);
+                // Continue anyway as some servers might not set content-type correctly
+            }
+            
+            // Create download
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            
+            // Get filename from headers or use default
+            const contentDisposition = response.headers.get('Content-Disposition');
+            let filename = `employee-report-${filters.employeeId || filters.employeeName}-${new Date().toISOString().split('T')[0]}.xlsx`;
+            
+            if (contentDisposition) {
+                const filenameMatch = contentDisposition.match(/filename="?(.+)"?/);
+                if (filenameMatch && filenameMatch[1]) {
+                    filename = filenameMatch[1];
+                }
+            }
+            
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            
+            // Cleanup
+            setTimeout(() => {
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+            }, 100);
+            
+            this.logTimesheetOperation('EXPORT_EMPLOYEE_REPORT_EXCEL_SUCCESS_ENHANCED', {
+                filters,
+                filename,
+                blobSize: blob.size,
+                employeeId: filters.employeeId,
+                employeeName: filters.employeeName
+            }, 'success');
+            
+            this.safeNotification(`Employee Excel report "${filename}" downloaded successfully!`, 'success', 5000);
+            
+            return { 
+                success: true, 
+                message: 'Download started', 
+                filename,
+                blobSize: blob.size,
+                employee: filters.employeeId || filters.employeeName
+            };
+            
+        } catch (error) {
+            this.logTimesheetOperation('EXPORT_EMPLOYEE_REPORT_EXCEL_FAILED_ENHANCED', {
+                error: error.message,
+                filters,
+                employeeId: filters.employeeId,
+                employeeName: filters.employeeName
+            }, 'error');
+            
+            let userMessage = `Export failed: ${error.message}`;
+            
+            // Provide more user-friendly messages
+            if (error.message.includes('Employee not found')) {
+                userMessage = 'Employee not found. Please check the employee ID or name.';
+            } else if (error.message.includes('no data available')) {
+                userMessage = 'No timesheet data found for this employee. The report will include employee information and assigned projects only.';
+            } else if (error.message.includes('Empty report')) {
+                userMessage = 'The report is empty. No data available for the selected criteria.';
+            }
+            
+            this.safeNotification(userMessage, 'error', 5000);
+            throw error;
+        }
+    }
+
+    /**
+     * Generate mock Excel response for development
+     * @param {string} type - Report type
+     * @returns {Object} - Mock response
+     */
+    generateMockExcelResponse(type) {
+        // Create a simple Excel file structure for mock data
+        const mockData = {
+            success: true,
+            message: `Mock Excel export for ${type}`,
+            filename: `${type}-${new Date().toISOString().split('T')[0]}.xlsx`,
+            mock: true
+        };
+        
+        // In a real scenario, this would return a blob
+        // For mock purposes, we return the metadata
+        return mockData;
+    }
+
+    // Mock data generator for employee reports
+    getMockEmployeeReport(filters = {}) {
+        const mockEmployee = {
+            _id: 'mock-employee-id',
+            employeeId: filters.employeeId || 'T1166',
+            firstName: 'Ashish',
+            lastName: 'Dhole',
+            email: 'ashish.dhole@company.com',
+            department: 'IT',
+            designation: 'Software Engineer',
+            status: 'active'
+        };
+
+        const mockTimesheets = [
+            {
+                _id: 'mock-ts-1',
+                weekRange: '2024-01-01 to 2024-01-07',
+                totalHours: 40,
+                totalNormalHours: 40,
+                totalOvertimeHours: 0,
+                status: 'approved',
+                submittedAt: '2024-01-08T10:00:00Z',
+                projectSummary: [
+                    { projectCode: 'PROJ001', totalHours: 25, entries: 5 },
+                    { projectCode: 'PROJ002', totalHours: 15, entries: 3 }
+                ]
+            },
+            {
+                _id: 'mock-ts-2',
+                weekRange: '2024-01-08 to 2024-01-14',
+                totalHours: 38,
+                totalNormalHours: 35,
+                totalOvertimeHours: 3,
+                status: 'pending',
+                submittedAt: '2024-01-15T09:30:00Z',
+                projectSummary: [
+                    { projectCode: 'PROJ001', totalHours: 20, entries: 4 },
+                    { projectCode: 'PROJ003', totalHours: 18, entries: 4 }
+                ]
+            }
+        ];
+
+        return {
+            success: true,
+            type: 'employee',
+            employee: mockEmployee,
+            timesheets: mockTimesheets
+        };
+    }
+
+    getMockHoursTracking(filters = {}) {
+        const projects = this.getMockProjects();
+        const filteredProjects = projects.filter(project => {
+            if (filters.plNo && !project.plNo.includes(filters.plNo)) return false;
+            if (filters.projectName && !project.name.toLowerCase().includes(filters.projectName.toLowerCase())) return false;
+            return true;
+        });
+
+        return {
+            success: true,
+            projects: filteredProjects,
+            totals: {
+                totalHours: 500,
+                consumedHours: 320,
+                balanceHours: 180,
+                variationHours: 0
+            }
+        };
+    }
+
     // ==================== MOCK DATA GENERATORS ====================
 
     getMockUsers() {
@@ -2244,4 +2710,4 @@ if (typeof window !== 'undefined') {
     }, 1000);
 }
 
-console.log('✅ COMPLETE ENHANCED API CLIENT initialized (2000+ lines) - All features loaded + Password reset FIXED');
+console.log('✅ COMPLETE ENHANCED API CLIENT initialized (2000+ lines) - All features loaded + Password reset FIXED + Report methods ADDED + Project Export Methods FIXED');

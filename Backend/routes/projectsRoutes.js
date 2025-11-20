@@ -1,5 +1,8 @@
 import express from 'express';
 import Project from '../models/Project.js';
+import Timesheet from '../models/TimeSheet.js';
+import User from '../models/User.js';
+import ExcelJS from 'exceljs';
 import { authenticate, authorizeAdmin } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
@@ -301,8 +304,8 @@ router.patch('/:id/add-variable-hours', authenticate, authorizeProjectManager, a
   }
 });
 
-// ✅ ADDED: Export project to Excel
-router.get('/:id/export-excel', authenticate, authorizeProjectManager, async (req, res) => {
+// ✅ COMPLETELY REPLACED: Export project to Excel with proper format
+router.get('/:id/export', authenticate, authorizeProjectManager, async (req, res) => {
   try {
     console.log(`📊 Exporting project ${req.params.id} to Excel`);
     
@@ -314,15 +317,203 @@ router.get('/:id/export-excel', authenticate, authorizeProjectManager, async (re
       return res.status(404).json({ message: 'Project not found' });
     }
 
-    // For now, return a simple CSV as placeholder
-    // You can implement proper Excel generation later
-    const csvData = generateProjectCSV(project);
+    // Get timesheets for this project
+    const timesheets = await Timesheet.find({
+      'entries.projectCode': project.projectCode
+    })
+    .populate('employee', 'firstName lastName employeeId department')
+    .sort({ weekStartDate: -1 })
+    .lean();
+
+    console.log(`📊 Found ${timesheets.length} timesheets for project ${project.projectCode}`);
+
+    // Create Excel workbook
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Project Timesheet Report');
+
+    // === REPORT GENERATED VIA PROJECT CODE SECTION ===
+    worksheet.mergeCells('A1:K1');
+    worksheet.getCell('A1').value = 'Report generated via Project Code';
+    worksheet.getCell('A1').alignment = { horizontal: 'center' };
+    worksheet.getCell('A1').font = { bold: true, size: 14 };
     
-    res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', `attachment; filename="${project.name}_report.csv"`);
-    res.send(csvData);
+    worksheet.addRow([]); // Empty row
     
-    console.log('✅ Project exported successfully');
+    // Add table headers
+    const headers = ['Sr no.', 'Project No.', 'Project Name', 'Employee name', 'Department', 'Activity Name', 'Consumed Hour', 'Start date', 'End Date', 'Total Hour', 'Remarks'];
+    const headerRow = worksheet.addRow(headers);
+    
+    // Style the header row
+    headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    headerRow.eachCell((cell) => {
+      cell.border = {
+        top: { style: 'thin' },
+        left: { style: 'thin' },
+        bottom: { style: 'thin' },
+        right: { style: 'thin' }
+      };
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF2E75B6' }
+      };
+      cell.alignment = { horizontal: 'center', vertical: 'middle' };
+    });
+
+    // Add project timesheet data
+    let srNo = 1;
+    let totalConsumedHours = 0;
+
+    // If timesheets exist, add timesheet entries
+    if (timesheets && timesheets.length > 0) {
+      timesheets.forEach(timesheet => {
+        if (timesheet.entries && timesheet.entries.length > 0) {
+          timesheet.entries.forEach(entry => {
+            // Only include entries for this project
+            if (entry.projectCode === project.projectCode) {
+              const consumedHours = (entry.normalHours || 0) + (entry.overtimeHours || 0);
+              totalConsumedHours += consumedHours;
+              
+              const dataRow = worksheet.addRow([
+                srNo++,
+                project.projectCode,
+                project.name,
+                `${timesheet.employee.firstName} ${timesheet.employee.lastName}`,
+                timesheet.employee.department,
+                entry.activityCode,
+                formatTimeToHHMMSS(consumedHours),
+                new Date(timesheet.weekStartDate).toLocaleDateString('en-GB'),
+                new Date(timesheet.weekEndDate).toLocaleDateString('en-GB'),
+                'Project Hour',
+                'Things written in remarks'
+              ]);
+              
+              // Add borders to data rows
+              dataRow.eachCell((cell) => {
+                cell.border = {
+                  top: { style: 'thin' },
+                  left: { style: 'thin' },
+                  bottom: { style: 'thin' },
+                  right: { style: 'thin' }
+                };
+              });
+            }
+          });
+        }
+      });
+    }
+
+    // If no timesheet data, show assigned employees
+    if (srNo === 1) {
+      if (project.assignedEmployees && project.assignedEmployees.length > 0) {
+        project.assignedEmployees.forEach(employee => {
+          const dataRow = worksheet.addRow([
+            srNo++,
+            project.projectCode,
+            project.name,
+            `${employee.firstName} ${employee.lastName}`,
+            employee.department,
+            'No Activity',
+            '00:00:00',
+            'N/A',
+            'N/A',
+            'Project Hour',
+            'No timesheet data available'
+          ]);
+          
+          // Add borders to data rows
+          dataRow.eachCell((cell) => {
+            cell.border = {
+              top: { style: 'thin' },
+              left: { style: 'thin' },
+              bottom: { style: 'thin' },
+              right: { style: 'thin' }
+            };
+          });
+        });
+      } else {
+        const dataRow = worksheet.addRow([
+          srNo++,
+          project.projectCode,
+          project.name,
+          'No Employee Assigned',
+          'N/A',
+          'No Activity',
+          '00:00:00',
+          'N/A',
+          'N/A',
+          'Project Hour',
+          'No employees assigned to project'
+        ]);
+        
+        // Add borders to data rows
+        dataRow.eachCell((cell) => {
+          cell.border = {
+            top: { style: 'thin' },
+            left: { style: 'thin' },
+            bottom: { style: 'thin' },
+            right: { style: 'thin' }
+          };
+        });
+      }
+    }
+
+    // Add total row if we have data
+    if (srNo > 1) {
+      const totalRowNumber = worksheet.rowCount + 1;
+      worksheet.addRow([]);
+      
+      // Add sum formula for consumed hours
+      const sumRow = worksheet.addRow([
+        '', '', '', '', '', '',
+        `=SUM(G4:G${totalRowNumber - 1})`, '', '', '', 'Total Hours'
+      ]);
+      
+      // Style the sum row
+      sumRow.font = { bold: true };
+      sumRow.eachCell((cell) => {
+        cell.border = {
+          top: { style: 'thin' },
+          left: { style: 'thin' },
+          bottom: { style: 'thin' },
+          right: { style: 'thin' }
+        };
+        if (cell.value === 'Total Hours') {
+          cell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFFCE4D6' }
+          };
+        }
+      });
+    }
+
+    // Set column widths
+    worksheet.columns = [
+      { width: 8 },   // Sr no.
+      { width: 15 },  // Project No.
+      { width: 25 },  // Project Name
+      { width: 20 },  // Employee name
+      { width: 15 },  // Department
+      { width: 18 },  // Activity Name
+      { width: 15 },  // Consumed Hour
+      { width: 12 },  // Start date
+      { width: 12 },  // End Date
+      { width: 12 },  // Total Hour
+      { width: 25 }   // Remarks
+    ];
+
+    // Set response headers for file download
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="project-${project.projectCode}-report.xlsx"`);
+    res.setHeader('Cache-Control', 'no-cache');
+
+    // Write workbook to response
+    await workbook.xlsx.write(res);
+    res.end();
+    
+    console.log('✅ Project exported successfully in new Excel format');
+
   } catch (error) {
     console.error('❌ Export project error:', error);
     res.status(500).json({ 
@@ -332,8 +523,8 @@ router.get('/:id/export-excel', authenticate, authorizeProjectManager, async (re
   }
 });
 
-// ✅ ADDED: Export all projects to Excel
-router.get('/export-excel', authenticate, authorizeProjectManager, async (req, res) => {
+// ✅ COMPLETELY REPLACED: Export all projects to Excel with proper format
+router.get('/export/all', authenticate, authorizeProjectManager, async (req, res) => {
   try {
     console.log('📊 Exporting all projects to Excel');
     
@@ -341,14 +532,206 @@ router.get('/export-excel', authenticate, authorizeProjectManager, async (req, r
       .populate('assignedEmployees', 'firstName lastName employeeId department')
       .sort({ createdAt: -1 });
 
-    // For now, return a simple CSV as placeholder
-    const csvData = generateAllProjectsCSV(projects);
+    // Create Excel workbook
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('All Projects Report');
+
+    // Add header
+    worksheet.mergeCells('A1:K1');
+    worksheet.getCell('A1').value = 'All Projects Report - Generated via Project Code';
+    worksheet.getCell('A1').alignment = { horizontal: 'center' };
+    worksheet.getCell('A1').font = { bold: true, size: 14 };
     
-    res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', `attachment; filename="all_projects_${new Date().toISOString().split('T')[0]}.csv"`);
-    res.send(csvData);
+    worksheet.addRow([]); // Empty row
     
-    console.log(`✅ Exported ${projects.length} projects successfully`);
+    // Add table headers
+    const headers = ['Sr no.', 'Project No.', 'Project Name', 'Employee name', 'Department', 'Activity Name', 'Consumed Hour', 'Start date', 'End Date', 'Total Hour', 'Remarks'];
+    const headerRow = worksheet.addRow(headers);
+    
+    // Style the header row
+    headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    headerRow.eachCell((cell) => {
+      cell.border = {
+        top: { style: 'thin' },
+        left: { style: 'thin' },
+        bottom: { style: 'thin' },
+        right: { style: 'thin' }
+      };
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF2E75B6' }
+      };
+      cell.alignment = { horizontal: 'center', vertical: 'middle' };
+    });
+
+    let srNo = 1;
+    let totalProjectsProcessed = 0;
+
+    // Add data for all projects
+    for (const project of projects) {
+      totalProjectsProcessed++;
+      
+      // Get timesheets for this project
+      const timesheets = await Timesheet.find({
+        'entries.projectCode': project.projectCode
+      })
+      .populate('employee', 'firstName lastName employeeId department')
+      .sort({ weekStartDate: -1 })
+      .lean();
+
+      let hasTimesheetData = false;
+
+      // Add timesheet entries if available
+      if (timesheets && timesheets.length > 0) {
+        timesheets.forEach(timesheet => {
+          if (timesheet.entries && timesheet.entries.length > 0) {
+            timesheet.entries.forEach(entry => {
+              if (entry.projectCode === project.projectCode) {
+                const consumedHours = (entry.normalHours || 0) + (entry.overtimeHours || 0);
+                
+                const dataRow = worksheet.addRow([
+                  srNo++,
+                  project.projectCode,
+                  project.name,
+                  `${timesheet.employee.firstName} ${timesheet.employee.lastName}`,
+                  timesheet.employee.department,
+                  entry.activityCode,
+                  formatTimeToHHMMSS(consumedHours),
+                  new Date(timesheet.weekStartDate).toLocaleDateString('en-GB'),
+                  new Date(timesheet.weekEndDate).toLocaleDateString('en-GB'),
+                  'Project Hour',
+                  'Things written in remarks'
+                ]);
+                
+                // Add borders to data rows
+                dataRow.eachCell((cell) => {
+                  cell.border = {
+                    top: { style: 'thin' },
+                    left: { style: 'thin' },
+                    bottom: { style: 'thin' },
+                    right: { style: 'thin' }
+                  };
+                });
+                
+                hasTimesheetData = true;
+              }
+            });
+          }
+        });
+      }
+
+      // If no timesheet data, show assigned employees
+      if (!hasTimesheetData) {
+        if (project.assignedEmployees && project.assignedEmployees.length > 0) {
+          project.assignedEmployees.forEach(employee => {
+            const dataRow = worksheet.addRow([
+              srNo++,
+              project.projectCode,
+              project.name,
+              `${employee.firstName} ${employee.lastName}`,
+              employee.department,
+              'No Activity',
+              '00:00:00',
+              'N/A',
+              'N/A',
+              'Project Hour',
+              'No timesheet data available'
+            ]);
+            
+            // Add borders to data rows
+            dataRow.eachCell((cell) => {
+              cell.border = {
+                top: { style: 'thin' },
+                left: { style: 'thin' },
+                bottom: { style: 'thin' },
+                right: { style: 'thin' }
+              };
+            });
+          });
+        } else {
+          const dataRow = worksheet.addRow([
+            srNo++,
+            project.projectCode,
+            project.name,
+            'No Employee Assigned',
+            'N/A',
+            'No Activity',
+            '00:00:00',
+            'N/A',
+            'N/A',
+            'Project Hour',
+            'No employees assigned'
+          ]);
+          
+          // Add borders to data rows
+          dataRow.eachCell((cell) => {
+            cell.border = {
+              top: { style: 'thin' },
+              left: { style: 'thin' },
+              bottom: { style: 'thin' },
+              right: { style: 'thin' }
+            };
+          });
+        }
+      }
+    }
+
+    // Add summary row
+    if (srNo > 1) {
+      const totalRowNumber = worksheet.rowCount + 1;
+      worksheet.addRow([]);
+      
+      const summaryRow = worksheet.addRow([
+        '', '', '', '', '', '',
+        `=SUM(G4:G${totalRowNumber - 1})`, '', '', '', `Total: ${totalProjectsProcessed} Projects`
+      ]);
+      
+      // Style the summary row
+      summaryRow.font = { bold: true };
+      summaryRow.eachCell((cell) => {
+        cell.border = {
+          top: { style: 'thin' },
+          left: { style: 'thin' },
+          bottom: { style: 'thin' },
+          right: { style: 'thin' }
+        };
+        if (cell.value && cell.value.toString().includes('Total:')) {
+          cell.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFFCE4D6' }
+          };
+        }
+      });
+    }
+
+    // Set column widths
+    worksheet.columns = [
+      { width: 8 },   // Sr no.
+      { width: 15 },  // Project No.
+      { width: 25 },  // Project Name
+      { width: 20 },  // Employee name
+      { width: 15 },  // Department
+      { width: 18 },  // Activity Name
+      { width: 15 },  // Consumed Hour
+      { width: 12 },  // Start date
+      { width: 12 },  // End Date
+      { width: 12 },  // Total Hour
+      { width: 25 }   // Remarks
+    ];
+
+    // Set response headers
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="all-projects-report.xlsx"`);
+    res.setHeader('Cache-Control', 'no-cache');
+
+    // Write workbook to response
+    await workbook.xlsx.write(res);
+    res.end();
+    
+    console.log(`✅ Exported ${totalProjectsProcessed} projects successfully in new Excel format`);
+
   } catch (error) {
     console.error('❌ Export all projects error:', error);
     res.status(500).json({ 
@@ -358,69 +741,15 @@ router.get('/export-excel', authenticate, authorizeProjectManager, async (req, r
   }
 });
 
-// ✅ ADDED: Helper function to generate CSV for single project
-function generateProjectCSV(project) {
-  const headers = ['Project Code', 'Project Name', 'Status', 'Total Hours', 'Allocated Hours', 'Variable Hours', 'Consumed Hours', 'Balance Hours', 'Departments', 'Assigned Employees'];
+// Helper function to format hours to HH:MM:SS format
+const formatTimeToHHMMSS = (hours) => {
+  const totalSeconds = Math.round(hours * 3600);
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const s = totalSeconds % 60;
   
-  const totalAllocated = project.departmentHours.reduce((sum, dept) => sum + dept.allocatedHours, 0);
-  const totalVariable = project.departmentHours.reduce((sum, dept) => sum + dept.variableHours, 0);
-  const totalConsumed = project.departmentHours.reduce((sum, dept) => sum + dept.consumedHours, 0);
-  const totalAvailable = totalAllocated + totalVariable;
-  const balanceHours = Math.max(0, totalAvailable - totalConsumed);
-  
-  const departments = project.departments.join(', ');
-  const assignedEmployees = project.assignedEmployees.map(emp => 
-    `${emp.firstName} ${emp.lastName} (${emp.employeeId})`
-  ).join(', ');
-  
-  const row = [
-    project.projectCode,
-    project.name,
-    project.status,
-    project.totalHours,
-    totalAllocated,
-    totalVariable,
-    totalConsumed,
-    balanceHours,
-    departments,
-    assignedEmployees
-  ];
-  
-  return [headers, row].map(row => row.map(field => `"${field}"`).join(',')).join('\n');
-}
-
-// ✅ ADDED: Helper function to generate CSV for all projects
-function generateAllProjectsCSV(projects) {
-  const headers = ['Project Code', 'Project Name', 'Status', 'Total Hours', 'Allocated Hours', 'Variable Hours', 'Consumed Hours', 'Balance Hours', 'Progress %', 'Departments', 'Employee Count'];
-  
-  const rows = projects.map(project => {
-    const totalAllocated = project.departmentHours.reduce((sum, dept) => sum + dept.allocatedHours, 0);
-    const totalVariable = project.departmentHours.reduce((sum, dept) => sum + dept.variableHours, 0);
-    const totalConsumed = project.departmentHours.reduce((sum, dept) => sum + dept.consumedHours, 0);
-    const totalAvailable = totalAllocated + totalVariable;
-    const balanceHours = Math.max(0, totalAvailable - totalConsumed);
-    const progress = totalAvailable > 0 ? ((totalConsumed / totalAvailable) * 100).toFixed(1) : 0;
-    
-    const departments = project.departments.join(', ');
-    const employeeCount = project.assignedEmployees.length;
-    
-    return [
-      project.projectCode,
-      project.name,
-      project.status,
-      project.totalHours,
-      totalAllocated,
-      totalVariable,
-      totalConsumed,
-      balanceHours,
-      progress,
-      departments,
-      employeeCount
-    ];
-  });
-  
-  return [headers, ...rows].map(row => row.map(field => `"${field}"`).join(',')).join('\n');
-}
+  return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+};
 
 // Delete project (Project Manager/Admin only) - ✅ CHANGED AUTHORIZATION
 router.delete('/:id', authenticate, authorizeProjectManager, async (req, res) => {

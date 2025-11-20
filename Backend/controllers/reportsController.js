@@ -236,11 +236,44 @@ export const exportEmployeeReportToExcel = async (req, res) => {
     const workbook = new ExcelJS.Workbook();
     
     if (reportType === 'employee' || !reportType) {
-      // Employee report export
-      const employee = await User.findOne({ employeeId }).lean();
+      // Employee report export - FIXED: Handle both employeeId and name lookup
+      let employee = null;
+
+      // Find by employee ID first
+      if (employeeId) {
+        employee = await User.findOne({ employeeId }).lean();
+        console.log('👤 Found employee by ID:', employee?.employeeId);
+      } 
+      // If no employee found by ID, try by name
+      else if (name) {
+        const nameRegex = new RegExp(name, 'i');
+        employee = await User.findOne({
+          $or: [
+            { firstName: nameRegex },
+            { lastName: nameRegex },
+            { 
+              $expr: {
+                $regexMatch: {
+                  input: { $concat: ["$firstName", " ", "$lastName"] },
+                  regex: nameRegex
+                }
+              }
+            }
+          ]
+        }).lean();
+        console.log('👤 Found employee by name:', employee?.employeeId);
+      }
+
       if (!employee) {
         return res.status(404).json({ success: false, message: 'Employee not found' });
       }
+
+      // Get assigned projects for the employee
+      const assignedProjects = await Project.find({
+        assignedEmployees: employee._id
+      }).lean();
+
+      console.log(`📋 Found ${assignedProjects.length} assigned projects for employee ${employee.employeeId}`);
 
       let dateFilter = {};
       if (startDate || endDate) {
@@ -257,48 +290,145 @@ export const exportEmployeeReportToExcel = async (req, res) => {
       .sort({ weekStartDate: -1 })
       .lean();
 
+      console.log(`📊 Found ${timesheets.length} timesheets for employee ${employee.employeeId}`);
+
+      // Create worksheet with exact format from your template
       const worksheet = workbook.addWorksheet('Employee Timesheet Report');
       
-      // Add headers
-      worksheet.columns = [
-        { header: 'Week Start', key: 'weekStart', width: 15 },
-        { header: 'Week End', key: 'weekEnd', width: 15 },
-        { header: 'Project Code', key: 'projectCode', width: 15 },
-        { header: 'Activity Code', key: 'activityCode', width: 15 },
-        { header: 'Normal Hours', key: 'normalHours', width: 12 },
-        { header: 'Overtime Hours', key: 'overtimeHours', width: 12 },
-        { header: 'Total Hours', key: 'totalHours', width: 12 },
-        { header: 'Status', key: 'status', width: 12 },
-        { header: 'Submitted Date', key: 'submittedAt', width: 15 }
-      ];
-
-      // Add employee info
-      worksheet.addRow([]);
-      worksheet.addRow(['Employee Information']);
-      worksheet.addRow([`Employee ID: ${employee.employeeId}`]);
-      worksheet.addRow([`Name: ${employee.firstName} ${employee.lastName}`]);
-      worksheet.addRow([`Department: ${employee.department}`]);
-      worksheet.addRow([`Designation: ${employee.designation}`]);
-      worksheet.addRow([]);
-
-      // Add data rows
-      worksheet.addRow(['Week Start', 'Week End', 'Project Code', 'Activity Code', 'Normal Hours', 'Overtime Hours', 'Total Hours', 'Status', 'Submitted Date']);
+      // Add headers matching your template format - "Report generated via Employee Code"
+      worksheet.mergeCells('A1:K1');
+      worksheet.getCell('A1').value = 'Report generated via Employee Code';
+      worksheet.getCell('A1').alignment = { horizontal: 'center' };
+      worksheet.getCell('A1').font = { bold: true };
       
-      timesheets.forEach(timesheet => {
-        timesheet.entries?.forEach(entry => {
-          worksheet.addRow([
-            new Date(timesheet.weekStartDate).toLocaleDateString(),
-            new Date(timesheet.weekEndDate).toLocaleDateString(),
-            entry.projectCode,
-            entry.activityCode,
-            entry.normalHours,
-            entry.overtimeHours,
-            entry.normalHours + entry.overtimeHours,
-            timesheet.status,
-            timesheet.submittedAt ? new Date(timesheet.submittedAt).toLocaleDateString() : 'Not Submitted'
-          ]);
-        });
+      worksheet.addRow([]); // Empty row
+      
+      // Add table headers matching your template
+      const headers = ['Sr no.', 'Employee name', 'Department', 'Project Name', 'Project No.', 'Activity Name', 'Consumed Hour', 'Start date', 'End Date', 'Total Hour', 'Remarks'];
+      const headerRow = worksheet.addRow(headers);
+      
+      // Style the header row
+      headerRow.font = { bold: true };
+      headerRow.eachCell((cell) => {
+        cell.border = {
+          top: { style: 'thin' },
+          left: { style: 'thin' },
+          bottom: { style: 'thin' },
+          right: { style: 'thin' }
+        };
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFE6E6FA' }
+        };
+        cell.alignment = { horizontal: 'center' };
       });
+
+      // Add employee timesheet data
+      let srNo = 1;
+      let totalConsumedHours = 0;
+      let hasData = false;
+
+      // If timesheets exist, add timesheet entries
+      if (timesheets && timesheets.length > 0) {
+        timesheets.forEach(timesheet => {
+          if (timesheet.entries && timesheet.entries.length > 0) {
+            timesheet.entries.forEach(entry => {
+              const consumedHours = (entry.normalHours || 0) + (entry.overtimeHours || 0);
+              totalConsumedHours += consumedHours;
+              
+              // Get project name from assigned projects or use project code
+              const project = assignedProjects.find(p => p.projectCode === entry.projectCode);
+              const projectName = project ? project.name : entry.projectCode;
+              
+              worksheet.addRow([
+                srNo++,
+                `${employee.firstName} ${employee.lastName}`,
+                employee.department,
+                projectName,
+                entry.projectCode,
+                entry.activityCode,
+                formatTimeToHHMMSS(consumedHours),
+                new Date(timesheet.weekStartDate).toLocaleDateString(),
+                new Date(timesheet.weekEndDate).toLocaleDateString(),
+                'Project Hour',
+                'Things written in remarks'
+              ]);
+              hasData = true;
+            });
+          }
+        });
+      }
+
+      // If no timesheet data, still show employee information with assigned projects
+      if (!hasData) {
+        if (assignedProjects.length > 0) {
+          // Show assigned projects even without timesheets
+          assignedProjects.forEach(project => {
+            worksheet.addRow([
+              srNo++,
+              `${employee.firstName} ${employee.lastName}`,
+              employee.department,
+              project.name,
+              project.projectCode,
+              'No Activity',
+              '00:00:00',
+              'N/A',
+              'N/A',
+              'Project Hour',
+              'No timesheet data available'
+            ]);
+          });
+        } else {
+          // Show employee info even without assigned projects
+          worksheet.addRow([
+            srNo++,
+            `${employee.firstName} ${employee.lastName}`,
+            employee.department,
+            'No Project Assigned',
+            'N/A',
+            'No Activity',
+            '00:00:00',
+            'N/A',
+            'N/A',
+            'Project Hour',
+            'No projects or timesheets available'
+          ]);
+        }
+      }
+
+      // Add total row if we have data
+      if (srNo > 1) {
+        const totalRowNumber = worksheet.rowCount + 1;
+        worksheet.addRow([]);
+        
+        // Add sum formula for consumed hours
+        const sumRow = worksheet.addRow([
+          '', '', '', '', '', '',
+          `=SUM(G4:G${totalRowNumber - 1})`, '', '', '', ''
+        ]);
+        
+        // Style the sum row
+        sumRow.font = { bold: true };
+      }
+
+      // Auto-fit columns
+      worksheet.columns.forEach(column => {
+        column.width = 15;
+      });
+
+      // Set column widths specifically for better display
+      worksheet.getColumn(1).width = 8;  // Sr no.
+      worksheet.getColumn(2).width = 20; // Employee name
+      worksheet.getColumn(3).width = 15; // Department
+      worksheet.getColumn(4).width = 20; // Project Name
+      worksheet.getColumn(5).width = 12; // Project No.
+      worksheet.getColumn(6).width = 15; // Activity Name
+      worksheet.getColumn(7).width = 12; // Consumed Hour
+      worksheet.getColumn(8).width = 12; // Start date
+      worksheet.getColumn(9).width = 12; // End Date
+      worksheet.getColumn(10).width = 12; // Total Hour
+      worksheet.getColumn(11).width = 20; // Remarks
 
     } else if (reportType === 'project') {
       // Project report export
@@ -338,7 +468,7 @@ export const exportEmployeeReportToExcel = async (req, res) => {
 
     // Set response headers for file download
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', 'attachment; filename=report.xlsx');
+    res.setHeader('Content-Disposition', `attachment; filename=employee-report-${Date.now()}.xlsx`);
 
     // Write workbook to response
     await workbook.xlsx.write(res);
@@ -351,6 +481,16 @@ export const exportEmployeeReportToExcel = async (req, res) => {
       message: 'Failed to generate Excel report' 
     });
   }
+};
+
+// Helper function to format hours to HH:MM:SS format
+const formatTimeToHHMMSS = (hours) => {
+  const totalSeconds = Math.round(hours * 3600);
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const s = totalSeconds % 60;
+  
+  return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
 };
 
 // Helper functions
