@@ -1,4 +1,4 @@
-// projects.js - Complete Fixed Version with Variable Hours Support
+// projects.js - Fixed Version with Correct Hours Validation
 document.addEventListener('DOMContentLoaded', async function() {
     console.log('🚀 Projects.js: Starting initialization...');
     
@@ -18,6 +18,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     const searchProjectCode = document.getElementById('searchProjectCode');
     const filterStatus = document.getElementById('filterStatus');
     const departments = document.getElementById('departments');
+    const totalHoursInput = document.getElementById('totalHours');
 
     if (addProjectForm) {
         addProjectForm.addEventListener('submit', function(e) {
@@ -49,7 +50,44 @@ document.addEventListener('DOMContentLoaded', async function() {
     if (departments) {
         departments.addEventListener('change', handleDepartmentSelection);
     }
+
+    if (totalHoursInput) {
+        totalHoursInput.addEventListener('change', validateHoursDistribution);
+    }
 });
+
+// ✅ FIXED: Function to validate hours distribution - Now checks allocated + variable hours
+function validateHoursDistribution() {
+    const totalHoursInput = document.getElementById('totalHours');
+    const departmentAllocatedInputs = document.querySelectorAll('input[id^="deptHours_"]');
+    const departmentVariableInputs = document.querySelectorAll('input[id^="variableHours_"]');
+    
+    if (!totalHoursInput || !totalHoursInput.value) return true;
+    
+    const totalHours = parseInt(totalHoursInput.value);
+    let totalDistributed = 0;
+    
+    // Calculate sum of ALL department hours (allocated + variable)
+    departmentAllocatedInputs.forEach(input => {
+        totalDistributed += parseInt(input.value) || 0;
+    });
+    
+    // ✅ ADDED: Include variable hours in the calculation for editing
+    if (departmentVariableInputs.length > 0) {
+        departmentVariableInputs.forEach(input => {
+            totalDistributed += parseInt(input.value) || 0;
+        });
+    }
+    
+    console.log(`📊 Hours Validation: Total=${totalHours}, Distributed=${totalDistributed}`);
+    
+    if (totalDistributed !== totalHours) {
+        showNotification(`Total hours (${totalHours}) must equal the sum of all department hours (${totalDistributed})`, 'error');
+        return false;
+    }
+    
+    return true;
+}
 
 async function loadProjects() {
     try {
@@ -313,7 +351,7 @@ async function showAssignedEmployees(projectId) {
     }
 }
 
-async function populateEmployeeSelect(selectedDepartments = []) {
+async function populateEmployeeSelect(selectedDepartments = [], preserveSelections = []) {
     try {
         console.log('👤 Populating employee select...');
         
@@ -344,6 +382,10 @@ async function populateEmployeeSelect(selectedDepartments = []) {
             return;
         }
 
+        // Store currently selected values before clearing
+        const currentSelections = Array.from(employeeSelect.selectedOptions).map(option => option.value);
+        const selectionsToPreserve = preserveSelections.length > 0 ? preserveSelections : currentSelections;
+
         // Clear existing options except the first one (if it's a placeholder)
         while (employeeSelect.options.length > 0) {
             employeeSelect.remove(0);
@@ -354,7 +396,7 @@ async function populateEmployeeSelect(selectedDepartments = []) {
         defaultOption.value = '';
         defaultOption.textContent = 'Select employees...';
         defaultOption.disabled = true;
-        defaultOption.selected = true;
+        defaultOption.selected = selectionsToPreserve.length === 0;
         employeeSelect.appendChild(defaultOption);
 
         console.log('🏢 Selected departments for filtering:', selectedDepartments);
@@ -371,6 +413,12 @@ async function populateEmployeeSelect(selectedDepartments = []) {
                 const option = document.createElement('option');
                 option.value = user._id;
                 option.textContent = `${user.employeeId} - ${user.firstName} ${user.lastName} (${user.department})`;
+                
+                // ✅ FIXED: Preserve selection if this employee was previously selected
+                if (selectionsToPreserve.includes(user._id)) {
+                    option.selected = true;
+                }
+                
                 employeeSelect.appendChild(option);
             }
         });
@@ -388,6 +436,11 @@ async function addProject() {
         const form = document.getElementById('addProjectForm');
         if (!form) {
             showNotification('Add project form not found', 'error');
+            return;
+        }
+        
+        // ✅ ADDED: Validate hours distribution before submitting
+        if (!validateHoursDistribution()) {
             return;
         }
         
@@ -462,31 +515,46 @@ async function editProject(id) {
         if (totalHoursEl) totalHoursEl.value = project.totalHours;
         if (projectStatusEl) projectStatusEl.value = project.status;
 
-        // ✅ FIXED: Properly handle assigned employees selection
+        // ✅ FIXED: Handle employee IDs properly (they might be objects or strings)
         const employeeSelect = document.getElementById('assignedEmployees');
         if (employeeSelect) {
-            // First populate the select with all employees
-            await populateEmployeeSelect(project.departments || []);
-            
-            // Then set the selected employees
-            const assignedIds = project.assignedEmployees || [];
-            console.log(`👥 Setting ${assignedIds.length} assigned employees:`, assignedIds);
-            
-            // Clear any existing selections
-            Array.from(employeeSelect.options).forEach(option => {
-                option.selected = false;
-            });
-
-            // Set the selected employees
-            assignedIds.forEach(employeeId => {
-                const option = employeeSelect.querySelector(`option[value="${employeeId}"]`);
-                if (option) {
-                    option.selected = true;
-                    console.log(`✅ Selected employee: ${employeeId}`);
-                } else {
-                    console.warn(`❌ Employee option not found for ID: ${employeeId}`);
+            // Extract employee IDs properly - handle both object and string formats
+            const assignedIds = (project.assignedEmployees || []).map(emp => {
+                if (typeof emp === 'object' && emp._id) {
+                    return emp._id; // If it's an object, get the _id
                 }
+                return emp; // If it's already a string, use as is
             });
+            
+            console.log(`👥 Processing ${assignedIds.length} assigned employees:`, assignedIds);
+
+            // First populate the select with all employees based on departments
+            await populateEmployeeSelect(project.departments || [], assignedIds);
+            
+            // Then set the selected employees - wait a bit for options to render
+            setTimeout(() => {
+                console.log(`👥 Setting ${assignedIds.length} assigned employees:`, assignedIds);
+                
+                // Clear any existing selections first
+                Array.from(employeeSelect.options).forEach(option => {
+                    option.selected = false;
+                });
+
+                // Set the selected employees
+                let selectedCount = 0;
+                assignedIds.forEach(employeeId => {
+                    const option = employeeSelect.querySelector(`option[value="${employeeId}"]`);
+                    if (option) {
+                        option.selected = true;
+                        selectedCount++;
+                        console.log(`✅ Selected employee: ${employeeId}`);
+                    } else {
+                        console.warn(`❌ Employee option not found for ID: ${employeeId}`);
+                    }
+                });
+
+                console.log(`✅ Successfully selected ${selectedCount} out of ${assignedIds.length} employees`);
+            }, 100);
         }
 
         const departmentSelect = document.getElementById('departments');
@@ -556,7 +624,7 @@ function handleDepartmentSelectionForEdit(departmentHours) {
                 </div>
                 <div class="form-group">
                     <label for="variableHours_${dept}">${dept} Variable Hours</label>
-                    <input type="number" id="variableHours_${dept}" name="variableHours_${dept}" value="${variableHours}" min="0">
+                    <input type="number" id="variableHours_${dept}" name="variableHours_${dept}" value="${variableHours}" min="0" onchange="validateHoursDistribution()">
                     <small style="color: #f59e0b;">Additional hours to extend project capacity</small>
                 </div>
                 <div class="form-group">
@@ -593,6 +661,11 @@ async function updateProject(id) {
         const form = document.getElementById('addProjectForm');
         if (!form) {
             showNotification('Edit project form not found', 'error');
+            return;
+        }
+        
+        // ✅ ADDED: Validate hours distribution before submitting
+        if (!validateHoursDistribution()) {
             return;
         }
         
@@ -774,7 +847,8 @@ function handleDepartmentSelection() {
             deptDiv.innerHTML = `
                 <div class="form-group">
                     <label for="deptHours_${dept}">${dept} Allocated Hours *</label>
-                    <input type="number" id="deptHours_${dept}" name="deptHours_${dept}" min="1" required>
+                    <input type="number" id="deptHours_${dept}" name="deptHours_${dept}" min="1" required 
+                           onchange="validateHoursDistribution()">
                 </div>
             `;
             inputsContainer.appendChild(deptDiv);
@@ -952,3 +1026,4 @@ window.downloadProjectExcel = downloadProjectExcel;
 window.closeAssignedEmployeesModal = closeAssignedEmployeesModal;
 window.closeAddVariableHoursModal = closeAddVariableHoursModal;
 window.toggleAddProjectModal = toggleAddProjectModal;
+window.validateHoursDistribution = validateHoursDistribution;
