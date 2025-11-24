@@ -347,6 +347,96 @@ function getApiClient() {
     };
 }
 
+// ==================== ROLE-BASED NAVIGATION FUNCTIONS ====================
+
+function checkProjectAccess() {
+    console.log('🔍 [ROLE CHECK] Checking project access for user role:', AppState.userData?.role);
+    
+    if (!AppState.userData) {
+        safeNotification('User data not found', 'error');
+        return;
+    }
+
+    // Only allow project_manager role to access projects dashboard
+    if (AppState.userData.role === 'project_manager') {
+        console.log('✅ [ROLE CHECK] Access granted - redirecting to projects dashboard');
+        window.location.href = 'projects.html';
+    } else {
+        console.log('❌ [ROLE CHECK] Access denied - user role:', AppState.userData.role);
+        showAccessDeniedWithMessage('Project Manager access required');
+    }
+}
+
+function checkAdminAccess() {
+    console.log('🔍 [ROLE CHECK] Checking admin access for user role:', AppState.userData?.role);
+    
+    if (!AppState.userData) {
+        safeNotification('User data not found', 'error');
+        return;
+    }
+
+    // Only allow admin role to access admin dashboard
+    if (AppState.userData.role === 'admin') {
+        console.log('✅ [ROLE CHECK] Access granted - redirecting to admin dashboard');
+        window.location.href = 'admin-dashboard.html';
+    } else {
+        console.log('❌ [ROLE CHECK] Access denied - user role:', AppState.userData.role);
+        showAccessDeniedWithMessage('Administrator access required');
+    }
+}
+
+function showAccessDeniedWithMessage(message = 'Access Denied') {
+    console.log('🚫 [ACCESS DENIED]', message);
+    const modal = document.getElementById('access-denied-modal');
+    if (modal) {
+        const messageEl = modal.querySelector('p');
+        if (messageEl) {
+            messageEl.textContent = message;
+        }
+        showModal(modal);
+    } else {
+        safeNotification(message, 'error');
+    }
+}
+
+function updateUIBasedOnRole() {
+    console.log('🎨 [UI UPDATE] Updating interface based on user role:', AppState.userData?.role);
+    
+    if (!AppState.userData) return;
+    
+    const adminBtn = document.getElementById('admin-btn');
+    const projectsBtn = document.getElementById('projects-btn');
+    const employeeProjectsBtn = document.getElementById('employee-projects-btn');
+    
+    // Show Admin button only for admin role
+    if (adminBtn) {
+        if (AppState.userData.role === 'admin') {
+            adminBtn.style.display = 'block';
+            console.log('✅ [UI UPDATE] Admin button shown for admin user');
+        } else {
+            adminBtn.style.display = 'none';
+            console.log('❌ [UI UPDATE] Admin button hidden for non-admin user');
+        }
+    }
+    
+    // Show Projects button only for project_manager role
+    if (projectsBtn) {
+        if (AppState.userData.role === 'project_manager') {
+            projectsBtn.style.display = 'block';
+            console.log('✅ [UI UPDATE] Projects button shown for project_manager user');
+        } else {
+            projectsBtn.style.display = 'none';
+            console.log('❌ [UI UPDATE] Projects button hidden for non-project_manager user');
+        }
+    }
+    
+    // Show My Projects button for all employees
+    if (employeeProjectsBtn) {
+        employeeProjectsBtn.style.display = 'block';
+        console.log('✅ [UI UPDATE] My Projects button shown for all users');
+    }
+}
+
 // ==================== INITIALIZATION ====================
 
 document.addEventListener('DOMContentLoaded', async function() {
@@ -391,6 +481,7 @@ async function initializeDashboard() {
         updateDayDates();
         loadDraftTimesheet();
         await checkPendingRejectedTimesheets();
+        updateUIBasedOnRole(); // ✅ ADDED: Update UI based on user role
     } catch (error) {
         console.error('Error in dashboard initialization:', error);
         safeNotification('Error initializing dashboard', 'error');
@@ -432,6 +523,8 @@ function updateUserInfo() {
 }
 
 function setupEventListeners() {
+    console.log('🔗 Setting up event listeners...');
+    
     // Basic event listeners
     document.getElementById('toggle-sidebar').addEventListener('click', toggleSidebar);
     document.getElementById('logout-btn').addEventListener('click', handleLogout);
@@ -442,12 +535,14 @@ function setupEventListeners() {
     document.getElementById('submit-timesheet-btn').addEventListener('click', submitTimesheet);
     document.getElementById('history-btn').addEventListener('click', showHistoryModal);
     document.getElementById('summary-history-btn').addEventListener('click', showHistoryModal);
-    document.getElementById('admin-btn').addEventListener('click', showAccessDenied);
-    document.getElementById('projects-btn').addEventListener('click', showAccessDenied);
+    
+    // ✅ UPDATED: Role-based navigation listeners
+    document.getElementById('admin-btn').addEventListener('click', checkAdminAccess);
+    document.getElementById('projects-btn').addEventListener('click', checkProjectAccess);
     document.getElementById('employee-projects-btn').addEventListener('click', showEmployeeProjects);
     
     setupModalHandlers();
-    console.log('✅ Event listeners set up');
+    console.log('✅ Event listeners set up with role-based navigation');
 }
 
 function setupModalHandlers() {
@@ -2483,4 +2578,4 @@ window.openMiscellaneousHoursModal = showRejectedTimesheetsModal;
 window.closeMiscellaneousHoursModal = hideAllModals;
 window.closeTimesheetDetailsModal = hideAllModals;
 
-console.log('✅ COMPLETE DASHBOARD.JS loaded (2200+ lines) - All edit modal issues fixed');
+console.log('✅ COMPLETE DASHBOARD.JS loaded (2200+ lines) - Enhanced with role-based navigation');

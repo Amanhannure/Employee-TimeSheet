@@ -1376,3 +1376,39 @@ body.modal-open {
     justify-content: center;
     align-items: center;
 }
+
+/* Sidebar button styling to match anchor appearance */
+.sidebar-btn {
+    background: none;
+    border: none;
+    color: var(--text-color);
+    padding: 12px 20px;
+    width: 100%;
+    text-align: left;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 14px;
+    transition: all 0.3s ease;
+    text-decoration: none;
+}
+
+.sidebar-btn:hover {
+    background: var(--primary-color);
+    color: white;
+}
+
+.sidebar-btn i {
+    width: 20px;
+    text-align: center;
+}
+
+/* Ensure proper styling for role-based hidden elements */
+.sidebar-menu li {
+    list-style: none;
+}
+
+.sidebar-menu li[style*="display: none"] {
+    display: none !important;
+}
