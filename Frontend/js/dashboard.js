@@ -1,5 +1,6 @@
 // ==================== COMPLETE DASHBOARD.JS (2200+ LINES) ====================
 // Fixed all edit modal issues and enhanced error handling
+// ✅ ADDED: Role-based Projects access for manager and project_manager roles
 
 // Global variables with better organization
 const AppState = {
@@ -98,6 +99,18 @@ function getUserData() {
         console.error('Error getting user data:', error);
         return null;
     }
+}
+
+// ✅ ADDED: Role-based access control for Projects
+function hasProjectsAccess() {
+    const userData = getUserData();
+    if (!userData) return false;
+    
+    const allowedRoles = ['manager', 'project_manager'];
+    const hasAccess = allowedRoles.includes(userData.role);
+    
+    console.log(`🔐 Projects Access Check: Role=${userData.role}, HasAccess=${hasAccess}`);
+    return hasAccess;
 }
 
 function parseDateSafe(dateString) {
@@ -443,11 +456,31 @@ function setupEventListeners() {
     document.getElementById('history-btn').addEventListener('click', showHistoryModal);
     document.getElementById('summary-history-btn').addEventListener('click', showHistoryModal);
     document.getElementById('admin-btn').addEventListener('click', showAccessDenied);
-    document.getElementById('projects-btn').addEventListener('click', showAccessDenied);
+    
+    // ✅ UPDATED: Projects button with role-based access
+    document.getElementById('projects-btn').addEventListener('click', handleProjectsAccess);
+    
     document.getElementById('employee-projects-btn').addEventListener('click', showEmployeeProjects);
     
     setupModalHandlers();
     console.log('✅ Event listeners set up');
+}
+
+// ✅ ADDED: Projects access handler with role checking
+function handleProjectsAccess() {
+    if (AppState.isLoading) return;
+    
+    console.log('🔐 Checking Projects access...');
+    
+    if (hasProjectsAccess()) {
+        // User has access, redirect to projects page
+        console.log('✅ Access granted, redirecting to projects.html');
+        window.location.href = 'projects.html';
+    } else {
+        // User doesn't have access, show access denied
+        console.log('❌ Access denied, showing access denied modal');
+        showAccessDenied();
+    }
 }
 
 function setupModalHandlers() {
@@ -2483,4 +2516,4 @@ window.openMiscellaneousHoursModal = showRejectedTimesheetsModal;
 window.closeMiscellaneousHoursModal = hideAllModals;
 window.closeTimesheetDetailsModal = hideAllModals;
 
-console.log('✅ COMPLETE DASHBOARD.JS loaded (2200+ lines) - All edit modal issues fixed');
+console.log('✅ COMPLETE DASHBOARD.JS loaded (2200+ lines) - All edit modal issues fixed + Role-based Projects access ADDED');
