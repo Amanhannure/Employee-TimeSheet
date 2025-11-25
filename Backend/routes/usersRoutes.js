@@ -5,8 +5,17 @@ import { hashPassword } from '../utils/auth.js';
 
 const router = express.Router();
 
-// Get all users (Admin only)
-router.get('/', authenticate, authorizeAdmin, async (req, res) => {
+// ✅ ADDED: Manager or Admin authorization middleware
+const authorizeManagerOrAdmin = (req, res, next) => {
+  if (req.user.role === 'admin' || req.user.role === 'project_manager' || req.user.role === 'manager') {
+    next();
+  } else {
+    res.status(403).json({ message: 'Access denied. Manager or admin role required.' });
+  }
+};
+
+// Get all users (Admin and Manager only) - ✅ UPDATED AUTHORIZATION
+router.get('/', authenticate, authorizeManagerOrAdmin, async (req, res) => {
   try {
     const { department, role, status } = req.query;
     
@@ -26,7 +35,7 @@ router.get('/', authenticate, authorizeAdmin, async (req, res) => {
   }
 });
 
-// Get user by ID
+// Get user by ID (Admin only) - keep as admin only for security
 router.get('/:id', authenticate, authorizeAdmin, async (req, res) => {
   try {
     const user = await User.findById(req.params.id).select('-passwordHash');
@@ -42,7 +51,7 @@ router.get('/:id', authenticate, authorizeAdmin, async (req, res) => {
   }
 });
 
-// Create new user (Admin only)
+// Create new user (Admin only) - keep as admin only
 router.post('/', authenticate, authorizeAdmin, async (req, res) => {
   try {
     const {
@@ -124,7 +133,7 @@ router.post('/', authenticate, authorizeAdmin, async (req, res) => {
   }
 });
 
-// Update user (Admin only) - FIXED VERSION
+// Update user (Admin only) - keep as admin only
 router.put('/:id', authenticate, authorizeAdmin, async (req, res) => {
   try {
     console.log('=== UPDATE USER REQUEST ===');
@@ -236,7 +245,7 @@ router.put('/:id', authenticate, authorizeAdmin, async (req, res) => {
   }
 });
 
-// Update user password (Admin only)
+// Update user password (Admin only) - keep as admin only
 router.patch('/:id/password', authenticate, authorizeAdmin, async (req, res) => {
   try {
     const { password } = req.body;
@@ -264,7 +273,7 @@ router.patch('/:id/password', authenticate, authorizeAdmin, async (req, res) => 
   }
 });
 
-// Delete user (Admin only)
+// Delete user (Admin only) - keep as admin only
 router.delete('/:id', authenticate, authorizeAdmin, async (req, res) => {
   try {
     const user = await User.findByIdAndDelete(req.params.id);
@@ -280,7 +289,7 @@ router.delete('/:id', authenticate, authorizeAdmin, async (req, res) => {
   }
 });
 
-// Get users by department
+// Get users by department (Authenticated users only)
 router.get('/department/:department', authenticate, async (req, res) => {
   try {
     const users = await User.find({ 
@@ -297,7 +306,7 @@ router.get('/department/:department', authenticate, async (req, res) => {
   }
 });
 
-// Get user statistics (Admin only)
+// Get user statistics (Admin only) - keep as admin only
 router.get('/stats/overview', authenticate, authorizeAdmin, async (req, res) => {
   try {
     const totalUsers = await User.countDocuments();

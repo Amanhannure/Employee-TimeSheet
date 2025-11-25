@@ -92,7 +92,20 @@ function validateHoursDistribution() {
 async function loadProjects() {
     try {
         console.log('📋 Loading projects from API...');
-        const projects = await apiClient.getAllProjects();
+        
+        // ✅ FIXED: Get user role and use appropriate endpoint
+        const userData = JSON.parse(localStorage.getItem('userData') || '{}');
+        const userRole = userData.role;
+
+        let projects;
+        if (userRole === 'admin' || userRole === 'manager' || userRole === 'project_manager') {
+            projects = await apiClient.getAllProjects();
+        } else {
+            projects = await apiClient.getMyProjects();
+        }
+        
+        console.log('👤 Current user role:', userRole, 'Loading projects:', projects.length);
+        
         window.projects = projects;
         console.log(`✅ Loaded ${projects.length} projects:`, projects);
         
@@ -355,23 +368,30 @@ async function populateEmployeeSelect(selectedDepartments = [], preserveSelectio
     try {
         console.log('👤 Populating employee select...');
         
-        const response = await apiClient.getUsers();
-        console.log('📋 API Response:', response);
-        
         let users = [];
-        if (Array.isArray(response)) {
-            users = response;
-        } else if (response && Array.isArray(response.users)) {
-            users = response.users;
-        } else if (response && Array.isArray(response.data)) {
-            users = response.data;
-        } else if (response && typeof response === 'object') {
-            for (const key in response) {
-                if (Array.isArray(response[key])) {
-                    users = response[key];
-                    break;
+        
+        try {
+            // Try to fetch users from API
+            const response = await apiClient.getUsers();
+            console.log('📋 API Response:', response);
+            
+            if (Array.isArray(response)) {
+                users = response;
+            } else if (response && Array.isArray(response.users)) {
+                users = response.users;
+            } else if (response && Array.isArray(response.data)) {
+                users = response.data;
+            } else if (response && typeof response === 'object') {
+                for (const key in response) {
+                    if (Array.isArray(response[key])) {
+                        users = response[key];
+                        break;
+                    }
                 }
             }
+        } catch (apiError) {
+            console.warn('❌ API users fetch failed, using empty list:', apiError.message);
+            users = [];
         }
         
         console.log('📋 Loaded users:', users.length);
@@ -386,22 +406,34 @@ async function populateEmployeeSelect(selectedDepartments = [], preserveSelectio
         const currentSelections = Array.from(employeeSelect.selectedOptions).map(option => option.value);
         const selectionsToPreserve = preserveSelections.length > 0 ? preserveSelections : currentSelections;
 
-        // Clear existing options except the first one (if it's a placeholder)
-        while (employeeSelect.options.length > 0) {
-            employeeSelect.remove(0);
-        }
+        // Clear existing options
+        employeeSelect.innerHTML = '';
 
         // Add a default option
         const defaultOption = document.createElement('option');
         defaultOption.value = '';
-        defaultOption.textContent = 'Select employees...';
-        defaultOption.disabled = true;
+        
+        if (users.length === 0) {
+            defaultOption.textContent = 'No employees available - Contact admin';
+            defaultOption.disabled = true;
+        } else {
+            defaultOption.textContent = 'Select employees...';
+            defaultOption.disabled = true;
+        }
+        
         defaultOption.selected = selectionsToPreserve.length === 0;
         employeeSelect.appendChild(defaultOption);
 
+        if (users.length === 0) {
+            console.log('❌ No employees available for selection');
+            return;
+        }
+
         console.log('🏢 Selected departments for filtering:', selectedDepartments);
 
+        // ✅ FIXED: Employee filtering with proper department handling
         const filteredUsers = users.filter(user => {
+            if (!user.department) return false;
             if (selectedDepartments.length === 0) return true;
             return selectedDepartments.includes(user.department);
         });
@@ -427,6 +459,17 @@ async function populateEmployeeSelect(selectedDepartments = [], preserveSelectio
 
     } catch (error) {
         console.error('❌ Error populating employee select:', error);
+        
+        // Fallback: Show empty dropdown with message
+        const employeeSelect = document.getElementById('assignedEmployees');
+        if (employeeSelect) {
+            employeeSelect.innerHTML = '';
+            const errorOption = document.createElement('option');
+            errorOption.value = '';
+            errorOption.textContent = 'Unable to load employees';
+            errorOption.disabled = true;
+            employeeSelect.appendChild(errorOption);
+        }
     }
 }
 
