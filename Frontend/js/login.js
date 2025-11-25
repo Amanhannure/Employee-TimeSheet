@@ -68,15 +68,18 @@ function hideAllModals() {
 }
 
 // Redirect based on user role
+// Redirect based on user role - FIXED VERSION
 function redirectBasedOnRole(role) {
+    console.log(`🔀 Redirecting user with role: ${role}`);
+    
     switch (role) {
         case 'admin':
-        case 'manager':
             window.location.href = 'admin-dashboard.html';
             break;
+        case 'manager':
         case 'employee':
         default:
-            window.location.href = 'dashboard.html';
+            window.location.href = 'dashboard.html';  // Managers go to regular dashboard
             break;
     }
 }
