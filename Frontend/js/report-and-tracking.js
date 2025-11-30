@@ -1042,6 +1042,92 @@ function formatDate(dateString) {
     }
 }
 
+// ==================== AUTO-REFRESH SOLUTION ====================
+
+// ✅ CONCRETE FIX: Auto-refresh report data
+function startReportAutoRefresh() {
+    console.log('🔄 Starting auto-refresh for report data...');
+    
+    // Refresh every 30 seconds
+    setInterval(() => {
+        if (!document.hidden) {
+            refreshReportData();
+        }
+    }, 30000);
+    
+    // Refresh when tab becomes visible
+    document.addEventListener('visibilitychange', function() {
+        if (!document.hidden) {
+            console.log('📱 Tab became visible, refreshing report data...');
+            refreshReportData();
+        }
+    });
+}
+
+// ✅ Refresh function for report dashboard
+function refreshReportData() {
+    const activeTab = document.querySelector('.tab.active');
+    if (!activeTab) return;
+    
+    if (activeTab.textContent.includes('HOURS TRACKING')) {
+        console.log('🔄 Refreshing hours tracking data...');
+        
+        // If there's an active search, re-run it
+        const plNoInput = document.getElementById('pl-no');
+        const projectNameInput = document.getElementById('project-name');
+        
+        if ((plNoInput && plNoInput.value) || (projectNameInput && projectNameInput.value)) {
+            console.log('🔄 Re-running project search with current filters...');
+            searchProject(); // This will fetch fresh data from backend
+        }
+    } else if (activeTab.textContent.includes('EMPLOYEE REPORT')) {
+        console.log('🔄 Refreshing employee report data...');
+        
+        // If there's an active employee search, re-run it
+        const idPlNoInput = document.getElementById('id-pl-no');
+        const nameProjectInput = document.getElementById('name-project');
+        
+        if ((idPlNoInput && idPlNoInput.value) || (nameProjectInput && nameProjectInput.value)) {
+            console.log('🔄 Re-running employee search with current filters...');
+            searchEmployee(); // This will fetch fresh data
+        }
+    }
+}
+
+// ✅ MANUAL REFRESH BUTTON for reports
+function addReportRefreshButton() {
+    if (document.getElementById('report-refresh-btn')) return;
+    
+    const header = document.querySelector('.report-header') || 
+                   document.querySelector('.content-header') ||
+                   document.querySelector('h2');
+    
+    if (header) {
+        const refreshBtn = document.createElement('button');
+        refreshBtn.id = 'report-refresh-btn';
+        refreshBtn.className = 'btn btn-primary';
+        refreshBtn.innerHTML = '<i class="fas fa-sync-alt"></i> Refresh Data';
+        refreshBtn.style.marginLeft = '10px';
+        refreshBtn.onclick = function() {
+            refreshReportData();
+            showNotification('Refreshing report data...', 'info');
+        };
+        
+        header.parentNode.insertBefore(refreshBtn, header.nextSibling);
+        console.log('✅ Report refresh button added');
+    }
+}
+
+// ✅ Initialize auto-refresh for reports
+document.addEventListener('DOMContentLoaded', function() {
+    setTimeout(() => {
+        startReportAutoRefresh();
+        addReportRefreshButton();
+    }, 3000);
+});
+
+
+
 // Make functions globally available
 window.searchProject = searchProject;
 window.searchEmployee = searchEmployee;
@@ -1052,3 +1138,4 @@ window.exportEmployeeReportToExcel = exportEmployeeReportToExcel;
 window.exportToPDF = exportToPDF;
 window.viewProjectDetails = viewProjectDetails;
 window.viewTimesheetDetails = viewTimesheetDetails;
+window.refreshReportData = refreshReportData;

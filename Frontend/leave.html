@@ -62,6 +62,39 @@
 
             <!-- Leave Application Content -->
             <div class="leave-content">
+                <!-- Leave Balance Display -->
+                <div class="leave-balance-section">
+                    <div class="section-header">
+                        <h3><i class="fas fa-chart-pie"></i> My Leave Balance</h3>
+                    </div>
+                    <div class="balance-cards">
+                        <div class="balance-card sick-leave">
+                            <div class="balance-icon">
+                                <i class="fas fa-heartbeat"></i>
+                            </div>
+                            <div class="balance-info">
+                                <h4>Sick Leave (SL)</h4>
+                                <div class="balance-amount" id="sick-leave-balance">8</div>
+                                <span class="balance-label">Days Available</span>
+                            </div>
+                        </div>
+                        <div class="balance-card privilege-leave">
+                            <div class="balance-icon">
+                                <i class="fas fa-umbrella-beach"></i>
+                            </div>
+                            <div class="balance-info">
+                                <h4>Privilege Leave (PL)</h4>
+                                <div class="balance-amount" id="privilege-leave-balance">0</div>
+                                <span class="balance-label" id="pl-status-label">Days Available</span>
+                            </div>
+                            <div class="probation-notice" id="probation-notice" style="display: none;">
+                                <i class="fas fa-info-circle"></i>
+                                <span>PL available after probation</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Leave Application Form -->
                 <div class="leave-form-section">
                     <div class="section-header">
@@ -75,12 +108,12 @@
                                 <label for="leave-type">Leave Type *</label>
                                 <select id="leave-type" name="leaveType" required>
                                     <option value="">Select Leave Type</option>
-                                    <option value="sick">Sick Leave</option>
-                                    <option value="casual">Casual Leave</option>
-                                    <option value="annual">Annual Leave</option>
-                                    <option value="emergency">Emergency Leave</option>
-                                    <option value="other">Other</option>
+                                    <option value="sick">Sick Leave (SL)</option>
+                                    <option value="privilege">Privilege Leave (PL)</option>
                                 </select>
+                                <div class="leave-type-info" id="leave-type-info">
+                                    <!-- Dynamic leave type information will appear here -->
+                                </div>
                             </div>
                             <div class="form-group">
                                 <label for="employee-code">Employee Code</label>
@@ -96,6 +129,14 @@
                             <div class="form-group">
                                 <label for="end-date">End Date *</label>
                                 <input type="date" id="end-date" name="endDate" required>
+                            </div>
+                        </div>
+
+                        <div class="form-group full-width">
+                            <label for="leave-duration">Leave Duration</label>
+                            <div id="leave-duration" class="leave-duration-display">
+                                <span id="duration-days">0 days</span>
+                                <span id="working-days" class="working-days-info"></span>
                             </div>
                         </div>
 
@@ -136,6 +177,9 @@
                 <div class="leave-history-section">
                     <div class="section-header">
                         <h3><i class="fas fa-history"></i> My Leave Requests</h3>
+                        <button id="refresh-requests" class="btn btn-icon">
+                            <i class="fas fa-sync-alt"></i> Refresh
+                        </button>
                     </div>
                     
                     <div class="leave-requests-container">
@@ -170,6 +214,44 @@
             </div>
             <div class="modal-body" id="leave-details-content">
                 <!-- Leave details will be loaded here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Leave Balance Info Modal -->
+    <div id="balance-info-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Leave Balance Information</h2>
+                <span class="close-modal">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="balance-info-content">
+                    <h4><i class="fas fa-heartbeat"></i> Sick Leave (SL)</h4>
+                    <ul>
+                        <li>Initial balance: 8 days per year</li>
+                        <li>Requires supporting document for leaves longer than 3 days</li>
+                        <li>Can be availed during probation period</li>
+                    </ul>
+                    
+                    <h4><i class="fas fa-umbrella-beach"></i> Privilege Leave (PL)</h4>
+                    <ul>
+                        <li>Accrual rate: 1.5 days per month</li>
+                        <li>Available only after probation period (6 months)</li>
+                        <li>Automatic update on 5th of each month</li>
+                        <li>Joining date rules apply:
+                            <ul>
+                                <li>Joined on or before 15th: Count from joining month</li>
+                                <li>Joined after 15th: Count from next month</li>
+                            </ul>
+                        </li>
+                    </ul>
+                    
+                    <div class="probation-info">
+                        <h5><i class="fas fa-info-circle"></i> Probation Period</h5>
+                        <p>During probation (first 6 months), PL balance shows as 0. Once status changes to active, PL is calculated as 1.5 × completed probation months.</p>
+                    </div>
+                </div>
             </div>
         </div>
     </div>

@@ -17,8 +17,9 @@ document.addEventListener('DOMContentLoaded', function() {
     // Initialize event listeners
     initializeEventListeners();
     
-    // Load leave requests
+    // Load leave requests and balance
     loadMyLeaveRequests();
+    loadLeaveBalance(); // ✅ ADDED: Load leave balance
 });
 
 function initializeEventListeners() {
@@ -77,6 +78,84 @@ function initializeEventListeners() {
     
     // Logout
     document.getElementById('logout-btn').addEventListener('click', logout);
+
+    // ✅ ADDED: Date change listeners for duration calculation
+    document.getElementById('start-date').addEventListener('change', calculateLeaveDuration);
+    document.getElementById('end-date').addEventListener('change', calculateLeaveDuration);
+    
+    // ✅ ADDED: Leave type change listener for balance validation
+    document.getElementById('leave-type').addEventListener('change', updateLeaveTypeInfo);
+    
+    // ✅ ADDED: Refresh button
+    document.getElementById('refresh-requests').addEventListener('click', loadMyLeaveRequests);
+}
+
+// ✅ ADDED: Load leave balance
+async function loadLeaveBalance() {
+    try {
+        const balance = await apiClient.getLeaveBalance();
+        updateBalanceDisplay(balance);
+    } catch (error) {
+        console.error('Error loading leave balance:', error);
+    }
+}
+
+// ✅ ADDED: Update balance display
+function updateBalanceDisplay(balance) {
+    document.getElementById('sick-leave-balance').textContent = balance.sickLeave;
+    document.getElementById('privilege-leave-balance').textContent = balance.privilegeLeave.toFixed(1);
+    
+    // Show/hide probation notice
+    const probationNotice = document.getElementById('probation-notice');
+    const plStatusLabel = document.getElementById('pl-status-label');
+    
+    if (balance.employeeStatus === 'probation') {
+        probationNotice.style.display = 'flex';
+        plStatusLabel.textContent = 'Available after probation';
+    } else {
+        probationNotice.style.display = 'none';
+        plStatusLabel.textContent = 'Days Available';
+    }
+}
+
+// ✅ ADDED: Update leave type information
+function updateLeaveTypeInfo() {
+    const leaveType = document.getElementById('leave-type').value;
+    const infoDiv = document.getElementById('leave-type-info');
+    
+    if (leaveType === 'privilege') {
+        infoDiv.innerHTML = `
+            <div class="info-message info-warning">
+                <i class="fas fa-info-circle"></i>
+                Privilege Leave (PL) is only available after probation period
+            </div>
+        `;
+    } else if (leaveType === 'sick') {
+        infoDiv.innerHTML = `
+            <div class="info-message info-success">
+                <i class="fas fa-info-circle"></i>
+                Sick Leave (SL) can be availed during probation
+            </div>
+        `;
+    } else {
+        infoDiv.innerHTML = '';
+    }
+}
+
+// ✅ ADDED: Calculate leave duration
+function calculateLeaveDuration() {
+    const startDate = document.getElementById('start-date').value;
+    const endDate = document.getElementById('end-date').value;
+    
+    if (startDate && endDate) {
+        const start = new Date(startDate);
+        const end = new Date(endDate);
+        
+        if (start <= end) {
+            const duration = Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1;
+            document.getElementById('duration-days').textContent = `${duration} day${duration > 1 ? 's' : ''}`;
+        }
+    }
 }
 
 function handleFileSelect(file) {
@@ -128,6 +207,22 @@ async function submitLeaveRequest(e) {
             return;
         }
 
+        // ✅ ADDED: Validate leave type against balance
+        const leaveType = formData.get('leaveType');
+        const duration = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1;
+        
+        if (leaveType === 'privilege') {
+            const balance = await apiClient.getLeaveBalance();
+            if (balance.employeeStatus === 'probation') {
+                showNotification('Cannot avail Privilege Leave during probation period', 'error');
+                return;
+            }
+            if (balance.privilegeLeave < duration) {
+                showNotification(`Insufficient Privilege Leave balance. Available: ${balance.privilegeLeave.toFixed(1)} days`, 'error');
+                return;
+            }
+        }
+
         // Show loading state
         const submitBtn = document.getElementById('submit-leave-btn');
         const originalText = submitBtn.innerHTML;
@@ -146,6 +241,7 @@ async function submitLeaveRequest(e) {
         showNotification('Leave request submitted successfully!', 'success');
         resetForm();
         loadMyLeaveRequests();
+        loadLeaveBalance(); // ✅ ADDED: Refresh balance after submission
 
     } catch (error) {
         console.error('Error submitting leave request:', error);
@@ -195,11 +291,14 @@ function displayLeaveRequests(leaveRequests) {
         const appliedDate = new Date(request.createdAt).toLocaleDateString('en-GB');
         const processedDate = request.approvedAt ? new Date(request.approvedAt).toLocaleDateString('en-GB') : null;
         
+        // ✅ UPDATED: Leave type display
+        const leaveTypeDisplay = request.leaveType === 'sick' ? 'Sick Leave (SL)' : 'Privilege Leave (PL)';
+        
         return `
         <div class="leave-request-card" data-id="${request._id}">
             <div class="leave-request-header">
                 <div>
-                    <span class="leave-type">${request.leaveType.charAt(0).toUpperCase() + request.leaveType.slice(1)} Leave</span>
+                    <span class="leave-type">${leaveTypeDisplay}</span>
                     <div class="leave-dates">
                         <div class="date-item">
                             <span class="date-label">From</span>
@@ -275,6 +374,8 @@ function resetForm() {
     document.getElementById('file-preview').style.display = 'none';
     document.getElementById('file-upload-area').style.display = 'block';
     document.getElementById('supporting-document').value = '';
+    document.getElementById('leave-type-info').innerHTML = ''; // ✅ ADDED: Clear leave type info
+    document.getElementById('duration-days').textContent = '0 days'; // ✅ ADDED: Reset duration
 }
 
 // Make functions globally available

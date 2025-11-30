@@ -40,8 +40,31 @@ function initializeEventListeners() {
         btn.addEventListener('click', function() {
             document.getElementById('action-modal').style.display = 'none';
             document.getElementById('leave-details-modal').style.display = 'none';
+            document.getElementById('status-update-modal').style.display = 'none';
+            document.getElementById('balance-adjustment-modal').style.display = 'none';
+            document.getElementById('all-balances-modal').style.display = 'none';
         });
     });
+    
+    // ✅ ADDED: Admin action buttons
+    document.getElementById('update-status-btn').addEventListener('click', openStatusUpdateModal);
+    document.getElementById('adjust-balance-btn').addEventListener('click', openBalanceAdjustmentModal);
+    document.getElementById('view-balances-btn').addEventListener('click', openAllBalancesModal);
+    
+    // ✅ ADDED: Admin form submissions
+    document.getElementById('status-update-form').addEventListener('submit', handleStatusUpdate);
+    document.getElementById('balance-adjustment-form').addEventListener('submit', handleBalanceAdjustment);
+    
+    // ✅ ADDED: Cancel buttons for new modals
+    document.getElementById('cancel-status-update').addEventListener('click', () => {
+        document.getElementById('status-update-modal').style.display = 'none';
+    });
+    document.getElementById('cancel-balance-adjust').addEventListener('click', () => {
+        document.getElementById('balance-adjustment-modal').style.display = 'none';
+    });
+    
+    // ✅ ADDED: Refresh button
+    document.getElementById('refresh-requests').addEventListener('click', loadLeaveRequests);
     
     // Logout
     document.getElementById('logout-btn').addEventListener('click', logout);
@@ -123,6 +146,9 @@ function displayLeaveRequests(leaveRequests) {
         
         const isPending = request.status === 'pending';
 
+        // ✅ UPDATED: Leave type display
+        const leaveTypeDisplay = request.leaveType === 'sick' ? 'Sick Leave (SL)' : 'Privilege Leave (PL)';
+
         return `
             <tr>
                 <td>
@@ -131,7 +157,7 @@ function displayLeaveRequests(leaveRequests) {
                         <div style="font-size: 0.875rem; color: #666;">${employeeCode}</div>
                     </div>
                 </td>
-                <td>${request.leaveType.charAt(0).toUpperCase() + request.leaveType.slice(1)}</td>
+                <td>${leaveTypeDisplay}</td>
                 <td>${startDate}</td>
                 <td>${endDate}</td>
                 <td>${duration} day${duration > 1 ? 's' : ''}</td>
@@ -213,10 +239,13 @@ async function loadLeaveSummary(leaveRequestId) {
         const startDate = new Date(request.startDate).toLocaleDateString('en-GB');
         const endDate = new Date(request.endDate).toLocaleDateString('en-GB');
         
+        // ✅ UPDATED: Leave type display
+        const leaveTypeDisplay = request.leaveType === 'sick' ? 'Sick Leave (SL)' : 'Privilege Leave (PL)';
+
         const summaryHTML = `
             <div class="leave-summary" style="background: #f8f9fa; padding: 15px; border-radius: 5px; margin-bottom: 15px;">
                 <p><strong>Employee:</strong> ${employeeName}</p>
-                <p><strong>Leave Type:</strong> ${request.leaveType.charAt(0).toUpperCase() + request.leaveType.slice(1)}</p>
+                <p><strong>Leave Type:</strong> ${leaveTypeDisplay}</p>
                 <p><strong>Period:</strong> ${startDate} to ${endDate}</p>
                 <p><strong>Reason:</strong> ${request.reason}</p>
                 ${request.supportingDocument ? `<p><strong>Document:</strong> ${request.supportingDocument.originalName}</p>` : ''}
@@ -292,6 +321,9 @@ async function viewLeaveDetails(leaveRequestId) {
         const processedDate = request.approvedAt ? new Date(request.approvedAt).toLocaleDateString('en-GB') : 'Not processed';
         const processedBy = request.approvedBy ? `${request.approvedBy.firstName} ${request.approvedBy.lastName}` : 'N/A';
         
+        // ✅ UPDATED: Leave type display
+        const leaveTypeDisplay = request.leaveType === 'sick' ? 'Sick Leave (SL)' : 'Privilege Leave (PL)';
+
         const detailsHTML = `
             <div class="leave-details">
                 <h3>Leave Request Details</h3>
@@ -302,7 +334,7 @@ async function viewLeaveDetails(leaveRequestId) {
                     </div>
                     <div class="detail-item">
                         <label>Leave Type:</label>
-                        <span>${request.leaveType.charAt(0).toUpperCase() + request.leaveType.slice(1)}</span>
+                        <span>${leaveTypeDisplay}</span>
                     </div>
                     <div class="detail-item">
                         <label>Start Date:</label>
@@ -372,6 +404,159 @@ async function downloadDocument(leaveRequestId) {
     }
 }
 
+// ✅ ADDED: Status Update Modal Functions
+async function openStatusUpdateModal() {
+    try {
+        // Load employees for dropdown
+        const users = await apiClient.getAllUsers();
+        const employeeSelect = document.getElementById('employee-select');
+        
+        employeeSelect.innerHTML = '<option value="">Select Employee</option>';
+        users.forEach(user => {
+            const option = document.createElement('option');
+            option.value = user._id;
+            option.textContent = `${user.firstName} ${user.lastName} (${user.employeeId}) - ${user.status}`;
+            employeeSelect.appendChild(option);
+        });
+        
+        document.getElementById('status-update-modal').style.display = 'block';
+    } catch (error) {
+        console.error('Error opening status update modal:', error);
+        showNotification('Failed to load employees', 'error');
+    }
+}
+
+async function handleStatusUpdate(e) {
+    e.preventDefault();
+    
+    const employeeId = document.getElementById('employee-select').value;
+    const status = document.getElementById('status-select').value;
+    
+    if (!employeeId) {
+        showNotification('Please select an employee', 'error');
+        return;
+    }
+    
+    try {
+        const result = await apiClient.updateEmployeeStatus(employeeId, status);
+        showNotification(result.message, 'success');
+        document.getElementById('status-update-modal').style.display = 'none';
+        document.getElementById('status-update-form').reset();
+    } catch (error) {
+        console.error('Error updating employee status:', error);
+        showNotification(error.message || 'Failed to update employee status', 'error');
+    }
+}
+
+// ✅ ADDED: Balance Adjustment Modal Functions
+async function openBalanceAdjustmentModal() {
+    try {
+        // Load employees for dropdown
+        const users = await apiClient.getAllUsers();
+        const employeeSelect = document.getElementById('adjust-employee-select');
+        
+        employeeSelect.innerHTML = '<option value="">Select Employee</option>';
+        users.forEach(user => {
+            const option = document.createElement('option');
+            option.value = user._id;
+            option.textContent = `${user.firstName} ${user.lastName} (${user.employeeId})`;
+            employeeSelect.appendChild(option);
+        });
+        
+        document.getElementById('balance-adjustment-modal').style.display = 'block';
+    } catch (error) {
+        console.error('Error opening balance adjustment modal:', error);
+        showNotification('Failed to load employees', 'error');
+    }
+}
+
+async function handleBalanceAdjustment(e) {
+    e.preventDefault();
+    
+    const employeeId = document.getElementById('adjust-employee-select').value;
+    const sickLeave = document.getElementById('sick-leave-adjust').value;
+    const privilegeLeave = document.getElementById('privilege-leave-adjust').value;
+    
+    if (!employeeId) {
+        showNotification('Please select an employee', 'error');
+        return;
+    }
+    
+    if (!sickLeave && !privilegeLeave) {
+        showNotification('Please enter at least one leave balance to update', 'error');
+        return;
+    }
+    
+    try {
+        const updateData = {};
+        if (sickLeave) updateData.sickLeave = parseFloat(sickLeave);
+        if (privilegeLeave) updateData.privilegeLeave = parseFloat(privilegeLeave);
+        
+        const result = await apiClient.updateLeaveBalance(employeeId, updateData);
+        showNotification(result.message, 'success');
+        document.getElementById('balance-adjustment-modal').style.display = 'none';
+        document.getElementById('balance-adjustment-form').reset();
+    } catch (error) {
+        console.error('Error updating leave balance:', error);
+        showNotification(error.message || 'Failed to update leave balance', 'error');
+    }
+}
+
+// ✅ ADDED: All Balances Modal Functions
+async function openAllBalancesModal() {
+    try {
+        const balances = await apiClient.getAllLeaveBalances();
+        displayAllBalances(balances);
+        document.getElementById('all-balances-modal').style.display = 'block';
+    } catch (error) {
+        console.error('Error opening all balances modal:', error);
+        showNotification('Failed to load leave balances', 'error');
+    }
+}
+
+function displayAllBalances(balances) {
+    const tbody = document.getElementById('balances-table-body');
+    
+    if (!balances || balances.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="5" style="text-align: center; padding: 20px;">
+                    <div class="empty-state">
+                        <i class="fas fa-inbox"></i>
+                        <p>No leave balances found</p>
+                    </div>
+                </td>
+            </tr>
+        `;
+        return;
+    }
+    
+    tbody.innerHTML = balances.map(balance => {
+        const employeeName = balance.employee ? 
+            `${balance.employee.firstName} ${balance.employee.lastName}` : 'Unknown';
+        const lastUpdated = new Date(balance.lastUpdated).toLocaleDateString('en-GB');
+        
+        return `
+            <tr>
+                <td>
+                    <div>
+                        <strong>${sanitizeHTML(employeeName)}</strong>
+                        <div style="font-size: 0.875rem; color: #666;">${balance.employee?.employeeId || 'N/A'}</div>
+                    </div>
+                </td>
+                <td>
+                    <span class="leave-status status-${balance.employeeStatus}">
+                        ${balance.employeeStatus.charAt(0).toUpperCase() + balance.employeeStatus.slice(1)}
+                    </span>
+                </td>
+                <td><strong>${balance.sickLeave}</strong> days</td>
+                <td><strong>${balance.privilegeLeave.toFixed(1)}</strong> days</td>
+                <td>${lastUpdated}</td>
+            </tr>
+        `;
+    }).join('');
+}
+
 // Utility function for debouncing
 function debounce(func, wait) {
     let timeout;
@@ -390,3 +575,7 @@ window.openApproveModal = openApproveModal;
 window.openRejectModal = openRejectModal;
 window.viewLeaveDetails = viewLeaveDetails;
 window.downloadDocument = downloadDocument;
+// ✅ ADDED: Make new functions globally available
+window.openStatusUpdateModal = openStatusUpdateModal;
+window.openBalanceAdjustmentModal = openBalanceAdjustmentModal;
+window.openAllBalancesModal = openAllBalancesModal;

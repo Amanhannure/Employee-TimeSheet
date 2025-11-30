@@ -1017,6 +1017,81 @@ async function generateClientSideReport(projectId) {
     }
 }
 
+// ==================== AUTO-REFRESH SOLUTION ====================
+
+// ✅ CONCRETE FIX: Auto-refresh project data every 30 seconds
+function startAutoRefresh() {
+    console.log('🔄 Starting auto-refresh for project data...');
+    
+    // Refresh immediately when page loads
+    setTimeout(() => {
+        refreshProjectData();
+    }, 2000);
+    
+    // Refresh every 30 seconds
+    setInterval(() => {
+        if (!document.hidden) { // Only refresh if tab is visible
+            refreshProjectData();
+        }
+    }, 30000);
+    
+    // Also refresh when user comes back to the tab
+    document.addEventListener('visibilitychange', function() {
+        if (!document.hidden) {
+            console.log('📱 Tab became visible, refreshing project data...');
+            refreshProjectData();
+        }
+    });
+}
+
+// ✅ Refresh function that reloads project data
+async function refreshProjectData() {
+    try {
+        console.log('🔄 Auto-refreshing project data...');
+        await loadProjects(); // This will reload all projects with updated hours
+        updateOverviewCards(); // This will update the summary cards
+        console.log('✅ Project data refreshed successfully');
+    } catch (error) {
+        console.warn('⚠️ Auto-refresh failed, will retry:', error);
+    }
+}
+
+// ✅ MANUAL REFRESH BUTTON - Add to UI
+function addManualRefreshButton() {
+    // Check if button already exists
+    if (document.getElementById('manual-refresh-btn')) return;
+    
+    const header = document.querySelector('.dashboard-header') || 
+                   document.querySelector('.content-header') ||
+                   document.querySelector('header');
+    
+    if (header) {
+        const refreshBtn = document.createElement('button');
+        refreshBtn.id = 'manual-refresh-btn';
+        refreshBtn.className = 'btn btn-primary';
+        refreshBtn.innerHTML = '<i class="fas fa-sync-alt"></i> Refresh Data';
+        refreshBtn.style.marginLeft = '10px';
+        refreshBtn.onclick = function() {
+            refreshProjectData();
+            showNotification('Refreshing project data...', 'info');
+        };
+        
+        header.appendChild(refreshBtn);
+        console.log('✅ Manual refresh button added');
+    }
+}
+
+// ✅ Initialize auto-refresh when page loads
+document.addEventListener('DOMContentLoaded', function() {
+    // Wait a bit for initial load to complete
+    setTimeout(() => {
+        startAutoRefresh();
+        addManualRefreshButton();
+    }, 3000);
+});
+
+
+
 // Make functions globally available
 window.showAssignedEmployees = showAssignedEmployees;
 window.editProject = editProject;
@@ -1027,3 +1102,4 @@ window.closeAssignedEmployeesModal = closeAssignedEmployeesModal;
 window.closeAddVariableHoursModal = closeAddVariableHoursModal;
 window.toggleAddProjectModal = toggleAddProjectModal;
 window.validateHoursDistribution = validateHoursDistribution;
+window.refreshProjectData = refreshProjectData;
