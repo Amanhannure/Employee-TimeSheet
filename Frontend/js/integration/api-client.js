@@ -639,10 +639,6 @@ class ApiClient {
             '/reports/hours-tracking': this.getMockHoursTracking(options.body),
             '/reports/employee-report': this.getMockEmployeeReport(options.body),
             
-            // Leave Balance endpoints (NEW)
-            '/leaves/balance/my': this.getMockLeaveBalance(),
-            '/leaves/balance/all': this.getMockAllLeaveBalances(),
-            
             // Health check
             '/health': { status: 'OK', message: 'Mock server is running', timestamp: new Date().toISOString() },
             
@@ -1934,290 +1930,6 @@ generateMockCSV(timesheetId) {
         }
     }
 
-    // ==================== LEAVE BALANCE ENDPOINTS (NEW) ====================
-
-    /**
-     * Get all leave balances (Admin only)
-     * @param {Object} params - Filter parameters
-     * @returns {Promise} - Leave balances array
-     */
-    async getLeaveBalances(params = {}) {
-        this.logTimesheetOperation('GET_LEAVE_BALANCES', { params }, 'info');
-        
-        try {
-            const queryParams = new URLSearchParams(params).toString();
-            const endpoint = `/leaves/balance/all${queryParams ? `?${queryParams}` : ''}`;
-            const response = await this.request(endpoint);
-            
-            this.logTimesheetOperation('GET_LEAVE_BALANCES_SUCCESS', {
-                count: Array.isArray(response) ? response.length : 0,
-                params
-            }, 'success');
-            
-            return response;
-        } catch (error) {
-            this.logTimesheetOperation('GET_LEAVE_BALANCES_FAILED', {
-                error: error.message,
-                params
-            }, 'error');
-            
-            // Return mock data for development
-            return this.getMockAllLeaveBalances();
-        }
-    }
-
-    /**
-     * Get employee's own leave balance
-     * @returns {Promise} - Leave balance object
-     */
-    async getMyLeaveBalance() {
-        this.logTimesheetOperation('GET_MY_LEAVE_BALANCE', {}, 'info');
-        
-        try {
-            const response = await this.request('/leaves/balance/my');
-            
-            this.logTimesheetOperation('GET_MY_LEAVE_BALANCE_SUCCESS', {
-                hasBalance: !!response.leaveBalance
-            }, 'success');
-            
-            return response;
-        } catch (error) {
-            this.logTimesheetOperation('GET_MY_LEAVE_BALANCE_FAILED', {
-                error: error.message
-            }, 'error');
-            
-            // Return mock data for development
-            return { leaveBalance: this.getMockLeaveBalance() };
-        }
-    }
-
-    /**
-     * Update leave balance for an employee (Admin only)
-     * @param {string} employeeId - Employee ID
-     * @param {Object} data - Update data
-     * @returns {Promise} - Updated leave balance
-     */
-    async updateLeaveBalance(employeeId, data) {
-        this.logTimesheetOperation('UPDATE_LEAVE_BALANCE', {
-            employeeId,
-            leaveType: data.leaveType,
-            newValue: data.newValue
-        }, 'info');
-        
-        try {
-            const response = await this.request(`/leaves/balance/${employeeId}`, {
-                method: 'PUT',
-                body: data
-            });
-            
-            this.logTimesheetOperation('UPDATE_LEAVE_BALANCE_SUCCESS', {
-                employeeId,
-                leaveType: data.leaveType,
-                oldValue: response.adjustment?.oldValue,
-                newValue: response.adjustment?.newValue
-            }, 'success');
-            
-            this.safeNotification('Leave balance updated successfully', 'success', 5000);
-            
-            return response;
-        } catch (error) {
-            this.logTimesheetOperation('UPDATE_LEAVE_BALANCE_FAILED', {
-                employeeId,
-                error: error.message,
-                leaveType: data.leaveType
-            }, 'error');
-            
-            throw error;
-        }
-    }
-
-    /**
-     * Update employee leave status (Admin only)
-     * @param {string} employeeId - Employee ID
-     * @param {Object} data - Status update data
-     * @returns {Promise} - Updated leave balance
-     */
-    async updateEmployeeLeaveStatus(employeeId, data) {
-        this.logTimesheetOperation('UPDATE_EMPLOYEE_LEAVE_STATUS', {
-            employeeId,
-            newStatus: data.status,
-            probationMonths: data.probationMonths
-        }, 'info');
-        
-        try {
-            const response = await this.request(`/leaves/balance/${employeeId}/status`, {
-                method: 'PUT',
-                body: data
-            });
-            
-            this.logTimesheetOperation('UPDATE_EMPLOYEE_LEAVE_STATUS_SUCCESS', {
-                employeeId,
-                oldStatus: data.oldStatus || 'unknown',
-                newStatus: data.status
-            }, 'success');
-            
-            this.safeNotification(`Employee status updated to ${data.status}`, 'success', 5000);
-            
-            return response;
-        } catch (error) {
-            this.logTimesheetOperation('UPDATE_EMPLOYEE_LEAVE_STATUS_FAILED', {
-                employeeId,
-                error: error.message,
-                newStatus: data.status
-            }, 'error');
-            
-            throw error;
-        }
-    }
-
-    /**
-     * Run monthly PL accrual for all active employees (Admin only)
-     * @returns {Promise} - Accrual results
-     */
-    async runMonthlyAccrual() {
-        this.logTimesheetOperation('RUN_MONTHLY_ACCRUAL_ATTEMPT', {}, 'info');
-        
-        try {
-            const response = await this.request('/leaves/balance/monthly-accrual', {
-                method: 'POST'
-            });
-            
-            this.logTimesheetOperation('RUN_MONTHLY_ACCRUAL_SUCCESS', {
-                updatedCount: response.updatedCount,
-                date: response.date
-            }, 'success');
-            
-            this.safeNotification(`Monthly PL accrual completed. Updated ${response.updatedCount} employees.`, 'success', 5000);
-            
-            return response;
-        } catch (error) {
-            this.logTimesheetOperation('RUN_MONTHLY_ACCRUAL_FAILED', {
-                error: error.message
-            }, 'error');
-            
-            throw error;
-        }
-    }
-
-    // ==================== LEAVE BALANCE MOCK DATA ====================
-
-    getMockLeaveBalance() {
-        const userData = this.getSafeUserData();
-        
-        return {
-            _id: 'mock-leave-balance-id',
-            employee: userData?._id || 'mock-user-id',
-            employeeId: userData?.employeeId || 'T1166',
-            firstName: userData?.firstName || 'Mock',
-            lastName: userData?.lastName || 'User',
-            department: userData?.department || 'IT',
-            designation: userData?.designation || 'Software Engineer',
-            joinDate: new Date('2023-01-01').toISOString(),
-            status: 'active',
-            
-            // 6 LEAVE TYPES
-            sickLeave: {
-                current: 8,
-                total: 8,
-                lastReset: new Date().toISOString()
-            },
-            
-            privilegeLeave: {
-                current: 18,
-                total: 18,
-                accrualRate: 1.5,
-                nextAccrual: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-                probationMonths: 0
-            },
-            
-            halfPayWithPL: {
-                current: 0,
-                total: 0
-            },
-            
-            leaveWithoutPay: {
-                current: 0,
-                total: 0
-            },
-            
-            halfLWP: {
-                current: 0,
-                total: 0
-            },
-            
-            maternityLeave: {
-                current: 182,
-                total: 182,
-                eligibilityDate: null
-            },
-            
-            // Mock history
-            accrualHistory: [
-                {
-                    date: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
-                    leaveType: 'PL',
-                    amount: 1.5,
-                    reason: 'Monthly accrual',
-                    addedBy: 'system'
-                }
-            ],
-            
-            adjustmentHistory: [],
-            usedLeaves: [],
-            notes: '',
-            lastUpdated: new Date().toISOString(),
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString()
-        };
-    }
-
-    getMockAllLeaveBalances() {
-        return [
-            {
-                _id: 'mock-balance-1',
-                employeeId: 'T1166',
-                firstName: 'Ashish',
-                lastName: 'Dhole',
-                department: 'IT',
-                status: 'active',
-                sickLeave: { current: 8, total: 8 },
-                privilegeLeave: { current: 18, total: 18, accrualRate: 1.5 },
-                maternityLeave: { current: 182, total: 182 },
-                halfPayWithPL: { current: 0 },
-                leaveWithoutPay: { current: 0 },
-                halfLWP: { current: 0 }
-            },
-            {
-                _id: 'mock-balance-2',
-                employeeId: 'T1136',
-                firstName: 'Anjali',
-                lastName: 'Kulkarni',
-                department: 'HR',
-                status: 'probation',
-                sickLeave: { current: 8, total: 8 },
-                privilegeLeave: { current: 0, total: 0, accrualRate: 1.5 },
-                maternityLeave: { current: 182, total: 182 },
-                halfPayWithPL: { current: 0 },
-                leaveWithoutPay: { current: 0 },
-                halfLWP: { current: 0 }
-            },
-            {
-                _id: 'mock-balance-3',
-                employeeId: 'T1200',
-                firstName: 'Rahul',
-                lastName: 'Sharma',
-                department: 'Finance',
-                status: 'active',
-                sickLeave: { current: 8, total: 8 },
-                privilegeLeave: { current: 24.5, total: 24.5, accrualRate: 1.5 },
-                maternityLeave: { current: 182, total: 182 },
-                halfPayWithPL: { current: 5 },
-                leaveWithoutPay: { current: 2 },
-                halfLWP: { current: 0 }
-            }
-        ];
-    }
-
     // ==================== PROJECT EXPORT METHODS (FIXED) ====================
 
     /**
@@ -2975,6 +2687,660 @@ generateMockCSV(timesheetId) {
         this.logTimesheetOperation('SYSTEM_DIAGNOSTICS', diagnostics, 'info');
         return diagnostics;
     }
+
+    // ==================== LEAVE MANAGEMENT ENDPOINTS ====================
+
+    /**
+     * Get employee's own leave balance
+     * @returns {Promise} Leave balance data
+     */
+    async getMyLeaveBalance() {
+        this.logTimesheetOperation('GET_MY_LEAVE_BALANCE', {}, 'info');
+        
+        try {
+            const response = await this.request('/leaves/balance/my');
+            
+            this.logTimesheetOperation('GET_MY_LEAVE_BALANCE_SUCCESS', {
+                hasBalance: !!response.leaveBalance
+            }, 'success');
+            
+            return response;
+        } catch (error) {
+            this.logTimesheetOperation('GET_MY_LEAVE_BALANCE_FAILED', {
+                error: error.message,
+                statusCode: error.status
+            }, 'error');
+            
+            throw error;
+        }
+    }
+
+    /**
+     * Get all leave balances (Admin only)
+     * @param {Object} params - Filter parameters
+     * @returns {Promise} Array of leave balances
+     */
+    async getLeaveBalances(params = {}) {
+        this.logTimesheetOperation('GET_ALL_LEAVE_BALANCES', { params }, 'info');
+        
+        try {
+            const queryParams = new URLSearchParams(params).toString();
+            const endpoint = `/leaves/balance/all${queryParams ? `?${queryParams}` : ''}`;
+            const response = await this.request(endpoint);
+            
+            this.logTimesheetOperation('GET_ALL_LEAVE_BALANCES_SUCCESS', {
+                count: response.length || 0,
+                params
+            }, 'success');
+            
+            return response;
+        } catch (error) {
+            this.logTimesheetOperation('GET_ALL_LEAVE_BALANCES_FAILED', {
+                error: error.message,
+                params
+            }, 'error');
+            
+            throw error;
+        }
+    }
+
+    /**
+     * Update leave balance for an employee
+     * @param {string} employeeId - Employee ID
+     * @param {Object} data - Update data {leaveType, newValue, reason}
+     * @returns {Promise} Updated leave balance
+     */
+    async updateLeaveBalance(employeeId, data) {
+        this.logTimesheetOperation('UPDATE_LEAVE_BALANCE', {
+            employeeId,
+            leaveType: data.leaveType,
+            newValue: data.newValue,
+            reason: data.reason
+        }, 'info');
+        
+        try {
+            const response = await this.request(`/leaves/balance/${employeeId}`, {
+                method: 'PUT',
+                body: data
+            });
+            
+            this.logTimesheetOperation('UPDATE_LEAVE_BALANCE_SUCCESS', {
+                employeeId,
+                leaveType: data.leaveType,
+                oldValue: response.adjustment?.oldValue,
+                newValue: response.adjustment?.newValue,
+                difference: response.adjustment?.difference
+            }, 'success');
+            
+            this.safeNotification('Leave balance updated successfully!', 'success', 5000);
+            
+            return response;
+        } catch (error) {
+            this.logTimesheetOperation('UPDATE_LEAVE_BALANCE_FAILED', {
+                employeeId,
+                error: error.message,
+                statusCode: error.status,
+                userMessage: error.userMessage
+            }, 'error');
+            
+            throw error;
+        }
+    }
+
+    /**
+     * Update employee leave status
+     * @param {string} employeeId - Employee ID
+     * @param {Object} data - Status data {status, probationMonths}
+     * @returns {Promise} Updated leave balance
+     */
+    async updateEmployeeLeaveStatus(employeeId, data) {
+        this.logTimesheetOperation('UPDATE_EMPLOYEE_LEAVE_STATUS', {
+            employeeId,
+            newStatus: data.status,
+            probationMonths: data.probationMonths
+        }, 'info');
+        
+        try {
+            const response = await this.request(`/leaves/balance/${employeeId}/status`, {
+                method: 'PUT',
+                body: data
+            });
+            
+            this.logTimesheetOperation('UPDATE_EMPLOYEE_LEAVE_STATUS_SUCCESS', {
+                employeeId,
+                oldStatus: data.oldStatus,
+                newStatus: data.status,
+                probationMonths: data.probationMonths
+            }, 'success');
+            
+            this.safeNotification(`Employee status updated to ${data.status}`, 'success', 5000);
+            
+            return response;
+        } catch (error) {
+            this.logTimesheetOperation('UPDATE_EMPLOYEE_LEAVE_STATUS_FAILED', {
+                employeeId,
+                error: error.message,
+                statusCode: error.status
+            }, 'error');
+            
+            throw error;
+        }
+    }
+
+    /**
+     * Run monthly accrual for privilege leaves
+     * @returns {Promise} Accrual results
+     */
+    async runMonthlyAccrual() {
+        this.logTimesheetOperation('RUN_MONTHLY_ACCRUAL', {}, 'info');
+        
+        try {
+            const response = await this.request('/leaves/balance/monthly-accrual', {
+                method: 'POST'
+            });
+            
+            this.logTimesheetOperation('RUN_MONTHLY_ACCRUAL_SUCCESS', {
+                updatedCount: response.updatedCount,
+                date: response.date
+            }, 'success');
+            
+            this.safeNotification(`Monthly PL accrual completed. Updated ${response.updatedCount} employees.`, 'success', 5000);
+            
+            return response;
+        } catch (error) {
+            this.logTimesheetOperation('RUN_MONTHLY_ACCRUAL_FAILED', {
+                error: error.message,
+                statusCode: error.status
+            }, 'error');
+            
+            throw error;
+        }
+    }
+
+    /**
+     * Get leave requests for employee
+     * @param {Object} filters - Filter parameters
+     * @returns {Promise} Array of leave requests
+     */
+    async getMyLeaveRequests(filters = {}) {
+        this.logTimesheetOperation('GET_MY_LEAVE_REQUESTS', { filters }, 'info');
+        
+        try {
+            const queryParams = new URLSearchParams(filters).toString();
+            const endpoint = `/leaves/my-requests${queryParams ? `?${queryParams}` : ''}`;
+            const response = await this.request(endpoint);
+            
+            this.logTimesheetOperation('GET_MY_LEAVE_REQUESTS_SUCCESS', {
+                count: response.length || 0,
+                statusBreakdown: this.getLeaveStatusBreakdown(response)
+            }, 'success');
+            
+            return response;
+        } catch (error) {
+            this.logTimesheetOperation('GET_MY_LEAVE_REQUESTS_FAILED', {
+                error: error.message,
+                filters
+            }, 'error');
+            
+            throw error;
+        }
+    }
+
+    /**
+     * Submit a new leave request
+     * @param {Object} leaveData - Leave request data
+     * @returns {Promise} Created leave request
+     */
+    async submitLeaveRequest(leaveData) {
+        this.logTimesheetOperation('SUBMIT_LEAVE_REQUEST', {
+            leaveType: leaveData.leaveType,
+            startDate: leaveData.startDate,
+            endDate: leaveData.endDate,
+            totalDays: leaveData.totalDays,
+            reason: leaveData.reason
+        }, 'submission');
+        
+        try {
+            const response = await this.request('/leaves/submit', {
+                method: 'POST',
+                body: leaveData
+            });
+            
+            this.logTimesheetOperation('SUBMIT_LEAVE_REQUEST_SUCCESS', {
+                leaveId: response._id,
+                status: response.status,
+                leaveType: response.leaveType,
+                totalDays: response.totalDays
+            }, 'success');
+            
+            this.safeNotification('Leave request submitted successfully! It is now pending approval.', 'success', 5000);
+            
+            return response;
+        } catch (error) {
+            this.logTimesheetOperation('SUBMIT_LEAVE_REQUEST_FAILED', {
+                error: error.message,
+                statusCode: error.status,
+                userMessage: error.userMessage
+            }, 'error');
+            
+            throw error;
+        }
+    }
+
+    /**
+     * Cancel a leave request
+     * @param {string} leaveId - Leave request ID
+     * @returns {Promise} Updated leave request
+     */
+    async cancelLeaveRequest(leaveId) {
+        this.logTimesheetOperation('CANCEL_LEAVE_REQUEST', { leaveId }, 'info');
+        
+        try {
+            const response = await this.request(`/leaves/${leaveId}/cancel`, {
+                method: 'PATCH'
+            });
+            
+            this.logTimesheetOperation('CANCEL_LEAVE_REQUEST_SUCCESS', {
+                leaveId,
+                newStatus: response.status
+            }, 'success');
+            
+            this.safeNotification('Leave request cancelled successfully!', 'success', 5000);
+            
+            return response;
+        } catch (error) {
+            this.logTimesheetOperation('CANCEL_LEAVE_REQUEST_FAILED', {
+                leaveId,
+                error: error.message,
+                statusCode: error.status
+            }, 'error');
+            
+            throw error;
+        }
+    }
+
+    /**
+     * Get all leave requests for admin approval
+     * @param {Object} filters - Filter parameters
+     * @returns {Promise} Array of leave requests
+     */
+    async getAllLeaveRequests(filters = {}) {
+        this.logTimesheetOperation('GET_ALL_LEAVE_REQUESTS', { filters }, 'info');
+        
+        try {
+            const queryParams = new URLSearchParams(filters).toString();
+            const endpoint = `/api/leaves${queryParams ? `?${queryParams}` : ''}`;
+            const response = await this.request(endpoint);
+            
+            this.logTimesheetOperation('GET_ALL_LEAVE_REQUESTS_SUCCESS', {
+                count: response.length || 0,
+                statusBreakdown: this.getLeaveStatusBreakdown(response)
+            }, 'success');
+            
+            return response;
+        } catch (error) {
+            this.logTimesheetOperation('GET_ALL_LEAVE_REQUESTS_FAILED', {
+                error: error.message,
+                filters
+            }, 'error');
+            
+            throw error;
+        }
+    }
+
+    /**
+     * Approve a leave request
+     * @param {string} leaveId - Leave request ID
+     * @returns {Promise} Updated leave request
+     */
+    async approveLeaveRequest(leaveId) {
+        this.logTimesheetOperation('APPROVE_LEAVE_REQUEST', { leaveId }, 'approval');
+        
+        try {
+            const response = await this.request(`/leaves/${leaveId}/approve`, {
+                method: 'PATCH'
+            });
+            
+            this.logTimesheetOperation('APPROVE_LEAVE_REQUEST_SUCCESS', {
+                leaveId,
+                newStatus: response.status,
+                approvedBy: this.getSafeUserData()?.employeeId
+            }, 'success');
+            
+            this.safeNotification('Leave request approved successfully!', 'success', 5000);
+            
+            return response;
+        } catch (error) {
+            this.logTimesheetOperation('APPROVE_LEAVE_REQUEST_FAILED', {
+                leaveId,
+                error: error.message,
+                statusCode: error.status
+            }, 'error');
+            
+            throw error;
+        }
+    }
+
+    /**
+     * Reject a leave request
+     * @param {string} leaveId - Leave request ID
+     * @param {string} remarks - Rejection remarks
+     * @returns {Promise} Updated leave request
+     */
+    async rejectLeaveRequest(leaveId, remarks) {
+        this.logTimesheetOperation('REJECT_LEAVE_REQUEST', {
+            leaveId,
+            hasRemarks: !!remarks,
+            remarksLength: remarks?.length || 0
+        }, 'rejection');
+        
+        try {
+            const response = await this.request(`/leaves/${leaveId}/reject`, {
+                method: 'PATCH',
+                body: { remarks }
+            });
+            
+            this.logTimesheetOperation('REJECT_LEAVE_REQUEST_SUCCESS', {
+                leaveId,
+                newStatus: response.status,
+                rejectedBy: this.getSafeUserData()?.employeeId,
+                hasRemarks: !!remarks
+            }, 'success');
+            
+            this.safeNotification('Leave request rejected with remarks.', 'warning', 5000);
+            
+            return response;
+        } catch (error) {
+            this.logTimesheetOperation('REJECT_LEAVE_REQUEST_FAILED', {
+                leaveId,
+                error: error.message,
+                statusCode: error.status
+            }, 'error');
+            
+            throw error;
+        }
+    }
+
+    /**
+     * Get leave request by ID
+     * @param {string} leaveId - Leave request ID
+     * @returns {Promise} Leave request details
+     */
+    async getLeaveRequestById(leaveId) {
+        this.logTimesheetOperation('GET_LEAVE_REQUEST_BY_ID', { leaveId }, 'info');
+        
+        try {
+            const response = await this.request(`/leaves/${leaveId}`);
+            
+            this.logTimesheetOperation('GET_LEAVE_REQUEST_BY_ID_SUCCESS', {
+                leaveId,
+                status: response.status,
+                employee: response.employeeName
+            }, 'success');
+            
+            return response;
+        } catch (error) {
+            this.logTimesheetOperation('GET_LEAVE_REQUEST_BY_ID_FAILED', {
+                leaveId,
+                error: error.message,
+                statusCode: error.status
+            }, 'error');
+            
+            throw error;
+        }
+    }
+
+    /**
+     * Get leave statistics breakdown
+     * @param {Array} leaves - Array of leave requests
+     * @returns {Object} Status breakdown
+     */
+    getLeaveStatusBreakdown(leaves) {
+        const breakdown = {
+            pending: 0,
+            approved: 0,
+            rejected: 0,
+            cancelled: 0,
+            total: leaves.length || 0
+        };
+        
+        if (Array.isArray(leaves)) {
+            leaves.forEach(leave => {
+                if (breakdown.hasOwnProperty(leave.status)) {
+                    breakdown[leave.status]++;
+                }
+            });
+        }
+        
+        return breakdown;
+    }
+
+    /**
+     * Get leave balance summary
+     * @param {Object} balance - Leave balance object
+     * @returns {Object} Summary of leave balances
+     */
+    getLeaveBalanceSummary(balance) {
+        if (!balance) {
+            return {
+                totalLeaves: 0,
+                availableLeaves: 0,
+                usedLeaves: 0,
+                sickLeave: 0,
+                privilegeLeave: 0,
+                maternityLeave: 0,
+                otherLeaves: 0
+            };
+        }
+
+        const sickLeave = balance.sickLeave?.current || 0;
+        const privilegeLeave = balance.privilegeLeave?.current || 0;
+        const maternityLeave = balance.maternityLeave?.current || 0;
+        const otherLeaves = 
+            (balance.halfPayWithPL?.current || 0) +
+            (balance.leaveWithoutPay?.current || 0) +
+            (balance.halfLWP?.current || 0);
+
+        const availableLeaves = sickLeave + privilegeLeave + maternityLeave + otherLeaves;
+        
+        // Calculate used leaves from history (if available)
+        const usedLeaves = balance.usedLeaves?.reduce((total, used) => total + used.days, 0) || 0;
+        
+        return {
+            totalLeaves: availableLeaves + usedLeaves,
+            availableLeaves,
+            usedLeaves,
+            sickLeave,
+            privilegeLeave,
+            maternityLeave,
+            otherLeaves,
+            status: balance.status,
+            nextAccrual: balance.privilegeLeave?.nextAccrual
+        };
+    }
+
+    /**
+     * Check if employee has sufficient leave balance
+     * @param {string} leaveType - Type of leave
+     * @param {number} daysRequested - Number of days requested
+     * @returns {Promise} Sufficiency check result
+     */
+    async checkLeaveBalanceSufficiency(leaveType, daysRequested) {
+        this.logTimesheetOperation('CHECK_LEAVE_BALANCE_SUFFICIENCY', {
+            leaveType,
+            daysRequested
+        }, 'info');
+        
+        try {
+            const balanceData = await this.getMyLeaveBalance();
+            const balance = balanceData.leaveBalance;
+            
+            if (!balance) {
+                throw new Error('Leave balance not found');
+            }
+            
+            let availableDays = 0;
+            switch(leaveType) {
+                case 'sickLeave':
+                    availableDays = balance.sickLeave?.current || 0;
+                    break;
+                case 'privilegeLeave':
+                    availableDays = balance.privilegeLeave?.current || 0;
+                    break;
+                case 'maternityLeave':
+                    availableDays = balance.maternityLeave?.current || 0;
+                    break;
+                case 'halfPayWithPL':
+                    availableDays = balance.halfPayWithPL?.current || 0;
+                    break;
+                case 'leaveWithoutPay':
+                    availableDays = balance.leaveWithoutPay?.current || 0;
+                    break;
+                case 'halfLWP':
+                    availableDays = balance.halfLWP?.current || 0;
+                    break;
+                default:
+                    throw new Error('Invalid leave type');
+            }
+            
+            const isSufficient = availableDays >= daysRequested;
+            
+            return {
+                isSufficient,
+                availableDays,
+                daysRequested,
+                deficit: isSufficient ? 0 : daysRequested - availableDays,
+                canProceed: isSufficient || leaveType === 'leaveWithoutPay' || leaveType === 'halfLWP'
+            };
+        } catch (error) {
+            this.logTimesheetOperation('CHECK_LEAVE_BALANCE_SUFFICIENCY_FAILED', {
+                leaveType,
+                daysRequested,
+                error: error.message
+            }, 'error');
+            
+            throw error;
+        }
+    }
+
+    /**
+     * Get leave calendar events for employee
+     * @param {Object} params - Date range parameters
+     * @returns {Promise} Calendar events
+     */
+    async getLeaveCalendar(params = {}) {
+        this.logTimesheetOperation('GET_LEAVE_CALENDAR', { params }, 'info');
+        
+        try {
+            const queryParams = new URLSearchParams(params).toString();
+            const endpoint = `/leaves/calendar${queryParams ? `?${queryParams}` : ''}`;
+            const response = await this.request(endpoint);
+            
+            this.logTimesheetOperation('GET_LEAVE_CALENDAR_SUCCESS', {
+                eventCount: response.length || 0,
+                dateRange: params
+            }, 'success');
+            
+            return response;
+        } catch (error) {
+            this.logTimesheetOperation('GET_LEAVE_CALENDAR_FAILED', {
+                error: error.message,
+                params
+            }, 'error');
+            
+            throw error;
+        }
+    }
+
+    /**
+     * Get leave analytics for dashboard
+     * @returns {Promise} Leave analytics data
+     */
+    async getLeaveAnalytics() {
+        this.logTimesheetOperation('GET_LEAVE_ANALYTICS', {}, 'info');
+        
+        try {
+            const response = await this.request('/leaves/analytics');
+            
+            this.logTimesheetOperation('GET_LEAVE_ANALYTICS_SUCCESS', {
+                hasData: !!response
+            }, 'success');
+            
+            return response;
+        } catch (error) {
+            this.logTimesheetOperation('GET_LEAVE_ANALYTICS_FAILED', {
+                error: error.message,
+                statusCode: error.status
+            }, 'error');
+            
+            throw error;
+        }
+    }
+
+    /**
+     * Mock method for leave balance (when backend not available)
+     * @returns {Object} Mock leave balance
+     */
+    getMockLeaveBalance() {
+        const user = this.getSafeUserData();
+        
+        return {
+            leaveBalance: {
+                employee: user?._id || 'mock-user-id',
+                employeeId: user?.employeeId || 'T1166',
+                firstName: user?.firstName || 'Mock',
+                lastName: user?.lastName || 'User',
+                department: user?.department || 'IT',
+                designation: user?.designation || 'Software Engineer',
+                joinDate: new Date('2024-01-01').toISOString(),
+                status: 'active',
+                
+                sickLeave: {
+                    current: 8,
+                    total: 8,
+                    lastReset: new Date().toISOString()
+                },
+                
+                privilegeLeave: {
+                    current: 12,
+                    total: 12,
+                    accrualRate: 1.5,
+                    nextAccrual: new Date(new Date().setMonth(new Date().getMonth() + 1)).toISOString(),
+                    probationMonths: 0
+                },
+                
+                halfPayWithPL: {
+                    current: 0,
+                    total: 0
+                },
+                
+                leaveWithoutPay: {
+                    current: 0,
+                    total: 0
+                },
+                
+                halfLWP: {
+                    current: 0,
+                    total: 0
+                },
+                
+                maternityLeave: {
+                    current: 182,
+                    total: 182,
+                    eligibilityDate: null
+                },
+                
+                accrualHistory: [],
+                adjustmentHistory: [],
+                usedLeaves: [],
+                
+                notes: 'Mock leave balance for development',
+                lastUpdated: new Date().toISOString(),
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+            }
+        };
+    }
 }
 
 // Create and export global instance
@@ -2998,4 +3364,4 @@ if (typeof window !== 'undefined') {
     }, 1000);
 }
 
-console.log('✅ COMPLETE ENHANCED API CLIENT initialized (2000+ lines) - All features loaded + Password reset FIXED + Report methods ADDED + Project Export Methods FIXED + Leave Balance APIs ADDED');
+console.log('✅ COMPLETE ENHANCED API CLIENT initialized (2000+ lines) - All features loaded + Password reset FIXED + Report methods ADDED + Project Export Methods FIXED + Leave Balance Methods ADDED');

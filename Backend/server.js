@@ -112,6 +112,7 @@ app.use('/api/reports', reportsRoutes);
 app.use('/api/leave', leaveRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 
+
 // Health check
 app.get('/api/health', (req, res) => {
   res.json({ 

@@ -799,6 +799,17 @@ function debounce(func, wait) {
         timeout = setTimeout(later, wait);
     };
 }
+// ✅ ADDED: Logout function
+function logout() {
+  console.log('🚪 Logging out...');
+  
+  // Clear user data from localStorage
+  localStorage.removeItem('userData');
+  localStorage.removeItem('authToken');
+  
+  // Redirect to login page
+  window.location.href = 'index.html';
+}
 
 // Make functions globally available
 window.openApproveModal = openApproveModal;

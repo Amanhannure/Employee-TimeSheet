@@ -559,6 +559,19 @@ function formatDate(dateString) {
     }
 }
 
+
+// ✅ ADDED: Logout function
+function logout() {
+  console.log('🚪 Logging out...');
+  
+  // Clear user data from localStorage
+  localStorage.removeItem('userData');
+  localStorage.removeItem('authToken');
+  
+  // Redirect to login page
+  window.location.href = 'index.html';
+}
+
 // Make functions globally available
 window.downloadDocument = downloadDocument;
 window.refreshBalances = refreshBalances;
