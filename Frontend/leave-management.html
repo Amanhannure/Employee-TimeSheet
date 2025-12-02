@@ -7,6 +7,8 @@
     <link rel="stylesheet" href="css/dashboard.css">
     <link rel="stylesheet" href="css/admin.css">
     <link rel="stylesheet" href="css/leave.css">
+    <!-- ✅ ADDED: Leave Balance CSS -->
+    <link rel="stylesheet" href="css/leave-balances.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body>
@@ -67,8 +69,18 @@
                 </div>
             </div>
 
-            <!-- Leave Management Content -->
-            <div class="leave-management-content">
+            <!-- Tab Navigation -->
+            <div class="tab-container">
+                <button class="tab-btn active" data-target="leave-requests" id="tab-leave-requests">
+                    <i class="fas fa-list"></i> Leave Requests
+                </button>
+                <button class="tab-btn" data-target="leave-balances" id="tab-leave-balances">
+                    <i class="fas fa-chart-pie"></i> Leave Balances
+                </button>
+            </div>
+
+            <!-- Leave Requests Section (Default Visible) -->
+            <div id="leave-requests" class="content-section">
                 <!-- Statistics Cards -->
                 <div class="stats-cards">
                     <div class="stat-card pending">
@@ -152,6 +164,56 @@
                     </div>
                 </div>
             </div>
+
+            <!-- Leave Balances Section (Hidden by Default) -->
+            <div id="leave-balances" class="content-section" style="display: none;">
+                <div class="content-header">
+                    <h2><i class="fas fa-chart-pie"></i> Leave Balances Management</h2>
+                    <div class="header-actions">
+                        <button class="btn btn-success" onclick="runMonthlyAccrual()">
+                            <i class="fas fa-calculator"></i> Run Monthly Accrual
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="filters-container">
+                    <div class="filter-group">
+                        <label>Department:</label>
+                        <select id="department-filter">
+                            <option value="all">All Departments</option>
+                            <option value="IT">IT</option>
+                            <option value="HR">HR</option>
+                            <option value="Finance">Finance</option>
+                            <option value="Marketing">Marketing</option>
+                            <option value="Operations">Operations</option>
+                            <option value="Sales">Sales</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label>Status:</label>
+                        <select id="status-filter-balance">
+                            <option value="all">All Status</option>
+                            <option value="active">Active</option>
+                            <option value="probation">Probation</option>
+                            <option value="inactive">Inactive</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label>Search:</label>
+                        <input type="text" id="search-balance" placeholder="Search by name or ID...">
+                    </div>
+                    <button class="btn btn-primary" onclick="loadLeaveBalances()">
+                        <i class="fas fa-filter"></i> Apply Filters
+                    </button>
+                </div>
+                
+                <div id="leave-balances-container" class="table-container">
+                    <!-- Leave balances will be loaded here -->
+                    <div class="loading-spinner">
+                        <i class="fas fa-spinner fa-spin"></i> Loading leave balances...
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -194,8 +256,201 @@
         </div>
     </div>
 
+    <!-- ✅ ADDED: Edit Balance Modal -->
+    <div id="edit-balance-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal" onclick="closeEditBalanceModal()">&times;</span>
+            <h2 id="edit-balance-title">Edit Leave Balance</h2>
+            <form id="edit-balance-form">
+                <input type="hidden" id="edit-balance-employee-id">
+                <input type="hidden" id="edit-balance-type">
+                
+                <div class="modal-form-group">
+                    <label>Employee:</label>
+                    <input type="text" id="edit-balance-employee-name" readonly>
+                </div>
+                
+                <div class="modal-form-group">
+                    <label>Current Value:</label>
+                    <input type="number" id="edit-balance-current" step="0.5" min="0" readonly>
+                </div>
+                
+                <div class="modal-form-group">
+                    <label>New Value:</label>
+                    <input type="number" id="edit-balance-new" step="0.5" min="0" required>
+                </div>
+                
+                <div class="modal-form-group">
+                    <label>Reason for Change:</label>
+                    <textarea id="edit-balance-reason" placeholder="Enter reason for adjustment..." required></textarea>
+                </div>
+                
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeEditBalanceModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Update Balance</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ✅ ADDED: Adjust Balance Modal -->
+    <div id="adjust-balance-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal" onclick="closeAdjustBalanceModal()">&times;</span>
+            <h2>Adjust Leave Balance</h2>
+            <form id="adjust-balance-form">
+                <input type="hidden" id="adjust-balance-employee-id">
+                <input type="hidden" id="adjust-balance-employee-name">
+                
+                <div class="modal-form-group">
+                    <label>Leave Type:</label>
+                    <select id="adjust-leave-type" required>
+                        <option value="">Select Leave Type</option>
+                        <option value="sickLeave">Sick Leave (SL)</option>
+                        <option value="privilegeLeave">Privilege Leave (PL)</option>
+                        <option value="maternityLeave">Maternity Leave (ML)</option>
+                        <option value="halfPayWithPL">Half Pay with PL</option>
+                        <option value="leaveWithoutPay">Leave Without Pay</option>
+                        <option value="halfLWP">Half LWP</option>
+                    </select>
+                </div>
+                
+                <div class="modal-form-group">
+                    <label>Adjustment Type:</label>
+                    <select id="adjust-type" required>
+                        <option value="set">Set to Value</option>
+                        <option value="add">Add to Current</option>
+                        <option value="subtract">Subtract from Current</option>
+                    </select>
+                </div>
+                
+                <div class="modal-form-group">
+                    <label>Value (in days):</label>
+                    <input type="number" id="adjust-value" step="0.5" min="0" required>
+                </div>
+                
+                <div class="modal-form-group">
+                    <label>Reason:</label>
+                    <textarea id="adjust-reason" placeholder="Enter reason for adjustment..." required></textarea>
+                </div>
+                
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeAdjustBalanceModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Apply Adjustment</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ✅ ADDED: Status Change Modal -->
+    <div id="status-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal" onclick="closeStatusModal()">&times;</span>
+            <h2>Change Employee Status</h2>
+            <form id="status-form">
+                <input type="hidden" id="status-employee-id">
+                <input type="hidden" id="status-employee-name">
+                
+                <div class="modal-form-group">
+                    <label>Employee:</label>
+                    <input type="text" id="status-employee-display" readonly>
+                </div>
+                
+                <div class="modal-form-group">
+                    <label>Current Status:</label>
+                    <input type="text" id="current-status" readonly>
+                </div>
+                
+                <div class="modal-form-group">
+                    <label>New Status:</label>
+                    <select id="new-status" required>
+                        <option value="probation">Probation</option>
+                        <option value="active">Active</option>
+                        <option value="inactive">Inactive</option>
+                    </select>
+                </div>
+                
+                <div class="modal-form-group" id="probation-months-field" style="display: none;">
+                    <label>Probation Months Completed:</label>
+                    <input type="number" id="probation-months" min="0" max="12" value="0">
+                    <small class="help-text">Enter number of probation months to calculate PL</small>
+                </div>
+                
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeStatusModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Update Status</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ✅ ADDED: History Modal -->
+    <div id="history-modal" class="modal">
+        <div class="modal-content large-modal">
+            <span class="close-modal" onclick="closeHistoryModal()">&times;</span>
+            <div id="history-content">
+                <!-- Loaded dynamically -->
+            </div>
+        </div>
+    </div>
+
     <script src="js/integration/api-client.js"></script>
     <script src="js/integration/utils.js"></script>
     <script src="js/leave-management.js"></script>
+    <script>
+        // ✅ ADDED: Show/Hide sections based on tab clicks
+        function showSection(sectionName) {
+            // Hide all sections
+            document.querySelectorAll('.content-section').forEach(section => {
+                section.style.display = 'none';
+            });
+            
+            // Show selected section
+            const targetSection = document.getElementById(sectionName);
+            if (targetSection) {
+                targetSection.style.display = 'block';
+            }
+            
+            // Update active tab
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            
+            const activeTab = document.querySelector(`[data-target="${sectionName}"]`);
+            if (activeTab) {
+                activeTab.classList.add('active');
+            }
+            
+            // Load data for the section
+            if (sectionName === 'leave-balances') {
+                window.loadLeaveBalances();
+            }
+        }
+
+        // ✅ ADDED: Tab event listeners
+        document.addEventListener('DOMContentLoaded', function() {
+            // Set up tab switching
+            document.getElementById('tab-leave-requests').addEventListener('click', () => {
+                showSection('leave-requests');
+            });
+            
+            document.getElementById('tab-leave-balances').addEventListener('click', () => {
+                showSection('leave-balances');
+            });
+            
+            // Set default section
+            showSection('leave-requests');
+            
+            // Status dropdown event for probation months field
+            document.getElementById('new-status')?.addEventListener('change', function() {
+                const probationField = document.getElementById('probation-months-field');
+                if (this.value === 'active') {
+                    probationField.style.display = 'block';
+                } else {
+                    probationField.style.display = 'none';
+                }
+            });
+        });
+    </script>
 </body>
 </html>

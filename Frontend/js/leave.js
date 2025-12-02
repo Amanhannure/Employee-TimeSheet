@@ -19,6 +19,9 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Load leave requests
     loadMyLeaveRequests();
+    
+    // ✅ ADDED: Load leave balances
+    loadMyLeaveBalances();
 });
 
 function initializeEventListeners() {
@@ -148,7 +151,7 @@ async function submitLeaveRequest(e) {
         loadMyLeaveRequests();
 
     } catch (error) {
-        console.error('Error submitting leave request:', error);
+        console.error('❌ Error submitting leave request:', error);
         showNotification(error.message || 'Failed to submit leave request', 'error');
     } finally {
         // Reset button state
@@ -160,11 +163,13 @@ async function submitLeaveRequest(e) {
 
 async function loadMyLeaveRequests() {
     try {
+        console.log('📋 Loading my leave requests...');
         const leaveRequests = await apiClient.getMyLeaveRequests();
+        console.log(`✅ Loaded ${leaveRequests.length} leave requests`);
         displayLeaveRequests(leaveRequests);
         
     } catch (error) {
-        console.error('Error loading leave requests:', error);
+        console.error('❌ Error loading leave requests:', error);
         showNotification('Failed to load leave requests', 'error');
         document.getElementById('requests-list').innerHTML = `
             <div class="empty-state">
@@ -248,9 +253,10 @@ function displayLeaveRequests(leaveRequests) {
 
 async function downloadDocument(leaveRequestId) {
     try {
+        console.log('📄 Downloading document for leave request:', leaveRequestId);
         await apiClient.downloadLeaveDocument(leaveRequestId);
     } catch (error) {
-        console.error('Error downloading document:', error);
+        console.error('❌ Error downloading document:', error);
         showNotification('Failed to download document', 'error');
     }
 }
@@ -277,5 +283,282 @@ function resetForm() {
     document.getElementById('supporting-document').value = '';
 }
 
+// ==================== ✅ LEAVE BALANCE FUNCTIONS ====================
+
+// Load personal leave balances
+async function loadMyLeaveBalances() {
+    try {
+        console.log('📊 Loading my leave balances...');
+        const balanceData = await apiClient.getMyLeaveBalance();
+        console.log('✅ Leave balance data:', balanceData);
+        displayLeaveBalances(balanceData);
+        
+    } catch (error) {
+        console.error('❌ Error loading leave balances:', error);
+        displayMockBalances(); // Fallback to mock data
+    }
+}
+
+// Display leave balances
+function displayLeaveBalances(balanceData) {
+    // Create or get the container
+    let container = document.getElementById('leave-balances-container');
+    if (!container) {
+        const mainContent = document.querySelector('.main-content');
+        if (mainContent) {
+            container = document.createElement('div');
+            container.id = 'leave-balances-container';
+            container.className = 'leave-balances-section';
+            // Insert at the beginning of main content
+            const leaveRequestSection = document.querySelector('.leave-application-section');
+            if (leaveRequestSection) {
+                mainContent.insertBefore(container, leaveRequestSection);
+            } else {
+                mainContent.prepend(container);
+            }
+        } else {
+            console.error('❌ Main content not found');
+            return;
+        }
+    }
+    
+    if (!balanceData || !balanceData.leaveBalance) {
+        console.warn('⚠️ No leave balance data found, showing mock data');
+        displayMockBalances();
+        return;
+    }
+    
+    const balance = balanceData.leaveBalance;
+    const status = balance.status || 'probation';
+    
+    const html = `
+        <div class="leave-balances-header" style="margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center;">
+            <h2 style="margin: 0; color: #333;">
+                <i class="fas fa-chart-pie" style="color: #3498db;"></i> My Leave Balances
+            </h2>
+            <button class="btn btn-sm btn-primary" onclick="refreshBalances()" style="padding: 8px 15px; background: #3498db; color: white; border: none; border-radius: 4px; cursor: pointer; display: flex; align-items: center; gap: 5px;">
+                <i class="fas fa-sync-alt"></i> Refresh
+            </button>
+        </div>
+        
+        <div class="leave-cards-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; margin-bottom: 30px;">
+            <!-- Sick Leave Card -->
+            <div class="leave-card sick-leave" style="background: white; border-radius: 10px; padding: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); border-left: 4px solid #4CAF50;">
+                <div class="card-header" style="display: flex; align-items: center; margin-bottom: 15px;">
+                    <i class="fas fa-heartbeat" style="font-size: 24px; margin-right: 10px; color: #4CAF50;"></i>
+                    <h3 style="margin: 0; font-size: 18px; color: #333;">Sick Leave (SL)</h3>
+                </div>
+                <div class="card-body">
+                    <div class="balance-amount" style="font-size: 36px; font-weight: bold; color: #333; text-align: center; margin: 10px 0;">
+                        ${balance.sickLeave?.current || 0}
+                    </div>
+                    <div class="balance-label" style="text-align: center; color: #666; margin-bottom: 15px; font-size: 14px;">
+                        Days Available
+                    </div>
+                    <div class="balance-details" style="font-size: 13px; color: #666;">
+                        <p style="margin: 5px 0; display: flex; align-items: center;">
+                            <i class="fas fa-info-circle" style="margin-right: 8px; width: 16px;"></i> Annual: 8 days
+                        </p>
+                        <p style="margin: 5px 0; display: flex; align-items: center;">
+                            <i class="fas fa-calendar" style="margin-right: 8px; width: 16px;"></i> Reset: ${formatDate(balance.sickLeave?.lastReset)}
+                        </p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Privilege Leave Card -->
+            <div class="leave-card privilege-leave" style="background: white; border-radius: 10px; padding: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); border-left: 4px solid #2196F3;">
+                <div class="card-header" style="display: flex; align-items: center; margin-bottom: 15px;">
+                    <i class="fas fa-umbrella-beach" style="font-size: 24px; margin-right: 10px; color: #2196F3;"></i>
+                    <h3 style="margin: 0; font-size: 18px; color: #333;">Privilege Leave (PL)</h3>
+                </div>
+                <div class="card-body">
+                    <div class="balance-amount" style="font-size: 36px; font-weight: bold; color: #333; text-align: center; margin: 10px 0;">
+                        ${balance.privilegeLeave?.current || 0}
+                    </div>
+                    <div class="balance-label" style="text-align: center; color: #666; margin-bottom: 15px; font-size: 14px;">
+                        Days Available
+                    </div>
+                    <div class="balance-details" style="font-size: 13px; color: #666;">
+                        <p style="margin: 5px 0; display: flex; align-items: center;">
+                            <i class="fas fa-chart-line" style="margin-right: 8px; width: 16px;"></i> Accrual: 1.5 days/month
+                        </p>
+                        ${status === 'probation' ? 
+                            `<p style="margin: 5px 0; display: flex; align-items: center;">
+                                <i class="fas fa-clock" style="margin-right: 8px; width: 16px;"></i> On Probation: PL will start after activation
+                            </p>` : 
+                            `<p style="margin: 5px 0; display: flex; align-items: center;">
+                                <i class="fas fa-history" style="margin-right: 8px; width: 16px;"></i> Total Accrued: ${balance.privilegeLeave?.total || 0} days
+                            </p>`
+                        }
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Maternity Leave Card -->
+            <div class="leave-card maternity-leave" style="background: white; border-radius: 10px; padding: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); border-left: 4px solid #E91E63;">
+                <div class="card-header" style="display: flex; align-items: center; margin-bottom: 15px;">
+                    <i class="fas fa-baby" style="font-size: 24px; margin-right: 10px; color: #E91E63;"></i>
+                    <h3 style="margin: 0; font-size: 18px; color: #333;">Maternity Leave (ML)</h3>
+                </div>
+                <div class="card-body">
+                    <div class="balance-amount" style="font-size: 36px; font-weight: bold; color: #333; text-align: center; margin: 10px 0;">
+                        ${balance.maternityLeave?.current || 0}
+                    </div>
+                    <div class="balance-label" style="text-align: center; color: #666; margin-bottom: 15px; font-size: 14px;">
+                        Days Available
+                    </div>
+                    <div class="balance-details" style="font-size: 13px; color: #666;">
+                        <p style="margin: 5px 0; display: flex; align-items: center;">
+                            <i class="fas fa-info-circle" style="margin-right: 8px; width: 16px;"></i> Total: 182 days (6 months)
+                        </p>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Other Leaves Card -->
+            <div class="leave-card other-leaves" style="background: white; border-radius: 10px; padding: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); border-left: 4px solid #FF9800;">
+                <div class="card-header" style="display: flex; align-items: center; margin-bottom: 15px;">
+                    <i class="fas fa-list-alt" style="font-size: 24px; margin-right: 10px; color: #FF9800;"></i>
+                    <h3 style="margin: 0; font-size: 18px; color: #333;">Other Leaves</h3>
+                </div>
+                <div class="card-body">
+                    <div class="other-leaves-list" style="display: flex; flex-direction: column; gap: 10px;">
+                        <div class="other-leave-item" style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #eee;">
+                            <span class="leave-type" style="color: #666;">Half Pay with PL</span>
+                            <span class="leave-balance" style="font-weight: bold; color: #333;">${balance.halfPayWithPL?.current || 0} days</span>
+                        </div>
+                        <div class="other-leave-item" style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #eee;">
+                            <span class="leave-type" style="color: #666;">Leave Without Pay</span>
+                            <span class="leave-balance" style="font-weight: bold; color: #333;">${balance.leaveWithoutPay?.current || 0} days</span>
+                        </div>
+                        <div class="other-leave-item" style="display: flex; justify-content: space-between; padding: 8px 0;">
+                            <span class="leave-type" style="color: #666;">Half LWP</span>
+                            <span class="leave-balance" style="font-weight: bold; color: #333;">${balance.halfLWP?.current || 0} days</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Quick Stats -->
+        <div class="leave-stats" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-top: 20px;">
+            <div class="stat-card" style="background: white; border-radius: 8px; padding: 15px; display: flex; align-items: center; box-shadow: 0 1px 5px rgba(0,0,0,0.1);">
+                <i class="fas fa-user-tag" style="font-size: 24px; color: #3498db; margin-right: 15px;"></i>
+                <div class="stat-content">
+                    <div class="stat-value" style="font-size: 18px; font-weight: bold; color: #333;">
+                        ${status.toUpperCase()}
+                    </div>
+                    <div class="stat-label" style="font-size: 12px; color: #666;">
+                        Employment Status
+                    </div>
+                </div>
+            </div>
+            <div class="stat-card" style="background: white; border-radius: 8px; padding: 15px; display: flex; align-items: center; box-shadow: 0 1px 5px rgba(0,0,0,0.1);">
+                <i class="fas fa-calendar-day" style="font-size: 24px; color: #3498db; margin-right: 15px;"></i>
+                <div class="stat-content">
+                    <div class="stat-value" style="font-size: 18px; font-weight: bold; color: #333;">
+                        ${formatDate(balance.joinDate)}
+                    </div>
+                    <div class="stat-label" style="font-size: 12px; color: #666;">
+                        Join Date
+                    </div>
+                </div>
+            </div>
+            <div class="stat-card" style="background: white; border-radius: 8px; padding: 15px; display: flex; align-items: center; box-shadow: 0 1px 5px rgba(0,0,0,0.1);">
+                <i class="fas fa-building" style="font-size: 24px; color: #3498db; margin-right: 15px;"></i>
+                <div class="stat-content">
+                    <div class="stat-value" style="font-size: 18px; font-weight: bold; color: #333;">
+                        ${balance.department || 'Not Set'}
+                    </div>
+                    <div class="stat-label" style="font-size: 12px; color: #666;">
+                        Department
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    container.innerHTML = html;
+    console.log('✅ Leave balances displayed successfully');
+}
+
+// Display mock balances (fallback)
+function displayMockBalances() {
+    const container = document.getElementById('leave-balances-container');
+    if (!container) {
+        console.error('❌ Leave balances container not found');
+        return;
+    }
+    
+    const html = `
+        <div class="leave-balances-header" style="margin-bottom: 20px;">
+            <h2 style="margin: 0; color: #333;">
+                <i class="fas fa-chart-pie" style="color: #3498db;"></i> My Leave Balances
+            </h2>
+        </div>
+        
+        <div class="mock-balances-notice" style="background: #f8f9fa; border-radius: 8px; padding: 20px; border: 1px dashed #dee2e6;">
+            <div class="notice-header" style="display: flex; align-items: center; margin-bottom: 15px;">
+                <i class="fas fa-info-circle" style="font-size: 24px; color: #6c757d; margin-right: 10px;"></i>
+                <h3 style="margin: 0; color: #495057;">Leave Balance System Preview</h3>
+            </div>
+            <p style="color: #666; margin-bottom: 20px;">Your actual leave balances will be displayed here once the system is fully configured.</p>
+            
+            <div class="mock-cards" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px; margin: 20px 0;">
+                <div class="mock-card" style="background: white; border-radius: 8px; padding: 15px; text-align: center; border: 1px solid #dee2e6;">
+                    <h4 style="margin: 0 0 10px 0; color: #333;">Sick Leave (SL)</h4>
+                    <div class="mock-value" style="font-size: 24px; font-weight: bold; color: #28a745; margin: 10px 0;">
+                        8 days
+                    </div>
+                    <small style="color: #6c757d;">Resets annually on work anniversary</small>
+                </div>
+                
+                <div class="mock-card" style="background: white; border-radius: 8px; padding: 15px; text-align: center; border: 1px solid #dee2e6;">
+                    <h4 style="margin: 0 0 10px 0; color: #333;">Privilege Leave (PL)</h4>
+                    <div class="mock-value" style="font-size: 24px; font-weight: bold; color: #28a745; margin: 10px 0;">
+                        0 days
+                    </div>
+                    <small style="color: #6c757d;">Accrues 1.5 days per month after probation</small>
+                </div>
+                
+                <div class="mock-card" style="background: white; border-radius: 8px; padding: 15px; text-align: center; border: 1px solid #dee2e6;">
+                    <h4 style="margin: 0 0 10px 0; color: #333;">Maternity Leave (ML)</h4>
+                    <div class="mock-value" style="font-size: 24px; font-weight: bold; color: #28a745; margin: 10px 0;">
+                        182 days
+                    </div>
+                    <small style="color: #6c757d;">6 months total, eligible after 180 days</small>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    container.innerHTML = html;
+    console.log('⚠️ Showing mock leave balances (fallback mode)');
+}
+
+// Refresh balances
+function refreshBalances() {
+    console.log('🔄 Refreshing leave balances...');
+    loadMyLeaveBalances();
+}
+
+// Format date helper
+function formatDate(dateString) {
+    if (!dateString) return 'Not set';
+    try {
+        const date = new Date(dateString);
+        return date.toLocaleDateString('en-GB', {
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric'
+        });
+    } catch (error) {
+        console.error('❌ Error formatting date:', error);
+        return 'Invalid date';
+    }
+}
+
 // Make functions globally available
 window.downloadDocument = downloadDocument;
+window.refreshBalances = refreshBalances;

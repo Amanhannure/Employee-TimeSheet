@@ -75,11 +75,13 @@
                                 <label for="leave-type">Leave Type *</label>
                                 <select id="leave-type" name="leaveType" required>
                                     <option value="">Select Leave Type</option>
-                                    <option value="sick">Sick Leave</option>
-                                    <option value="casual">Casual Leave</option>
-                                    <option value="annual">Annual Leave</option>
-                                    <option value="emergency">Emergency Leave</option>
-                                    <option value="other">Other</option>
+                                    <!-- ✅ KEEPING ONLY THE 6 REQUIRED LEAVE TYPES -->
+                                    <option value="sickLeave">Sick Leave (SL)</option>
+                                    <option value="privilegeLeave">Privilege Leave (PL)</option>
+                                    <option value="maternityLeave">Maternity Leave (ML)</option>
+                                    <option value="halfPayWithPL">Half Pay with PL</option>
+                                    <option value="leaveWithoutPay">Leave Without Pay</option>
+                                    <option value="halfLWP">Half LWP</option>
                                 </select>
                             </div>
                             <div class="form-group">

@@ -639,6 +639,10 @@ class ApiClient {
             '/reports/hours-tracking': this.getMockHoursTracking(options.body),
             '/reports/employee-report': this.getMockEmployeeReport(options.body),
             
+            // Leave Balance endpoints (NEW)
+            '/leaves/balance/my': this.getMockLeaveBalance(),
+            '/leaves/balance/all': this.getMockAllLeaveBalances(),
+            
             // Health check
             '/health': { status: 'OK', message: 'Mock server is running', timestamp: new Date().toISOString() },
             
@@ -1930,6 +1934,290 @@ generateMockCSV(timesheetId) {
         }
     }
 
+    // ==================== LEAVE BALANCE ENDPOINTS (NEW) ====================
+
+    /**
+     * Get all leave balances (Admin only)
+     * @param {Object} params - Filter parameters
+     * @returns {Promise} - Leave balances array
+     */
+    async getLeaveBalances(params = {}) {
+        this.logTimesheetOperation('GET_LEAVE_BALANCES', { params }, 'info');
+        
+        try {
+            const queryParams = new URLSearchParams(params).toString();
+            const endpoint = `/leaves/balance/all${queryParams ? `?${queryParams}` : ''}`;
+            const response = await this.request(endpoint);
+            
+            this.logTimesheetOperation('GET_LEAVE_BALANCES_SUCCESS', {
+                count: Array.isArray(response) ? response.length : 0,
+                params
+            }, 'success');
+            
+            return response;
+        } catch (error) {
+            this.logTimesheetOperation('GET_LEAVE_BALANCES_FAILED', {
+                error: error.message,
+                params
+            }, 'error');
+            
+            // Return mock data for development
+            return this.getMockAllLeaveBalances();
+        }
+    }
+
+    /**
+     * Get employee's own leave balance
+     * @returns {Promise} - Leave balance object
+     */
+    async getMyLeaveBalance() {
+        this.logTimesheetOperation('GET_MY_LEAVE_BALANCE', {}, 'info');
+        
+        try {
+            const response = await this.request('/leaves/balance/my');
+            
+            this.logTimesheetOperation('GET_MY_LEAVE_BALANCE_SUCCESS', {
+                hasBalance: !!response.leaveBalance
+            }, 'success');
+            
+            return response;
+        } catch (error) {
+            this.logTimesheetOperation('GET_MY_LEAVE_BALANCE_FAILED', {
+                error: error.message
+            }, 'error');
+            
+            // Return mock data for development
+            return { leaveBalance: this.getMockLeaveBalance() };
+        }
+    }
+
+    /**
+     * Update leave balance for an employee (Admin only)
+     * @param {string} employeeId - Employee ID
+     * @param {Object} data - Update data
+     * @returns {Promise} - Updated leave balance
+     */
+    async updateLeaveBalance(employeeId, data) {
+        this.logTimesheetOperation('UPDATE_LEAVE_BALANCE', {
+            employeeId,
+            leaveType: data.leaveType,
+            newValue: data.newValue
+        }, 'info');
+        
+        try {
+            const response = await this.request(`/leaves/balance/${employeeId}`, {
+                method: 'PUT',
+                body: data
+            });
+            
+            this.logTimesheetOperation('UPDATE_LEAVE_BALANCE_SUCCESS', {
+                employeeId,
+                leaveType: data.leaveType,
+                oldValue: response.adjustment?.oldValue,
+                newValue: response.adjustment?.newValue
+            }, 'success');
+            
+            this.safeNotification('Leave balance updated successfully', 'success', 5000);
+            
+            return response;
+        } catch (error) {
+            this.logTimesheetOperation('UPDATE_LEAVE_BALANCE_FAILED', {
+                employeeId,
+                error: error.message,
+                leaveType: data.leaveType
+            }, 'error');
+            
+            throw error;
+        }
+    }
+
+    /**
+     * Update employee leave status (Admin only)
+     * @param {string} employeeId - Employee ID
+     * @param {Object} data - Status update data
+     * @returns {Promise} - Updated leave balance
+     */
+    async updateEmployeeLeaveStatus(employeeId, data) {
+        this.logTimesheetOperation('UPDATE_EMPLOYEE_LEAVE_STATUS', {
+            employeeId,
+            newStatus: data.status,
+            probationMonths: data.probationMonths
+        }, 'info');
+        
+        try {
+            const response = await this.request(`/leaves/balance/${employeeId}/status`, {
+                method: 'PUT',
+                body: data
+            });
+            
+            this.logTimesheetOperation('UPDATE_EMPLOYEE_LEAVE_STATUS_SUCCESS', {
+                employeeId,
+                oldStatus: data.oldStatus || 'unknown',
+                newStatus: data.status
+            }, 'success');
+            
+            this.safeNotification(`Employee status updated to ${data.status}`, 'success', 5000);
+            
+            return response;
+        } catch (error) {
+            this.logTimesheetOperation('UPDATE_EMPLOYEE_LEAVE_STATUS_FAILED', {
+                employeeId,
+                error: error.message,
+                newStatus: data.status
+            }, 'error');
+            
+            throw error;
+        }
+    }
+
+    /**
+     * Run monthly PL accrual for all active employees (Admin only)
+     * @returns {Promise} - Accrual results
+     */
+    async runMonthlyAccrual() {
+        this.logTimesheetOperation('RUN_MONTHLY_ACCRUAL_ATTEMPT', {}, 'info');
+        
+        try {
+            const response = await this.request('/leaves/balance/monthly-accrual', {
+                method: 'POST'
+            });
+            
+            this.logTimesheetOperation('RUN_MONTHLY_ACCRUAL_SUCCESS', {
+                updatedCount: response.updatedCount,
+                date: response.date
+            }, 'success');
+            
+            this.safeNotification(`Monthly PL accrual completed. Updated ${response.updatedCount} employees.`, 'success', 5000);
+            
+            return response;
+        } catch (error) {
+            this.logTimesheetOperation('RUN_MONTHLY_ACCRUAL_FAILED', {
+                error: error.message
+            }, 'error');
+            
+            throw error;
+        }
+    }
+
+    // ==================== LEAVE BALANCE MOCK DATA ====================
+
+    getMockLeaveBalance() {
+        const userData = this.getSafeUserData();
+        
+        return {
+            _id: 'mock-leave-balance-id',
+            employee: userData?._id || 'mock-user-id',
+            employeeId: userData?.employeeId || 'T1166',
+            firstName: userData?.firstName || 'Mock',
+            lastName: userData?.lastName || 'User',
+            department: userData?.department || 'IT',
+            designation: userData?.designation || 'Software Engineer',
+            joinDate: new Date('2023-01-01').toISOString(),
+            status: 'active',
+            
+            // 6 LEAVE TYPES
+            sickLeave: {
+                current: 8,
+                total: 8,
+                lastReset: new Date().toISOString()
+            },
+            
+            privilegeLeave: {
+                current: 18,
+                total: 18,
+                accrualRate: 1.5,
+                nextAccrual: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+                probationMonths: 0
+            },
+            
+            halfPayWithPL: {
+                current: 0,
+                total: 0
+            },
+            
+            leaveWithoutPay: {
+                current: 0,
+                total: 0
+            },
+            
+            halfLWP: {
+                current: 0,
+                total: 0
+            },
+            
+            maternityLeave: {
+                current: 182,
+                total: 182,
+                eligibilityDate: null
+            },
+            
+            // Mock history
+            accrualHistory: [
+                {
+                    date: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
+                    leaveType: 'PL',
+                    amount: 1.5,
+                    reason: 'Monthly accrual',
+                    addedBy: 'system'
+                }
+            ],
+            
+            adjustmentHistory: [],
+            usedLeaves: [],
+            notes: '',
+            lastUpdated: new Date().toISOString(),
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+        };
+    }
+
+    getMockAllLeaveBalances() {
+        return [
+            {
+                _id: 'mock-balance-1',
+                employeeId: 'T1166',
+                firstName: 'Ashish',
+                lastName: 'Dhole',
+                department: 'IT',
+                status: 'active',
+                sickLeave: { current: 8, total: 8 },
+                privilegeLeave: { current: 18, total: 18, accrualRate: 1.5 },
+                maternityLeave: { current: 182, total: 182 },
+                halfPayWithPL: { current: 0 },
+                leaveWithoutPay: { current: 0 },
+                halfLWP: { current: 0 }
+            },
+            {
+                _id: 'mock-balance-2',
+                employeeId: 'T1136',
+                firstName: 'Anjali',
+                lastName: 'Kulkarni',
+                department: 'HR',
+                status: 'probation',
+                sickLeave: { current: 8, total: 8 },
+                privilegeLeave: { current: 0, total: 0, accrualRate: 1.5 },
+                maternityLeave: { current: 182, total: 182 },
+                halfPayWithPL: { current: 0 },
+                leaveWithoutPay: { current: 0 },
+                halfLWP: { current: 0 }
+            },
+            {
+                _id: 'mock-balance-3',
+                employeeId: 'T1200',
+                firstName: 'Rahul',
+                lastName: 'Sharma',
+                department: 'Finance',
+                status: 'active',
+                sickLeave: { current: 8, total: 8 },
+                privilegeLeave: { current: 24.5, total: 24.5, accrualRate: 1.5 },
+                maternityLeave: { current: 182, total: 182 },
+                halfPayWithPL: { current: 5 },
+                leaveWithoutPay: { current: 2 },
+                halfLWP: { current: 0 }
+            }
+        ];
+    }
+
     // ==================== PROJECT EXPORT METHODS (FIXED) ====================
 
     /**
@@ -2710,4 +2998,4 @@ if (typeof window !== 'undefined') {
     }, 1000);
 }
 
-console.log('✅ COMPLETE ENHANCED API CLIENT initialized (2000+ lines) - All features loaded + Password reset FIXED + Report methods ADDED + Project Export Methods FIXED');
+console.log('✅ COMPLETE ENHANCED API CLIENT initialized (2000+ lines) - All features loaded + Password reset FIXED + Report methods ADDED + Project Export Methods FIXED + Leave Balance APIs ADDED');
