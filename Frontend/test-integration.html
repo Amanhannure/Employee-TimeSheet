@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Integration Test</title>
+</head>
+<body>
+    <h1>API Integration Test</h1>
+    <button onclick="testAPI()">Test Backend Connection</button>
+    <div id="result"></div>
+
+    <script src="js/integration/api-client.js"></script>
+    <script>
+    async function testAPI() {
+        try {
+            const result = await fetch('http://localhost:5000/api/health');
+            const data = await result.json();
+            document.getElementById('result').innerHTML = 
+                `✅ Backend connected: ${data.message}`;
+        } catch (error) {
+            document.getElementById('result').innerHTML = 
+                `❌ Backend connection failed: ${error.message}`;
+        }
+    }
+    </script>
+</body>
+</html>

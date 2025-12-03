@@ -1,0 +1,144 @@
+import express from 'express';
+import dotenv from 'dotenv';
+dotenv.config();
+
+import cors from 'cors';
+import session from 'express-session';
+import authRoutes from './routes/authRoutes.js';
+import projectsRoutes from './routes/projectsRoutes.js';
+import timesheetsRoutes from './routes/timesheetsRoutes.js';
+import usersRoutes from './routes/usersRoutes.js';
+import activityCodesRoutes from './routes/activityCodesRoutes.js';
+import reportsRoutes from './routes/reportsRoutes.js';
+import leaveRoutes from './routes/leaveRoutes.js';
+import connectDB from './mongoDB.js';
+import { securityHeaders } from './security/headers.js';
+import { sanitizeMiddleware } from './security/sanitize.js';
+// import { authLimiter, apiLimiter } from './security/rateLimit.js';
+import { auditLogger } from './security/auditLogger.js';
+import dashboardRoutes from './routes/dashboardRoutes.js';
+import Timesheet from './models/TimeSheet.js'; // ✅ ADDED MISSING IMPORT
+import lateSubmissionRoutes from './routes/lateSubmissionRoutes.js';
+const app = express();
+
+// Environment check
+console.log('🔧 Environment check:');
+console.log('PORT:', process.env.PORT || '5000 (default)');
+console.log('NODE_ENV:', process.env.NODE_ENV || 'development');
+console.log('JWT_SECRET:', process.env.JWT_SECRET ? '✓ Loaded' : '✗ Missing');
+console.log('MONGO_URI:', process.env.MONGO_URI ? '✓ Loaded' : '✗ Missing');
+
+// Connect to MongoDB
+connectDB();
+
+
+
+
+// Middleware
+app.use(securityHeaders);
+app.use(sanitizeMiddleware);
+app.use(cors({ 
+  origin: true,
+  credentials: true
+}));
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(auditLogger);
+
+// Session middleware
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'dev-secret-change-in-production',
+  resave: false,
+  saveUninitialized: false,
+  cookie: { 
+    secure: false,
+    httpOnly: true,
+    sameSite: 'lax',
+    maxAge: 24 * 60 * 60 * 1000
+  }
+}));
+
+// ✅ FIXED: Archive job with proper implementation
+const archiveOldTimesheets = async () => {
+  try {
+    const oneYearAgo = new Date();
+    oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+    
+    const result = await Timesheet.updateMany(
+      { 
+        createdAt: { $lt: oneYearAgo },
+        isArchived: false 
+      },
+      { 
+        isArchived: true,
+        archiveDate: new Date()
+      }
+    );
+    
+    console.log(`✅ Archived ${result.modifiedCount} old timesheets`);
+  } catch (error) {
+    console.error('❌ Archive job failed:', error);
+  }
+};
+
+// Schedule archive job to run on 1st of every month
+const scheduleArchiveJob = () => {
+  const now = new Date();
+  if (now.getDate() === 1) {
+    archiveOldTimesheets();
+  }
+};
+
+// Run archive check daily
+setInterval(scheduleArchiveJob, 24 * 60 * 60 * 1000);
+scheduleArchiveJob(); // Run on startup
+console.log('🕒 Archive job scheduled - will run daily');
+
+// Static files
+app.use('/uploads', express.static('uploads')); 
+
+// Rate limiting
+// app.use('/api/auth/login', authLimiter);
+// app.use('/api/auth/login-admin', authLimiter);
+// app.use('/api/', apiLimiter);
+
+// Routes
+app.use('/api/auth', authRoutes);
+app.use('/api/projects', projectsRoutes);
+app.use('/api/timesheets', timesheetsRoutes);
+app.use('/api/users', usersRoutes);
+app.use('/api/activity-codes', activityCodesRoutes);
+app.use('/api/reports', reportsRoutes);
+app.use('/api/leave', leaveRoutes);
+app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/late-submissions', lateSubmissionRoutes);
+
+// Health check
+app.get('/api/health', (req, res) => {
+  res.json({ 
+    status: 'OK', 
+    message: 'Timesheet Management System API is running',
+    timestamp: new Date().toISOString()
+  });
+});
+
+// 404 handler
+app.use((req, res) => {
+  res.status(404).json({ message: 'Route not found' });
+});
+
+// Error handler
+app.use((err, req, res, next) => {
+  console.error('Error:', err);
+  res.status(500).json({ 
+    message: 'Internal server error',
+    ...(process.env.NODE_ENV === 'development' && { error: err.message })
+  });
+});
+
+// Start server
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => {
+  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`📡 Environment: ${process.env.NODE_ENV || 'development'}`);
+});
