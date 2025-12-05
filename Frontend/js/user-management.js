@@ -305,6 +305,10 @@ function formatJoinDate(joinDate) {
 
 // ==================== TEAM LEADER FUNCTIONALITY ====================
 
+// ==================== TEAM LEADER FUNCTIONALITY ====================
+
+// ==================== TEAM LEADER FUNCTIONALITY ====================
+
 async function populateTeamLeadersByDepartment(department, selectElementId) {
     try {
         const selectElement = getElementSafely(selectElementId);
@@ -319,65 +323,98 @@ async function populateTeamLeadersByDepartment(department, selectElementId) {
             selectElement.innerHTML = '<option value="">Select Team Leader</option>';
         }
         
-        if (!department) {
-            return;
-        }
-        
         console.log(`🔍 Fetching team leaders for department: ${department}`);
         
-        // Show loading state
+        // ✅ ALWAYS ADD MR. NILESH SAKPAL AND MRS. MEDHA SAKPAL FIRST
+        // Add Mr. Nilesh Sakpal (use a special ID)
+        const nileshOption = document.createElement('option');
+        nileshOption.value = 'nilesh_sakpal_special';
+        nileshOption.textContent = 'Mr. Nilesh Sakpal';
+        selectElement.appendChild(nileshOption);
+        
+        // Add Mrs. Medha Sakpal (use a special ID)
+        const medhaOption = document.createElement('option');
+        medhaOption.value = 'medha_sakpal_special';
+        medhaOption.textContent = 'Mrs. Medha Sakpal';
+        selectElement.appendChild(medhaOption);
+        
+        // Show loading state for department users
         const loadingOption = document.createElement('option');
         loadingOption.value = '';
         loadingOption.textContent = 'Loading team leaders...';
         loadingOption.disabled = true;
         selectElement.appendChild(loadingOption);
         
-        // Fetch users from the same department
-        const response = await apiClient.getUsers({ 
-            department: department,
-            status: 'active' // Only active users
-        });
+        let departmentUsers = [];
         
-        // Remove loading option
-        selectElement.removeChild(loadingOption);
-        
-        const users = response.users || [];
-        
-        if (users.length === 0) {
-            const noUsersOption = document.createElement('option');
-            noUsersOption.value = '';
-            noUsersOption.textContent = 'No team leaders found';
-            noUsersOption.disabled = true;
-            selectElement.appendChild(noUsersOption);
-            return;
+        // If department is selected, fetch users from that department
+        if (department) {
+            // Fetch users from the same department
+            const response = await apiClient.getUsers({ 
+                department: department,
+                status: 'active' // Only active users
+            });
+            
+            departmentUsers = response.users || [];
+            
+            // Remove loading option
+            selectElement.removeChild(loadingOption);
+            
+            if (departmentUsers.length > 0) {
+                // Add team leaders from the same department
+                departmentUsers.forEach(user => {
+                    if (user._id) { // Skip if no ID
+                        const option = document.createElement('option');
+                        option.value = user._id;
+                        // Just show name and employee ID, no role tags
+                        option.textContent = `${user.firstName} ${user.lastName} (${user.employeeId})`;
+                        
+                        selectElement.appendChild(option);
+                    }
+                });
+            } else {
+                // No users found in this department
+                const noUsersOption = document.createElement('option');
+                noUsersOption.value = '';
+                noUsersOption.textContent = 'No team leaders found in this department';
+                noUsersOption.disabled = true;
+                selectElement.appendChild(noUsersOption);
+            }
+        } else {
+            // If no department selected, remove loading option
+            selectElement.removeChild(loadingOption);
+            
+            // Add option to select department first
+            const selectDeptOption = document.createElement('option');
+            selectDeptOption.value = '';
+            selectDeptOption.textContent = 'Select a department to see team leaders';
+            selectDeptOption.disabled = true;
+            selectElement.appendChild(selectDeptOption);
         }
         
-        // Add team leaders (you can filter by role if needed)
-        // For now, showing all active employees from the same department
-        users.forEach(user => {
-            if (user._id) { // Skip if no ID
-                const option = document.createElement('option');
-                option.value = user._id;
-                option.textContent = `${user.firstName} ${user.lastName} (${user.employeeId})`;
-                
-                // If user has manager/project_manager role, mark them
-                if (user.role === 'manager' || user.role === 'project_manager') {
-                    option.textContent += ' [Manager]';
-                }
-                
-                selectElement.appendChild(option);
-            }
-        });
-        
-        console.log(`✅ Loaded ${users.length} team leaders for ${department}`);
+        console.log(`✅ Loaded ${departmentUsers.length} team leaders from department plus 2 special directors`);
         
     } catch (error) {
         console.error('❌ Error loading team leaders:', error);
         const selectElement = getElementSafely(selectElementId);
         if (selectElement) {
+            // Clear previous options
+            selectElement.innerHTML = '<option value="">Select Team Leader</option>';
+            
+            // Still add the special directors even on error
+            const nileshOption = document.createElement('option');
+            nileshOption.value = 'nilesh_sakpal_special';
+            nileshOption.textContent = 'Mr. Nilesh Sakpal';
+            selectElement.appendChild(nileshOption);
+            
+            const medhaOption = document.createElement('option');
+            medhaOption.value = 'medha_sakpal_special';
+            medhaOption.textContent = 'Mrs. Medha Sakpal';
+            selectElement.appendChild(medhaOption);
+            
             const errorOption = document.createElement('option');
             errorOption.value = '';
-            errorOption.textContent = 'Error loading team leaders';
+            errorOption.textContent = 'Error loading department team leaders';
             errorOption.disabled = true;
             selectElement.appendChild(errorOption);
         }
@@ -386,6 +423,15 @@ async function populateTeamLeadersByDepartment(department, selectElementId) {
 
 async function fetchTeamLeaderName(teamLeaderId) {
     if (!teamLeaderId) return 'Not assigned';
+    
+    // Check for special directors first
+    if (teamLeaderId === 'nilesh_sakpal_special') {
+        return 'Mr. Nilesh Sakpal';
+    }
+    
+    if (teamLeaderId === 'medha_sakpal_special') {
+        return 'Mrs. Medha Sakpal';
+    }
     
     try {
         // Check if we already have the user data in our loaded users
@@ -520,9 +566,17 @@ async function populateEditForm(user) {
         // Set selected team leader if exists
         if (safeUser.teamLeader) {
             setTimeout(() => {
-                setElementValueSafely('editTeamLeader', safeUser.teamLeader);
+                // Handle special director IDs
+                let teamLeaderValue = safeUser.teamLeader;
+                if (typeof safeUser.teamLeader === 'object' && safeUser.teamLeader._id) {
+                    teamLeaderValue = safeUser.teamLeader._id;
+                }
+                setElementValueSafely('editTeamLeader', teamLeaderValue);
             }, 100);
         }
+    } else {
+        // If no department, still populate with special directors
+        await populateTeamLeadersByDepartment('', 'editTeamLeader');
     }
 }
 
@@ -548,6 +602,12 @@ async function updateUser() {
         console.log('📋 Update data:', userData);
         
         showLoadingState(true);
+        
+        // Handle special director IDs - convert to null for backend
+        if (userData.teamLeader === 'nilesh_sakpal_special' || userData.teamLeader === 'medha_sakpal_special') {
+            userData.teamLeader = null; // Send null to backend for special directors
+        }
+        
         const result = await apiClient.updateUser(userId, userData);
         
         console.log('✅ Update result:', result);
@@ -735,10 +795,28 @@ function openAddUserModal() {
         const form = getElementSafely('addUserForm');
         if (form) form.reset();
         
-        // Clear team leader dropdown
+        // Clear team leader dropdown and populate with special directors
         const teamLeaderSelect = getElementSafely('teamLeader');
         if (teamLeaderSelect) {
             teamLeaderSelect.innerHTML = '<option value="">Select Team Leader</option>';
+            
+            // Add special directors immediately
+            const nileshOption = document.createElement('option');
+            nileshOption.value = 'nilesh_sakpal_special';
+            nileshOption.textContent = 'Mr. Nilesh Sakpal';
+            teamLeaderSelect.appendChild(nileshOption);
+            
+            const medhaOption = document.createElement('option');
+            medhaOption.value = 'medha_sakpal_special';
+            medhaOption.textContent = 'Mrs. Medha Sakpal';
+            teamLeaderSelect.appendChild(medhaOption);
+            
+            // Show loading for department team leaders
+            const loadingOption = document.createElement('option');
+            loadingOption.value = '';
+            loadingOption.textContent = 'Select department to load team leaders...';
+            loadingOption.disabled = true;
+            teamLeaderSelect.appendChild(loadingOption);
         }
         
         modal.style.display = 'block';
@@ -957,10 +1035,12 @@ function downloadCSV(content, filename) {
     window.URL.revokeObjectURL(url);
     document.body.removeChild(a);
 }
+
 function closeUserDetailsModal() {
     const modal = getElementSafely('userDetailsModal');
     if (modal) modal.style.display = 'none';
 }
+
 function editUserFromDetails() {
     const modal = getElementSafely('userDetailsModal');
     if (modal) modal.style.display = 'none';
@@ -972,6 +1052,7 @@ function editUserFromDetails() {
         openEditUserModal(userId);
     }
 }
+
 // ==================== GLOBAL FUNCTION EXPORTS ====================
 
 window.openEditUserModal = openEditUserModal;

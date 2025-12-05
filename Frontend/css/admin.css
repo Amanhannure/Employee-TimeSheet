@@ -1334,12 +1334,15 @@
     border: 1px solid #e9ecef;
 }
 
+/* Enhanced filter section - updated for 2 columns only */
 .filter-controls {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
     gap: 15px;
     margin-bottom: 15px;
 }
+
+/* Remove any year filter related styles */
 
 .filter-group {
     display: flex;
@@ -1748,4 +1751,56 @@
     padding: 2px 4px;
     border-radius: 3px;
     font-weight: 600;
+}
+/* ✅ ENHANCED: Miscellaneous Hours Column Styles */
+.misc-hours-cell {
+    text-align: center;
+    font-weight: 600;
+    width: 100px;
+}
+
+.misc-hours {
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-size: 12px;
+    display: inline-block;
+    min-width: 40px;
+    font-weight: 700;
+    transition: all 0.3s ease;
+}
+
+.misc-hours.has-misc {
+    background: #fff3cd;
+    color: #856404;
+    border: 1px solid #ffeaa7;
+    animation: pulse-misc 2s infinite;
+}
+
+.misc-hours.no-misc {
+    background: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+}
+
+.misc-hours.na {
+    color: #bdc3c7;
+    font-style: italic;
+    background: #f8f9fa;
+    border: 1px solid #e9ecef;
+}
+
+@keyframes pulse-misc {
+    0%, 100% { 
+        background: #fff3cd;
+        transform: scale(1);
+    }
+    50% { 
+        background: #ffeaa7;
+        transform: scale(1.05);
+    }
+}
+
+/* REMOVED: Statistics summary section */
+.misc-hours-summary {
+    display: none; /* Hide the statistics summary section */
 }

@@ -161,102 +161,90 @@
     </div>
 
     <!-- ENHANCED: Miscellaneous Hours Modal with Dynamic Month Filtering -->
-    <div id="miscHoursModal" class="modal">
-        <div class="modal-content misc-modal">
-            <div class="modal-header">
-                <h2><i class="fas fa-clock"></i> Miscellaneous Hours Status</h2>
-                <span class="close" onclick="closeMiscellaneousHoursModal()">&times;</span>
+  <div id="miscHoursModal" class="modal">
+    <div class="modal-content misc-modal">
+        <div class="modal-header">
+            <h2><i class="fas fa-clock"></i> Miscellaneous Hours Status</h2>
+            <span class="close" onclick="closeMiscellaneousHoursModal()">&times;</span>
+        </div>
+        <div class="modal-body">
+            <!-- Enhanced Search and Filter Section -->
+            <div class="enhanced-filter-section">
+                <div class="filter-controls">
+                    <!-- Employee Search -->
+                    <div class="filter-group">
+                        <label for="searchMiscHours">
+                            <i class="fas fa-user"></i> Employee
+                        </label>
+                        <input type="text" id="searchMiscHoursModal" 
+                               placeholder="Employee name or code (e.g., T1166)" 
+                               class="filter-input">
+                    </div>
+                    
+                    <!-- Dynamic Month Filter (Year filter removed) -->
+                    <div class="filter-group">
+                        <label for="monthFilter">
+                            <i class="fas fa-calendar-alt"></i> Month
+                        </label>
+                        <select id="monthFilter" class="filter-select">
+                            <option value="all">All Months</option>
+                            <!-- Dynamic months will be populated here -->
+                        </select>
+                    </div>
+                    
+                    <!-- REMOVED: Year Filter -->
+                </div>
+                
+                <!-- Quick Filters -->
+                <div class="quick-filters">
+                    <button class="quick-filter-btn active" data-filter="all">
+                        <i class="fas fa-list"></i> All
+                    </button>
+                    <button class="quick-filter-btn" data-filter="recent">
+                        <i class="fas fa-history"></i> Recent (30 Days)
+                    </button>
+                    <button class="quick-filter-btn" data-filter="current-month">
+                        <i class="fas fa-calendar-check"></i> This Month
+                    </button>
+                    <button class="quick-filter-btn" data-filter="high-hours">
+                        <i class="fas fa-chart-line"></i> High Hours (>20)
+                    </button>
+                </div>
+                
+                <!-- Action Buttons -->
+                <div class="filter-actions">
+                    <button id="searchMiscButton" class="primary-button">
+                        <i class="fas fa-search"></i> Search
+                    </button>
+                    <button id="resetFiltersButton" class="secondary-button">
+                        <i class="fas fa-redo"></i> Reset
+                    </button>
+                    <button id="exportMiscHoursButton" class="export-button">
+                        <i class="fas fa-file-excel"></i> Export CSV
+                    </button>
+                </div>
             </div>
-            <div class="modal-body">
-                <!-- Enhanced Search and Filter Section -->
-                <div class="enhanced-filter-section">
-                    <div class="filter-controls">
-                        <!-- Employee Search -->
-                        <div class="filter-group">
-                            <label for="searchMiscHours">
-                                <i class="fas fa-user"></i> Employee
-                            </label>
-                            <input type="text" id="searchMiscHoursModal" 
-                                   placeholder="Employee name or code (e.g., T1166)" 
-                                   class="filter-input">
-                        </div>
-                        
-                        <!-- Dynamic Month Filter -->
-                        <div class="filter-group">
-                            <label for="monthFilter">
-                                <i class="fas fa-calendar-alt"></i> Month
-                            </label>
-                            <select id="monthFilter" class="filter-select">
-                                <option value="all">All Months</option>
-                                <!-- Dynamic months will be populated here -->
-                            </select>
-                        </div>
-                        
-                        <!-- Dynamic Year Filter -->
-                        <div class="filter-group">
-                            <label for="yearFilter">
-                                <i class="fas fa-calendar"></i> Year
-                            </label>
-                            <select id="yearFilter" class="filter-select">
-                                <option value="all">All Years</option>
-                                <!-- Dynamic years will be populated here -->
-                            </select>
-                        </div>
-                    </div>
-                    
-                    <!-- Quick Filters -->
-                    <div class="quick-filters">
-                        <button class="quick-filter-btn active" data-filter="all">
-                            <i class="fas fa-list"></i> All
-                        </button>
-                        <button class="quick-filter-btn" data-filter="recent">
-                            <i class="fas fa-history"></i> Recent (30 Days)
-                        </button>
-                        <button class="quick-filter-btn" data-filter="current-month">
-                            <i class="fas fa-calendar-check"></i> This Month
-                        </button>
-                        <button class="quick-filter-btn" data-filter="high-hours">
-                            <i class="fas fa-chart-line"></i> High Hours (>20)
-                        </button>
-                    </div>
-                    
-                    <!-- Action Buttons -->
-                    <div class="filter-actions">
-                        <button id="searchMiscButton" class="primary-button">
-                            <i class="fas fa-search"></i> Search
-                        </button>
-                        <button id="resetFiltersButton" class="secondary-button">
-                            <i class="fas fa-redo"></i> Reset
-                        </button>
-                        <button id="exportMiscHoursButton" class="export-button">
-                            <i class="fas fa-file-excel"></i> Export CSV
-                        </button>
+            
+            <!-- Results Section with Scrollbar -->
+            <div class="results-section">
+                <div id="searchResultCount" class="results-header">
+                    <!-- Search summary will appear here -->
+                    <div class="initial-state">
+                        <i class="fas fa-clock fa-2x"></i>
+                        <p>Enter search criteria to find miscellaneous hours</p>
                     </div>
                 </div>
                 
-                <!-- Results Section with Scrollbar -->
-                <div class="results-section">
-                    <div id="searchResultCount" class="results-header">
-                        <!-- Search summary will appear here -->
-                        <div class="initial-state">
-                            <i class="fas fa-clock fa-2x"></i>
-                            <p>Enter search criteria to find miscellaneous hours</p>
-                        </div>
-                    </div>
-                    
-                    <!-- Scrollable Results Container -->
-                    <div id="miscHoursResults" class="misc-hours-results">
-                        <!-- Search results will appear here -->
-                    </div>
-                    
-                    <!-- Summary Statistics -->
-                    <div id="miscHoursSummary" class="misc-hours-summary">
-                        <!-- Summary stats will appear here -->
-                    </div>
+                <!-- Scrollable Results Container -->
+                <div id="miscHoursResults" class="misc-hours-results">
+                    <!-- Search results will appear here -->
                 </div>
+                
+                <!-- REMOVED: Summary Statistics section -->
             </div>
         </div>
     </div>
+</div>
 
     <!-- Timesheet Details Modal -->
     <div id="timesheetDetailsModal" class="modal">
