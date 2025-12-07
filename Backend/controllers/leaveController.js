@@ -718,60 +718,211 @@ export const runMonthlyAccrual = async (req, res) => {
   }
 };
 // Check if employee has approved leave for specific date
+
+
+// Get all approved leave dates for a week
+
+// ✅ ADDED: Check if employee has approved leave for specific date
 export const checkLeaveForDate = async (req, res) => {
   try {
+    console.log(`🔍 Checking leave for date: ${req.params.date}`);
+    console.log('User ID:', req.user.id);
+    
     const { date } = req.params;
     const employeeId = req.user.id;
     
+    if (!date) {
+      console.log('❌ Date parameter missing');
+      return res.status(400).json({ message: 'Date parameter is required' });
+    }
+    
+    const targetDate = new Date(date);
+    if (isNaN(targetDate.getTime())) {
+      console.log('❌ Invalid date format:', date);
+      return res.status(400).json({ message: 'Invalid date format' });
+    }
+    
+    console.log(`🔍 Looking for approved leave on: ${targetDate.toISOString()}`);
+    
+    // Find approved leave that covers this date
     const approvedLeave = await LeaveRequest.findOne({
       employee: employeeId,
       status: 'approved',
-      startDate: { $lte: new Date(date) },
-      endDate: { $gte: new Date(date) }
+      startDate: { $lte: targetDate },
+      endDate: { $gte: targetDate }
     });
+    
+    console.log(`📋 Leave check result:`, approvedLeave ? 'Has leave' : 'No leave');
     
     return res.json({ 
       hasLeave: !!approvedLeave,
       leaveType: approvedLeave?.leaveType,
-      reason: approvedLeave?.reason 
+      leaveTypeDisplay: approvedLeave?.leaveTypeDisplay,
+      reason: approvedLeave?.reason,
+      date: date
     });
   } catch (error) {
-    res.status(500).json({ message: 'Server error' });
+    console.error('❌ Check leave for date error:', error);
+    res.status(500).json({ 
+      message: 'Server error',
+      error: error.message 
+    });
   }
 };
 
-// Get all approved leave dates for a week
+// ✅ ADDED: Get all approved leave dates for a week
 export const getApprovedLeavesForWeek = async (req, res) => {
   try {
+    console.log(`📅 Getting approved leaves for week: ${req.params.weekStartDate}`);
+    console.log('User ID:', req.user.id);
+    
     const { weekStartDate } = req.params;
     const employeeId = req.user.id;
     
+    if (!weekStartDate) {
+      console.log('❌ Week start date parameter missing');
+      return res.status(400).json({ message: 'Week start date is required' });
+    }
+    
     const weekStart = new Date(weekStartDate);
+    if (isNaN(weekStart.getTime())) {
+      console.log('❌ Invalid week start date format:', weekStartDate);
+      return res.status(400).json({ message: 'Invalid week start date format' });
+    }
+    
     const weekEnd = new Date(weekStart);
     weekEnd.setDate(weekStart.getDate() + 6);
     
+    console.log(`📅 Week range: ${weekStart.toISOString()} to ${weekEnd.toISOString()}`);
+    
+    // Find all approved leaves that overlap with this week
     const approvedLeaves = await LeaveRequest.find({
       employee: employeeId,
       status: 'approved',
-      startDate: { $lte: weekEnd },
-      endDate: { $gte: weekStart }
-    });
+      $or: [
+        // Leave starts during the week
+        { startDate: { $gte: weekStart, $lte: weekEnd } },
+        // Leave ends during the week
+        { endDate: { $gte: weekStart, $lte: weekEnd } },
+        // Leave spans the entire week
+        { startDate: { $lte: weekStart }, endDate: { $gte: weekEnd } }
+      ]
+    }).sort({ startDate: 1 });
     
+    console.log(`📋 Found ${approvedLeaves.length} approved leaves for the week`);
+    
+    // Generate array of all leave dates (excluding weekends)
     const leaveDates = [];
     approvedLeaves.forEach(leave => {
+      console.log(`📝 Processing leave: ${leave.startDate} to ${leave.endDate} (${leave.leaveType})`);
+      
       let current = new Date(leave.startDate);
       const end = new Date(leave.endDate);
       
-      while (current <= end && current <= weekEnd && current >= weekStart) {
-        if (current.getDay() !== 0 && current.getDay() !== 6) { // Skip weekends
-          leaveDates.push(current.toISOString().split('T')[0]);
+      while (current <= end) {
+        // Only include dates within the week range
+        if (current >= weekStart && current <= weekEnd) {
+          const dayOfWeek = current.getDay();
+          // Skip Saturday (6) and Sunday (0) - only weekdays
+          if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+            const dateStr = current.toISOString().split('T')[0];
+            if (!leaveDates.includes(dateStr)) {
+              leaveDates.push(dateStr);
+            }
+          }
         }
         current.setDate(current.getDate() + 1);
       }
     });
     
-    return res.json({ leaveDates });
+    console.log(`✅ Generated ${leaveDates.length} unique leave dates:`, leaveDates);
+    
+    return res.json({ 
+      success: true,
+      weekStartDate: weekStartDate,
+      weekEndDate: weekEnd.toISOString().split('T')[0],
+      leaveDates: leaveDates,
+      totalLeaves: approvedLeaves.length,
+      leaveDetails: approvedLeaves.map(leave => ({
+        startDate: leave.startDate,
+        endDate: leave.endDate,
+        leaveType: leave.leaveType,
+        leaveTypeDisplay: leave.leaveTypeDisplay,
+        daysTaken: leave.daysTaken,
+        reason: leave.reason
+      }))
+    });
   } catch (error) {
+    console.error('❌ Get approved leaves for week error:', error);
+    res.status(500).json({ 
+      message: 'Server error',
+      error: error.message 
+    });
+  }
+};
+
+// ✅ ADDED: Get leave calendar for employee (all leaves)
+export const getLeaveCalendar = async (req, res) => {
+  try {
+    console.log(`📅 Getting leave calendar for user: ${req.user.id}`);
+    
+    const employeeId = req.user.id;
+    const { startDate, endDate } = req.query;
+    
+    let query = { employee: employeeId };
+    
+    if (startDate && endDate) {
+      query.$or = [
+        // Leave starts in range
+        { startDate: { $gte: new Date(startDate), $lte: new Date(endDate) } },
+        // Leave ends in range
+        { endDate: { $gte: new Date(startDate), $lte: new Date(endDate) } },
+        // Leave spans the range
+        { startDate: { $lte: new Date(startDate) }, endDate: { $gte: new Date(endDate) } }
+      ];
+    }
+    
+    const leaves = await LeaveRequest.find(query)
+      .sort({ startDate: 1 })
+      .populate('employee', 'firstName lastName employeeId')
+      .populate('approvedBy', 'firstName lastName');
+    
+    console.log(`📋 Found ${leaves.length} leaves for calendar`);
+    
+    const calendarEvents = leaves.map(leave => ({
+      id: leave._id,
+      title: `${leave.leaveTypeDisplay} - ${leave.employee?.firstName || 'Employee'}`,
+      start: leave.startDate,
+      end: new Date(new Date(leave.endDate).setDate(leave.endDate.getDate() + 1)), // Add 1 day for full calendar display
+      status: leave.status,
+      leaveType: leave.leaveType,
+      color: getLeaveColor(leave.leaveType),
+      allDay: true,
+      extendedProps: {
+        reason: leave.reason,
+        employeeName: `${leave.employee?.firstName || ''} ${leave.employee?.lastName || ''}`,
+        employeeId: leave.employee?.employeeId,
+        approvedBy: leave.approvedBy ? `${leave.approvedBy.firstName} ${leave.approvedBy.lastName}` : null,
+        days: leave.daysTaken
+      }
+    }));
+    
+    return res.json(calendarEvents);
+  } catch (error) {
+    console.error('❌ Get leave calendar error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 };
+
+// ✅ ADDED: Helper function to get color based on leave type
+function getLeaveColor(leaveType) {
+  const colors = {
+    'sickLeave': '#e74c3c', // Red
+    'privilegeLeave': '#3498db', // Blue
+    'maternityLeave': '#9b59b6', // Purple
+    'halfPayWithPL': '#f39c12', // Orange
+    'leaveWithoutPay': '#7f8c8d', // Gray
+    'halfLWP': '#95a5a6' // Light gray
+  };
+  return colors[leaveType] || '#3498db';
+}

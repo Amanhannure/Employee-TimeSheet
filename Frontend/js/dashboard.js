@@ -488,7 +488,7 @@ function setupEventListeners() {
     document.getElementById('add-row-btn').addEventListener('click', addTimesheetRow);
     document.getElementById('save-timesheet-btn').addEventListener('click', saveTimesheet);
     document.getElementById('submit-timesheet-btn').addEventListener('click', submitTimesheet);
-    document.getElementById('history-btn').addEventListener('click', showHistoryModal);
+    
     document.getElementById('summary-history-btn').addEventListener('click', showHistoryModal);
     document.getElementById('admin-btn').addEventListener('click', showAccessDenied);
     
