@@ -1538,3 +1538,100 @@ body.modal-open {
 .close-modal:hover {
     color: black;
 }
+/* ✅ NEW: Leave Date Cell Styles */
+.time-cell.leave-date {
+    background: linear-gradient(135deg, #ffebee 0%, #ffcdd2 100%) !important;
+    color: #c62828 !important;
+    cursor: not-allowed !important;
+    opacity: 0.7;
+    position: relative;
+    border: 2px solid #ef9a9a !important;
+}
+
+.time-cell.leave-date::after {
+    content: "🏖️";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 18px;
+    opacity: 0.8;
+}
+
+.time-cell.leave-date:hover::before {
+    content: "Approved leave - Cannot enter hours";
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #d32f2f;
+    color: white;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    white-space: nowrap;
+    z-index: 1000;
+    box-shadow: 0 4px 12px rgba(211, 47, 47, 0.3);
+}
+
+/* ✅ NEW: Leave info in date headers */
+.day-date.leave-date {
+    color: #d32f2f !important;
+    font-weight: bold;
+    position: relative;
+}
+
+.day-date.leave-date::after {
+    content: " (Leave)";
+    font-size: 10px;
+    opacity: 0.8;
+}
+
+/* ✅ NEW: Leave blocked notification style */
+.leave-notification {
+    background: linear-gradient(135deg, #ffebee 0%, #ffcdd2 100%);
+    border: 2px solid #ef9a9a;
+    color: #c62828;
+    padding: 12px 20px;
+    margin: 10px 0;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    box-shadow: 0 4px 12px rgba(211, 47, 47, 0.2);
+}
+
+.leave-notification i {
+    font-size: 20px;
+}
+
+/* ✅ NEW: Leave type badges */
+.leave-type-badge {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    margin-left: 8px;
+    text-transform: uppercase;
+}
+
+.leave-type-sick {
+    background: #e3f2fd;
+    color: #1565c0;
+}
+
+.leave-type-privilege {
+    background: #e8f5e9;
+    color: #2e7d32;
+}
+
+.leave-type-maternity {
+    background: #f3e5f5;
+    color: #7b1fa2;
+}
+
+.leave-type-other {
+    background: #fff3e0;
+    color: #ef6c00;
+}

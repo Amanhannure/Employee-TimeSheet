@@ -113,7 +113,8 @@ function hasProjectsAccess() {
     const userData = getUserData();
     if (!userData) return false;
     
-    const allowedRoles = ['manager', 'project_manager'];
+    // ✅ ADDED 'admin' to allowed roles
+    const allowedRoles = ['admin', 'manager', 'project_manager'];
     const hasAccess = allowedRoles.includes(userData.role);
     
     console.log(`🔐 Projects Access Check: Role=${userData.role}, HasAccess=${hasAccess}`);
@@ -797,6 +798,8 @@ function openHoursModal(cell) {
     if (AppState.isLoading) return;
     
     const day = cell.getAttribute('data-day');
+    
+    // ✅ ADDED: First check if this is a future/old date
     if (isFutureOrOldDate(day)) {
         if (!AppState.selectedDays.has(day)) {
             safeNotification('This day is disabled. Click the date to enable it.', 'warning');
@@ -808,6 +811,56 @@ function openHoursModal(cell) {
         return;
     }
     
+    // ✅ ADDED: Check if employee has approved leave for this date
+    const cellDate = getCellDate(day);
+    const dateString = cellDate.toISOString().split('T')[0];
+    
+    // Check local cache first
+    if (isLeaveDate(dateString)) {
+        showLeaveBlockedMessage(cellDate);
+        return;
+    }
+    
+    // If not in cache, check with API
+    hasApprovedLeaveForDate(dateString)
+        .then(hasLeave => {
+            if (hasLeave) {
+                // Add to cache and show message
+                if (!AppState.leaveDates) AppState.leaveDates = [];
+                if (!AppState.leaveDates.includes(dateString)) {
+                    AppState.leaveDates.push(dateString);
+                }
+                showLeaveBlockedMessage(cellDate);
+                return;
+            }
+            
+            // No leave, proceed to open modal
+            proceedWithHoursModal(cell);
+        })
+        .catch(error => {
+            console.warn('Leave check failed, proceeding anyway:', error);
+            proceedWithHoursModal(cell);
+        });
+}
+function showLeaveBlockedMessage(date) {
+    const formattedDate = formatDateForDisplay(date);
+    safeNotification(`You have approved leave on ${formattedDate}. Cannot enter timesheet hours.`, 'error', 5000);
+    
+    // Optional: Show leave details
+    getLeaveTypeForDate(date.toISOString().split('T')[0])
+        .then(leaveType => {
+            if (leaveType) {
+                const leaveTypeDisplay = getLeaveTypeDisplayName(leaveType);
+                setTimeout(() => {
+                    safeNotification(`Leave Type: ${leaveTypeDisplay}`, 'info', 3000);
+                }, 1000);
+            }
+        })
+        .catch(() => {/* Ignore error */});
+}
+
+// ✅ ADDED: Proceed with opening hours modal (separated for clarity)
+function proceedWithHoursModal(cell) {
     if (AppState.hasPendingRejectedTimesheets && !isInEditMode()) {
         safeNotification('Please resolve your rejected timesheets before entering hours', 'error');
         return;
@@ -831,6 +884,7 @@ function openHoursModal(cell) {
     if (workRemark) workRemark.value = cell.getAttribute('data-remark') || '';
     
     // ✅ FIXED: Pass currentCell parameter
+    const day = cell.getAttribute('data-day');
     updateAvailableHoursInfo(day, cell);
     
     updateActivityCodeDropdown();
@@ -848,6 +902,18 @@ function openHoursModal(cell) {
     }
 }
 
+// ✅ ADDED: Helper function to get leave type display name
+function getLeaveTypeDisplayName(leaveType) {
+    const displayNames = {
+        'sickLeave': 'Sick Leave (SL)',
+        'privilegeLeave': 'Privilege Leave (PL)',
+        'maternityLeave': 'Maternity Leave (ML)',
+        'halfPayWithPL': 'Half Pay with PL',
+        'leaveWithoutPay': 'Leave Without Pay',
+        'halfLWP': 'Half LWP'
+    };
+    return displayNames[leaveType] || leaveType;
+}
 // ✅ ADDED: Update activity code dropdown with dynamic data
 function updateActivityCodeDropdown() {
     const activitySelect = document.getElementById('activity-code');
@@ -1044,7 +1110,8 @@ function setDefaultWeekDates() {
 }
 
 // ✅ UPDATED: Handle date change with 15-day limit and dynamic days
-function handleDateChange() {
+// ✅ UPDATED: Handle date change with 15-day limit, dynamic days, and leave checking
+async function handleDateChange() {
     const startDateInput = document.getElementById('week-start-date').value;
     const endDateInput = document.getElementById('week-end-date').value;
     
@@ -1083,8 +1150,111 @@ function handleDateChange() {
     
     updateDayDates();
     updateDateCellStates();
+    
+    // ✅ ADDED: Check for approved leaves for this week
+    try {
+        await checkLeaveForWeek(startDateInput);
+        highlightLeaveDays(); // Highlight cells that have approved leave
+    } catch (error) {
+        console.warn('Could not check leaves for week:', error);
+    }
+}
+function highlightLeaveDays() {
+    if (!AppState.leaveDates || !Array.isArray(AppState.leaveDates) || AppState.leaveDates.length === 0) {
+        return;
+    }
+    
+    const startDateInput = document.getElementById('week-start-date').value;
+    if (!startDateInput) return;
+    
+    const startDate = parseDateSafe(startDateInput);
+    if (!startDate) return;
+    
+    const days = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+    
+    days.forEach((day, index) => {
+        const cellDate = new Date(startDate);
+        cellDate.setDate(startDate.getDate() + index);
+        const dateString = cellDate.toISOString().split('T')[0];
+        
+        if (AppState.leaveDates.includes(dateString)) {
+            // Mark these cells as leave dates
+            const dayCells = document.querySelectorAll(`.time-cell[data-day="${day}"]`);
+            dayCells.forEach(cell => {
+                cell.classList.add('leave-date');
+                cell.classList.remove('future-date'); // Remove future date styling if present
+                cell.style.cursor = 'not-allowed';
+                cell.title = 'Approved leave - Cannot enter hours';
+            });
+        }
+    });
 }
 
+// ✅ ADDED: Update date cell states to include leave dates
+function updateDateCellStates() {
+    const timeCells = document.querySelectorAll('.time-cell');
+    timeCells.forEach(cell => {
+        const day = cell.getAttribute('data-day');
+        
+        // First check if it's a leave date
+        const cellDate = getCellDate(day);
+        const dateString = cellDate.toISOString().split('T')[0];
+        
+        if (AppState.leaveDates && AppState.leaveDates.includes(dateString)) {
+            cell.classList.add('leave-date');
+            cell.classList.remove('future-date');
+            cell.style.opacity = '0.5';
+            cell.style.cursor = 'not-allowed';
+            cell.title = 'Approved leave - Cannot enter hours';
+        } 
+        // Then check if it's future/old date or disabled day
+        else if (isFutureOrOldDate(day)) {
+            cell.classList.add('future-date');
+            cell.style.opacity = '0.5';
+            cell.style.cursor = 'not-allowed';
+            if (!AppState.selectedDays.has(day)) {
+                cell.title = 'Day disabled - click date to enable';
+            } else if (!isWithinLast15Days(getCellDate(day))) {
+                cell.title = 'Cannot enter hours for dates older than 15 days';
+            } else {
+                cell.title = 'Cannot enter hours for future dates';
+            }
+        } else {
+            cell.classList.remove('future-date', 'leave-date');
+            cell.style.opacity = '1';
+            cell.style.cursor = 'pointer';
+            cell.title = 'Click to enter hours';
+        }
+    });
+}
+async function initializeDashboard() {
+    setLoadingState(true);
+    
+    try {
+        updateUserInfo();
+        setupEventListeners();
+        setDefaultWeekDates();
+        initializeTimesheetTable();
+        await loadBackendData();
+        updateDayDates();
+        loadDraftTimesheet();
+        await checkPendingRejectedTimesheets();
+        setupDaySelectionHandlers();
+        
+        // ✅ ADDED: Check for approved leaves on initial load
+        const startDate = document.getElementById('week-start-date').value;
+        if (startDate) {
+            await checkLeaveForWeek(startDate);
+            highlightLeaveDays();
+        }
+        
+    } catch (error) {
+        console.error('Error in dashboard initialization:', error);
+        safeNotification('Error initializing dashboard', 'error');
+    } finally {
+        setLoadingState(false);
+    }
+}
 // ✅ UPDATED: Calculate actual week days based on selected start date (Monday)
 function updateDayDates() {
     const startDateInput = document.getElementById('week-start-date').value;
@@ -2005,7 +2175,120 @@ function showAccessDenied() {
     showModal(modal);
 }
 
+// ✅ ADDED: Check if employee has approved leave for specific date
+async function hasApprovedLeaveForDate(date) {
+    try {
+        if (!AppState.userData || AppState.isLoading) return false;
+        
+        const api = getApiClient();
+        
+        // First try the real API endpoint
+        try {
+            const response = await api.checkLeaveForDate(date);
+            console.log(`🔍 Leave check for ${date}:`, response);
+            return response.hasLeave || false;
+        } catch (apiError) {
+            console.warn('API leave check failed, checking locally:', apiError.message);
+            
+            // Fallback: Check local storage or mock data
+            const userLeaves = localStorage.getItem(`userLeaves_${AppState.userData.id}`);
+            if (userLeaves) {
+                const leaves = JSON.parse(userLeaves);
+                return leaves.some(leave => {
+                    const leaveStart = new Date(leave.startDate);
+                    const leaveEnd = new Date(leave.endDate);
+                    const checkDate = new Date(date);
+                    return checkDate >= leaveStart && checkDate <= leaveEnd && leave.status === 'approved';
+                });
+            }
+            return false;
+        }
+    } catch (error) {
+        console.warn('Leave check error:', error);
+        return false; // If checking fails, allow timesheet entry
+    }
+}
 
+// ✅ ADDED: Check leave status for entire week
+async function checkLeaveForWeek(startDate) {
+    try {
+        if (!AppState.userData || AppState.isLoading) return [];
+        
+        const api = getApiClient();
+        
+        // First try the real API endpoint
+        try {
+            const response = await api.getApprovedLeavesForWeek(startDate);
+            console.log(`📅 Weekly leave check for ${startDate}:`, response);
+            
+            // Store leave dates in AppState for quick access
+            AppState.leaveDates = response.leaveDates || [];
+            return AppState.leaveDates;
+        } catch (apiError) {
+            console.warn('API weekly leave check failed:', apiError.message);
+            
+            // Fallback: Return empty array or use mock data
+            AppState.leaveDates = [];
+            
+            // Try to get leaves from local storage
+            const userLeaves = localStorage.getItem(`userLeaves_${AppState.userData.id}`);
+            if (userLeaves) {
+                const leaves = JSON.parse(userLeaves);
+                const approvedLeaves = leaves.filter(leave => leave.status === 'approved');
+                
+                const weekStart = new Date(startDate);
+                const weekEnd = new Date(weekStart);
+                weekEnd.setDate(weekStart.getDate() + 6);
+                
+                const leaveDates = [];
+                approvedLeaves.forEach(leave => {
+                    let current = new Date(leave.startDate);
+                    const end = new Date(leave.endDate);
+                    
+                    while (current <= end && current <= weekEnd && current >= weekStart) {
+                        // Only include weekdays (Mon-Fri)
+                        const dayOfWeek = current.getDay();
+                        if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+                            leaveDates.push(current.toISOString().split('T')[0]);
+                        }
+                        current.setDate(current.getDate() + 1);
+                    }
+                });
+                
+                AppState.leaveDates = leaveDates;
+                return leaveDates;
+            }
+            
+            return [];
+        }
+    } catch (error) {
+        console.warn('Weekly leave check error:', error);
+        AppState.leaveDates = [];
+        return [];
+    }
+}
+
+// ✅ ADDED: Helper function to check if date is a leave day
+function isLeaveDate(dateString) {
+    if (!AppState.leaveDates || !Array.isArray(AppState.leaveDates)) return false;
+    
+    const dateObj = typeof dateString === 'string' ? new Date(dateString) : dateString;
+    const dateStr = dateObj.toISOString().split('T')[0];
+    
+    return AppState.leaveDates.includes(dateStr);
+}
+
+// ✅ ADDED: Get leave type for a specific date
+async function getLeaveTypeForDate(date) {
+    try {
+        const api = getApiClient();
+        const response = await api.checkLeaveForDate(date);
+        return response.leaveType || null;
+    } catch (error) {
+        console.warn('Could not get leave type:', error);
+        return null;
+    }
+}
 
 // Auto-save draft when leaving page
 window.addEventListener('beforeunload', function(e) {

@@ -3,6 +3,7 @@ import User from "../models/User.js";
 import Project from "../models/Project.js";
 import mongoose from "mongoose";
 import { Parser } from "json2csv";
+// import ExtendedAccess from "../models/ExtendedAccess.js";
 
 // ✅ FIXED: Check for pending rejected timesheets blocking
 const checkPendingRejectedBlock = async (employeeId) => {
@@ -15,7 +16,7 @@ const checkPendingRejectedBlock = async (employeeId) => {
     const pendingRejected = await Timesheet.findOne({
       employee: employeeId,
       status: 'rejected',
-      rejectedAt: { $lt: fifteenDaysAgo }, // ✅ FIX: Use rejectedAt
+      rejectedAt: { $lt: fifteenDaysAgo },
       isExpired: false
     });
 
@@ -26,6 +27,31 @@ const checkPendingRejectedBlock = async (employeeId) => {
   } catch (error) {
     console.error("Error checking pending rejected block:", error);
     return { isBlocked: false, blockedTimesheet: null };
+  }
+};
+
+// ✅ ADDED: Check if employee has extended access for old dates
+const checkExtendedAccess = async (employeeId, targetDate) => {
+  try {
+    // Check if targetDate is older than 15 days
+    const fifteenDaysAgo = new Date();
+    fifteenDaysAgo.setDate(fifteenDaysAgo.getDate() - 15);
+    
+    if (targetDate >= fifteenDaysAgo) {
+      return false; // No need for extended access
+    }
+    
+    // Check for active extended access
+    const extendedAccess = await ExtendedAccess.findOne({
+      employeeId: employeeId,
+      status: "active",
+      expiresAt: { $gt: new Date() },
+    });
+    
+    return !!extendedAccess;
+  } catch (error) {
+    console.error("Error checking extended access:", error);
+    return false;
   }
 };
 
@@ -66,7 +92,6 @@ export const archiveOldTimesheets = async (req, res) => {
 
     console.log(`🔄 Archiving timesheets older than: ${cutoffDate.toISOString()}`);
 
-    // Find timesheets older than cutoff date that are not already archived
     const result = await Timesheet.updateMany(
       {
         weekEndDate: { $lt: cutoffDate },
@@ -110,7 +135,6 @@ export const expireEditingPeriods = async (req, res) => {
   try {
     const now = new Date();
 
-    // Find rejected timesheets where editing period has expired but not marked as expired
     const result = await Timesheet.updateMany(
       {
         status: 'rejected',
@@ -151,7 +175,6 @@ export const getEditableTimesheets = async (req, res) => {
   try {
     const now = new Date();
 
-    // Find rejected timesheets that are still editable (within 15-day window and not expired)
     const editableTimesheets = await Timesheet.find({
       employee: req.user.id,
       status: 'rejected',
@@ -160,9 +183,8 @@ export const getEditableTimesheets = async (req, res) => {
     })
       .populate("employee", "firstName lastName employeeId department")
       .populate("rejectedBy", "firstName lastName")
-      .sort({ editableUntil: 1 }); // Sort by closest expiration first
+      .sort({ editableUntil: 1 });
 
-    // Calculate days remaining for each timesheet
     const enhancedTimesheets = editableTimesheets.map((timesheet) => {
       const timesheetObj = timesheet.toObject();
       const daysRemaining = Math.ceil((timesheet.editableUntil - now) / (24 * 60 * 60 * 1000));
@@ -197,11 +219,9 @@ export const exportMultipleTimesheetsToCSV = async (req, res) => {
 
     let query = {};
 
-    // If specific timesheet IDs are provided, use them
     if (timesheetIds && timesheetIds.length > 0) {
       query._id = { $in: timesheetIds };
     } else {
-      // Otherwise use filters
       if (filters.status && ["draft", "pending", "approved", "rejected"].includes(filters.status)) {
         query.status = filters.status;
       }
@@ -225,7 +245,6 @@ export const exportMultipleTimesheetsToCSV = async (req, res) => {
       }
     }
 
-    // Get timesheets with population
     const timesheets = await Timesheet.find(query)
       .populate("employee", "firstName lastName employeeId department")
       .populate("approvedBy", "firstName lastName")
@@ -236,7 +255,6 @@ export const exportMultipleTimesheetsToCSV = async (req, res) => {
       return res.status(404).json({ message: "No timesheets found for export" });
     }
 
-    // Prepare CSV data - flatten all entries from all timesheets
     const csvData = [];
     
     timesheets.forEach((timesheet) => {
@@ -286,35 +304,13 @@ export const exportMultipleTimesheetsToCSV = async (req, res) => {
     });
 
     const fields = [
-      "Employee Code",
-      "Employee Name",
-      "Department",
-      "Date",
-      "Day",
-      "Project Code",
-      "Location",
-      "Normal Hours",
-      "Overtime Hours",
-      "Total Hours",
-      "Activity Code",
-      "Remarks",
-      "Status",
-      "Week Start",
-      "Week End",
-      "Week Number",
-      "Year",
-      "Total Normal Hours",
-      "Total Overtime Hours",
-      "Grand Total Hours",
-      "Submitted At",
-      "Approved By",
-      "Approved At",
-      "Rejected By",
-      "Rejected At",
-      "Rejection Reason",
-      "Editable Until",
-      "Can Edit",
-      "Days Remaining",
+      "Employee Code", "Employee Name", "Department", "Date", "Day",
+      "Project Code", "Location", "Normal Hours", "Overtime Hours",
+      "Total Hours", "Activity Code", "Remarks", "Status", "Week Start",
+      "Week End", "Week Number", "Year", "Total Normal Hours",
+      "Total Overtime Hours", "Grand Total Hours", "Submitted At",
+      "Approved By", "Approved At", "Rejected By", "Rejected At",
+      "Rejection Reason", "Editable Until", "Can Edit", "Days Remaining",
     ];
 
     const json2csvParser = new Parser({ fields });
@@ -336,7 +332,7 @@ export const exportMultipleTimesheetsToCSV = async (req, res) => {
   }
 };
 
-// ✅ FIXED: Submit timesheet with proper blocking check
+// ✅ FIXED: Submit timesheet with extended access check
 export const submitTimesheet = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
@@ -350,7 +346,7 @@ export const submitTimesheet = async (req, res) => {
       entriesCount: entries?.length,
     });
 
-    // ✅ FIXED: Proper blocking check with error response
+    // Check for pending rejected block
     const blockCheck = await checkPendingRejectedBlock(req.user.id);
     if (blockCheck.isBlocked) {
       await session.abortTransaction();
@@ -375,6 +371,46 @@ export const submitTimesheet = async (req, res) => {
       return res
         .status(400)
         .json({ message: "At least one timesheet entry is required" });
+    }
+
+    // ✅ ADDED: Validate no old dates without extended access
+    try {
+      const hasExtendedAccess = await checkExtendedAccess(req.user.id, new Date(weekStartDate));
+      
+      if (!hasExtendedAccess) {
+        // Check if any entry is older than 15 days
+        const fifteenDaysAgo = new Date();
+        fifteenDaysAgo.setDate(fifteenDaysAgo.getDate() - 15);
+        
+        const oldEntries = entries.filter(entry => {
+          const entryDate = new Date(entry.date);
+          return entryDate < fifteenDaysAgo;
+        });
+        
+        if (oldEntries.length > 0) {
+          const oldDates = [
+            ...new Set(
+              oldEntries.map(entry =>
+                new Date(entry.date).toLocaleDateString("en-GB")
+              )
+            ),
+          ];
+          
+          await session.abortTransaction();
+          return res.status(403).json({
+            message: `Cannot submit hours for dates older than 15 days: ${oldDates.join(", ")}. Request extended access from admin.`,
+            code: "OLD_DATES_NOT_ALLOWED",
+            requiresExtendedAccess: true,
+            oldDates: oldDates,
+          });
+        }
+      }
+    } catch (dateError) {
+      await session.abortTransaction();
+      return res.status(400).json({
+        message: dateError.message,
+        code: "DATE_VALIDATION_ERROR",
+      });
     }
 
     // Validate no future dates
@@ -576,10 +612,9 @@ export const rejectTimesheet = async (req, res) => {
     timesheet.rejectedBy = req.user.id;
     timesheet.rejectedAt = new Date();
 
-    // ✅ FIXED: Use local timezone for editableUntil to match frontend
     const editableUntil = new Date();
     editableUntil.setDate(editableUntil.getDate() + 15);
-    editableUntil.setHours(23, 59, 59, 999); // End of day 15 days from now
+    editableUntil.setHours(23, 59, 59, 999);
     timesheet.editableUntil = editableUntil;
     timesheet.isExpired = false;
 
@@ -629,7 +664,6 @@ export const editRejectedTimesheet = async (req, res) => {
       return res.status(404).json({ message: "Timesheet not found" });
     }
 
-    // Check if timesheet is rejected and within 15-day window
     if (timesheet.status !== "rejected") {
       await session.abortTransaction();
       return res.status(400).json({ 
@@ -638,7 +672,6 @@ export const editRejectedTimesheet = async (req, res) => {
       });
     }
 
-    // ✅ ADDED: Check if editableUntil exists
     if (!timesheet.editableUntil) {
       await session.abortTransaction();
       return res.status(400).json({ 
@@ -684,10 +717,8 @@ export const editRejectedTimesheet = async (req, res) => {
       });
     }
 
-    // Store original values for audit
     const originalEntries = JSON.parse(JSON.stringify(timesheet.entries));
 
-    // Update timesheet entries and recalculate totals
     timesheet.entries = entries;
 
     const totalNormalHours = entries.reduce(
@@ -703,7 +734,6 @@ export const editRejectedTimesheet = async (req, res) => {
     timesheet.totalOvertimeHours = totalOvertimeHours;
     timesheet.totalHours = totalNormalHours + totalOvertimeHours;
 
-    // Reset status to pending for re-approval
     timesheet.status = "pending";
     timesheet.resubmittedAt = new Date();
     timesheet.resubmissionCount = (timesheet.resubmissionCount || 0) + 1;
@@ -772,7 +802,6 @@ export const getMyTimesheets = async (req, res) => {
       .sort({ weekStartDate: -1 })
       .limit(100);
 
-    // Calculate editing eligibility for rejected timesheets
     const enhancedTimesheets = timesheets.map((timesheet) => {
       const timesheetObj = timesheet.toObject();
 
@@ -787,7 +816,6 @@ export const getMyTimesheets = async (req, res) => {
           : 0;
         timesheetObj.isExpired = !timesheetObj.canEdit;
 
-        // Check if this timesheet is blocking new submissions
         const fifteenDaysAgo = new Date();
         fifteenDaysAgo.setDate(fifteenDaysAgo.getDate() - 15);
         timesheetObj.isBlocking =
@@ -863,7 +891,6 @@ export const getAllTimesheets = async (req, res) => {
 
     const total = await Timesheet.countDocuments(filter);
 
-    // Enhance with editing information
     const enhancedTimesheets = timesheets.map((timesheet) => {
       const timesheetObj = timesheet.toObject();
 
@@ -878,7 +905,6 @@ export const getAllTimesheets = async (req, res) => {
           : 0;
         timesheetObj.isExpired = !timesheetObj.canEdit;
 
-        // Check if blocking
         const fifteenDaysAgo = new Date();
         fifteenDaysAgo.setDate(fifteenDaysAgo.getDate() - 15);
         timesheetObj.isBlocking =
@@ -932,7 +958,6 @@ export const getTimesheetById = async (req, res) => {
       });
     }
 
-    // Enhanced response with editing info
     const enhancedTimesheet = timesheet.toObject();
 
     if (timesheet.status === "rejected") {
@@ -946,7 +971,6 @@ export const getTimesheetById = async (req, res) => {
         : 0;
       enhancedTimesheet.isExpired = !enhancedTimesheet.canEdit;
 
-      // Check if blocking
       const fifteenDaysAgo = new Date();
       fifteenDaysAgo.setDate(fifteenDaysAgo.getDate() - 15);
       enhancedTimesheet.isBlocking =
@@ -970,18 +994,16 @@ export const checkSubmissionBlock = async (req, res) => {
   try {
     const blockCheck = await checkPendingRejectedBlock(req.user.id);
 
-    // Get blocking timesheets details
     let blockingTimesheets = [];
     if (blockCheck.isBlocked) {
-      // ✅ FIXED: Define fifteenDaysAgo in the current scope
       const fifteenDaysAgo = new Date();
       fifteenDaysAgo.setDate(fifteenDaysAgo.getDate() - 15);
-      fifteenDaysAgo.setHours(23, 59, 59, 999); // End of that day
+      fifteenDaysAgo.setHours(23, 59, 59, 999);
 
       blockingTimesheets = await Timesheet.find({
         employee: req.user.id,
         status: 'rejected',
-        rejectedAt: { $lt: fifteenDaysAgo }, // ✅ FIX: Use rejectedAt
+        rejectedAt: { $lt: fifteenDaysAgo },
         isExpired: false
       })
         .sort({ submittedAt: 1 })
@@ -1021,7 +1043,6 @@ export const exportTimesheetToCSV = async (req, res) => {
       return res.status(404).json({ message: "Timesheet not found" });
     }
 
-    // Prepare data for CSV with editing info
     const csvData = timesheet.entries.map((entry) => ({
       "Employee Code": timesheet.employeeCode,
       "Employee Name": timesheet.employeeName,
@@ -1134,7 +1155,7 @@ export const healthCheck = async (req, res) => {
   }
 };
 
-// ✅ FIXED: Export all functions properly including all missing functions
+// ✅ FIXED: Export all functions
 export default {
   submitTimesheet,
   approveTimesheet,

@@ -24,15 +24,39 @@ const router = express.Router();
 
 // Employee routes
 router.post('/', authenticate, upload.single('document'), createLeaveRequest);
+router.post('/submit', authenticate, upload.single('document'), createLeaveRequest); // Keep only one of these
 router.get('/my-requests', authenticate, getMyLeaveRequests);
 router.get('/download/:id', authenticate, downloadDocument);
 router.get('/:id', authenticate, getLeaveRequestById);
 
-// Admin/Manager routes
-router.get('/', authenticate, authorizeManager, getAllLeaveRequests);
-router.get('/stats/statistics', authenticate, authorizeManager, getLeaveStatistics);
-router.patch('/:id/approve', authenticate, authorizeManager, approveLeaveRequest);
-router.patch('/:id/reject', authenticate, authorizeManager, rejectLeaveRequest);
+// Admin/Manager routes - Combine both authorizations
+router.get('/', authenticate, (req, res, next) => {
+  if (req.user.role === 'admin' || req.user.role === 'manager') {
+    return next();
+  }
+  return res.status(403).json({ message: 'Access denied' });
+}, getAllLeaveRequests);
+
+router.get('/stats/statistics', authenticate, (req, res, next) => {
+  if (req.user.role === 'admin' || req.user.role === 'manager') {
+    return next();
+  }
+  return res.status(403).json({ message: 'Access denied' });
+}, getLeaveStatistics);
+
+router.patch('/:id/approve', authenticate, (req, res, next) => {
+  if (req.user.role === 'admin' || req.user.role === 'manager') {
+    return next();
+  }
+  return res.status(403).json({ message: 'Access denied' });
+}, approveLeaveRequest);
+
+router.patch('/:id/reject', authenticate, (req, res, next) => {
+  if (req.user.role === 'admin' || req.user.role === 'manager') {
+    return next();
+  }
+  return res.status(403).json({ message: 'Access denied' });
+}, rejectLeaveRequest);
 
 // ==================== ✅ LEAVE BALANCE ROUTES ====================
 
@@ -40,15 +64,36 @@ router.patch('/:id/reject', authenticate, authorizeManager, rejectLeaveRequest);
 router.get('/balance/my', authenticate, getEmployeeLeaveBalance);
 
 // Admin/Manager routes for managing all leave balances
-router.get('/balance/all', authenticate, authorizeManager, getAllLeaveBalances);
+router.get('/balance/all', authenticate, (req, res, next) => {
+  if (req.user.role === 'admin' || req.user.role === 'manager') {
+    return next();
+  }
+  return res.status(403).json({ message: 'Access denied' });
+}, getAllLeaveBalances);
 
 // Update specific leave balance for an employee
-router.put('/balance/:employeeId', authenticate, authorizeManager, updateLeaveBalance);
+router.put('/balance/:employeeId', authenticate, (req, res, next) => {
+  if (req.user.role === 'admin' || req.user.role === 'manager') {
+    return next();
+  }
+  return res.status(403).json({ message: 'Access denied' });
+}, updateLeaveBalance);
 
 // Update employee's leave status (probation/active/inactive)
-router.put('/balance/:employeeId/status', authenticate, authorizeManager, updateEmployeeLeaveStatus);
+router.put('/balance/:employeeId/status', authenticate, (req, res, next) => {
+  if (req.user.role === 'admin' || req.user.role === 'manager') {
+    return next();
+  }
+  return res.status(403).json({ message: 'Access denied' });
+}, updateEmployeeLeaveStatus);
 
 // Run monthly PL accrual for all active employees
-router.post('/balance/monthly-accrual', authenticate, authorizeManager, runMonthlyAccrual);
+router.post('/balance/monthly-accrual', authenticate, (req, res, next) => {
+  if (req.user.role === 'admin' || req.user.role === 'manager') {
+    return next();
+  }
+  return res.status(403).json({ message: 'Access denied' });
+}, runMonthlyAccrual);
+
 
 export default router;

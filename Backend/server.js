@@ -18,7 +18,7 @@ import { sanitizeMiddleware } from './security/sanitize.js';
 import { auditLogger } from './security/auditLogger.js';
 import dashboardRoutes from './routes/dashboardRoutes.js';
 import Timesheet from './models/TimeSheet.js'; // ✅ ADDED MISSING IMPORT
-import lateSubmissionRoutes from './routes/lateSubmissionRoutes.js';
+
 const app = express();
 
 // Environment check
@@ -111,7 +111,7 @@ app.use('/api/activity-codes', activityCodesRoutes);
 app.use('/api/reports', reportsRoutes);
 app.use('/api/leave', leaveRoutes);
 app.use('/api/dashboard', dashboardRoutes);
-app.use('/api/late-submissions', lateSubmissionRoutes);
+
 
 // Health check
 app.get('/api/health', (req, res) => {

@@ -51,7 +51,6 @@ function initializeEventListeners() {
             document.getElementById('edit-balance-modal').style.display = 'none';
             document.getElementById('adjust-balance-modal').style.display = 'none';
             document.getElementById('status-modal').style.display = 'none';
-            document.getElementById('history-modal').style.display = 'none';
         });
     });
     
@@ -426,7 +425,7 @@ async function loadLeaveBalances() {
     }
 }
 
-// Display leave balances table
+// Display leave balances table - UPDATED: Only SL and PL columns
 function displayLeaveBalances(balances) {
     const container = document.getElementById('leave-balances-container');
     if (!container) {
@@ -455,8 +454,6 @@ function displayLeaveBalances(balances) {
                         <th style="padding: 12px 15px; text-align: left; font-weight: 600; color: #333;">Status</th>
                         <th style="padding: 12px 15px; text-align: left; font-weight: 600; color: #333;">Sick Leave (SL)</th>
                         <th style="padding: 12px 15px; text-align: left; font-weight: 600; color: #333;">Privilege Leave (PL)</th>
-                        <th style="padding: 12px 15px; text-align: left; font-weight: 600; color: #333;">Maternity Leave (ML)</th>
-                        <th style="padding: 12px 15px; text-align: left; font-weight: 600; color: #333;">Other Leaves</th>
                         <th style="padding: 12px 15px; text-align: left; font-weight: 600; color: #333;">Actions</th>
                     </tr>
                 </thead>
@@ -493,22 +490,6 @@ function displayLeaveBalances(balances) {
                                     <small>Accrual: ${balance.privilegeLeave?.accrualRate || 1.5}/month</small>
                                 </div>
                             </td>
-                            <td class="editable-balance" data-id="${balance.employeeId}" data-type="maternityLeave" style="padding: 12px 15px; position: relative;">
-                                <span class="balance-value" style="font-weight: bold; font-size: 16px; color: #333;">${balance.maternityLeave?.current || 0}</span>
-                                <button class="btn-edit-balance" title="Edit ML" style="position: absolute; right: 5px; top: 50%; transform: translateY(-50%); background: none; border: none; color: #666; cursor: pointer; padding: 5px; opacity: 0; transition: opacity 0.3s;">
-                                    <i class="fas fa-edit"></i>
-                                </button>
-                                <div class="balance-details" style="font-size: 11px; color: #888; margin-top: 3px;">
-                                    <small>Total: ${balance.maternityLeave?.total || 182}</small>
-                                </div>
-                            </td>
-                            <td style="padding: 12px 15px;">
-                                <div class="other-balances">
-                                    <div style="margin-bottom: 5px;">HPPL: ${balance.halfPayWithPL?.current || 0}</div>
-                                    <div style="margin-bottom: 5px;">LWP: ${balance.leaveWithoutPay?.current || 0}</div>
-                                    <div>HLWP: ${balance.halfLWP?.current || 0}</div>
-                                </div>
-                            </td>
                             <td style="padding: 12px 15px;">
                                 <div class="balance-actions" style="display: flex; gap: 5px;">
                                     <button class="btn-small btn-info" onclick="openBalanceAdjustModal('${balance.employeeId}', '${balance.firstName} ${balance.lastName}')" style="padding: 6px 10px; background: #17a2b8; color: white; border: none; border-radius: 4px; cursor: pointer;">
@@ -516,9 +497,6 @@ function displayLeaveBalances(balances) {
                                     </button>
                                     <button class="btn-small btn-warning" onclick="openStatusModal('${balance.employeeId}', '${balance.firstName} ${balance.lastName}', '${balance.status}')" style="padding: 6px 10px; background: #ffc107; color: #333; border: none; border-radius: 4px; cursor: pointer;">
                                         <i class="fas fa-user-cog"></i>
-                                    </button>
-                                    <button class="btn-small btn-secondary" onclick="openHistoryModal('${balance.employeeId}')" style="padding: 6px 10px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer;">
-                                        <i class="fas fa-history"></i>
                                     </button>
                                 </div>
                             </td>
@@ -564,7 +542,7 @@ function displayLeaveBalancesError() {
             <div class="error-state" style="text-align: center; padding: 40px; color: #e74c3c;">
                 <i class="fas fa-exclamation-circle" style="font-size: 48px; margin-bottom: 15px;"></i>
                 <p>Failed to load leave balances</p>
-                <button class="btn btn-primary" onclick="loadLeaveBalances()" style="margin-top: 15px;">
+                    <button class="btn btn-primary" onclick="loadLeaveBalances()" style="margin-top: 15px;">
                     <i class="fas fa-redo"></i> Retry
                 </button>
             </div>
@@ -584,8 +562,7 @@ function openEditBalanceModal(employeeId, leaveType, currentValue, employeeName)
     
     const typeNames = {
         'sickLeave': 'Sick Leave (SL)',
-        'privilegeLeave': 'Privilege Leave (PL)',
-        'maternityLeave': 'Maternity Leave (ML)'
+        'privilegeLeave': 'Privilege Leave (PL)'
     };
     
     document.getElementById('edit-balance-title').textContent = 
@@ -622,12 +599,6 @@ function openStatusModal(employeeId, employeeName, currentStatus) {
     document.getElementById('status-modal').style.display = 'block';
 }
 
-function openHistoryModal(employeeId) {
-    console.log(`📜 Opening history modal for ${employeeId}`);
-    // TODO: Implement history modal functionality
-    showNotification('History feature coming soon!', 'info');
-}
-
 function closeEditBalanceModal() {
     document.getElementById('edit-balance-modal').style.display = 'none';
     document.getElementById('edit-balance-form').reset();
@@ -641,10 +612,6 @@ function closeAdjustBalanceModal() {
 function closeStatusModal() {
     document.getElementById('status-modal').style.display = 'none';
     document.getElementById('status-form').reset();
-}
-
-function closeHistoryModal() {
-    document.getElementById('history-modal').style.display = 'none';
 }
 
 // Form Handlers
@@ -799,16 +766,17 @@ function debounce(func, wait) {
         timeout = setTimeout(later, wait);
     };
 }
+
 // ✅ ADDED: Logout function
 function logout() {
-  console.log('🚪 Logging out...');
-  
-  // Clear user data from localStorage
-  localStorage.removeItem('userData');
-  localStorage.removeItem('authToken');
-  
-  // Redirect to login page
-  window.location.href = 'index.html';
+    console.log('🚪 Logging out...');
+    
+    // Clear user data from localStorage
+    localStorage.removeItem('userData');
+    localStorage.removeItem('authToken');
+    
+    // Redirect to login page
+    window.location.href = 'index.html';
 }
 
 // Make functions globally available
@@ -821,10 +789,8 @@ window.downloadDocument = downloadDocument;
 window.openEditBalanceModal = openEditBalanceModal;
 window.openBalanceAdjustModal = openBalanceAdjustModal;
 window.openStatusModal = openStatusModal;
-window.openHistoryModal = openHistoryModal;
 window.closeEditBalanceModal = closeEditBalanceModal;
 window.closeAdjustBalanceModal = closeAdjustBalanceModal;
 window.closeStatusModal = closeStatusModal;
-window.closeHistoryModal = closeHistoryModal;
 window.runMonthlyAccrual = runMonthlyAccrual;
 window.loadLeaveBalances = loadLeaveBalances;

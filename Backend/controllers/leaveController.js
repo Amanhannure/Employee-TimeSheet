@@ -41,11 +41,17 @@ export const createLeaveRequest = async (req, res) => {
     const start = new Date(startDate);
     const end = new Date(endDate);
     
-    if (start >= end) {
+    if (start > end) {
       console.log('❌ Invalid date range');
       return res.status(400).json({ message: 'End date must be after start date' });
     }
-
+     const today = new Date();
+    today.setHours(0, 0, 0, 0); // Set to start of day
+    
+    if (end < today) {
+      console.log('❌ Dates in the past');
+      return res.status(400).json({ message: 'Cannot apply for leave in the past' });
+    }
     const supportingDocument = req.file ? {
       filename: req.file.filename,
       originalName: req.file.originalname,
@@ -131,7 +137,6 @@ export const getAllLeaveRequests = async (req, res) => {
     res.status(500).json({ message: 'Server error' });
   }
 };
-
 export const approveLeaveRequest = async (req, res) => {
   try {
     console.log(`✅ Approving leave request: ${req.params.id}`);
@@ -150,6 +155,91 @@ export const approveLeaveRequest = async (req, res) => {
       return res.status(400).json({ message: 'Leave request already processed' });
     }
 
+    // ✅ ADDED: Deduct leave from balance if it's a leave type that affects balance
+    if (['sickLeave', 'privilegeLeave', 'maternityLeave', 'halfPayWithPL', 'leaveWithoutPay', 'halfLWP'].includes(leaveRequest.leaveType)) {
+      // Calculate number of days
+      const start = new Date(leaveRequest.startDate);
+      const end = new Date(leaveRequest.endDate);
+      const days = Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1;
+      
+      console.log(`📅 ${leaveRequest.leaveType} days to deduct: ${days} (${start} to ${end})`);
+      
+      // Find and update leave balance
+      const leaveBalance = await LeaveBalance.findOne({ 
+        employee: leaveRequest.employee 
+      });
+      
+      if (leaveBalance) {
+        // Get current balance for this leave type
+        let currentBalance;
+        let leaveTypeField;
+        
+        switch(leaveRequest.leaveType) {
+          case 'sickLeave':
+            currentBalance = leaveBalance.sickLeave.current;
+            leaveTypeField = 'sickLeave';
+            break;
+          case 'privilegeLeave':
+            currentBalance = leaveBalance.privilegeLeave.current;
+            leaveTypeField = 'privilegeLeave';
+            break;
+          case 'maternityLeave':
+            currentBalance = leaveBalance.maternityLeave.current;
+            leaveTypeField = 'maternityLeave';
+            break;
+          case 'halfPayWithPL':
+            currentBalance = leaveBalance.halfPayWithPL.current;
+            leaveTypeField = 'halfPayWithPL';
+            break;
+          case 'leaveWithoutPay':
+            currentBalance = leaveBalance.leaveWithoutPay.current;
+            leaveTypeField = 'leaveWithoutPay';
+            break;
+          case 'halfLWP':
+            currentBalance = leaveBalance.halfLWP.current;
+            leaveTypeField = 'halfLWP';
+            break;
+        }
+        
+        // Check if enough leave available (skip check for leave without pay types)
+        const needsBalanceCheck = !['leaveWithoutPay', 'halfLWP'].includes(leaveRequest.leaveType);
+        
+        if (needsBalanceCheck && currentBalance < days) {
+          console.log(`❌ Insufficient ${leaveRequest.leaveType}: ${currentBalance} available, need ${days}`);
+          return res.status(400).json({ 
+            message: `Insufficient ${leaveRequest.leaveType} balance. Available: ${currentBalance} days, Requested: ${days} days` 
+          });
+        }
+        
+        // Deduct leave (only deduct from types that have balances)
+        if (leaveTypeField && !['leaveWithoutPay', 'halfLWP'].includes(leaveRequest.leaveType)) {
+          const oldBalance = currentBalance;
+          leaveBalance[leaveTypeField].current -= days;
+          
+          console.log(`✅ ${leaveRequest.leaveType} deducted: ${oldBalance} → ${leaveBalance[leaveTypeField].current} (${days} days)`);
+        }
+        
+        // Add to used leaves history
+        leaveBalance.usedLeaves.push({
+          leaveRequestId: leaveRequest._id,
+          date: new Date(),
+          leaveType: leaveRequest.leaveType,
+          days: days,
+          description: `${leaveRequest.leaveType} approved by ${req.user.firstName} ${req.user.lastName}`
+        });
+        
+        await leaveBalance.save();
+        console.log(`✅ Leave balance updated for employee: ${leaveBalance.employeeId}`);
+        
+      } else {
+        console.log('⚠️ No leave balance found for employee');
+        return res.status(400).json({ 
+          message: 'Employee leave balance not found. Please contact administrator.' 
+        });
+      }
+    }
+
+    // Update leave request status
     leaveRequest.status = 'approved';
     leaveRequest.approvedBy = req.user.id;
     leaveRequest.approvedAt = new Date();
@@ -170,7 +260,6 @@ export const approveLeaveRequest = async (req, res) => {
     res.status(500).json({ message: 'Server error' });
   }
 };
-
 export const rejectLeaveRequest = async (req, res) => {
   try {
     console.log(`❌ Rejecting leave request: ${req.params.id}`);
@@ -194,6 +283,41 @@ export const rejectLeaveRequest = async (req, res) => {
     if (!rejectionReason) {
       console.log('❌ Rejection reason missing');
       return res.status(400).json({ message: 'Rejection reason is required' });
+    }
+
+    // ✅ ADDED: Restore leave balance if this was previously approved (in case of undo)
+    if (leaveRequest.status === 'approved') {
+      // Restore the deducted leave balance
+      const leaveBalance = await LeaveBalance.findOne({ 
+        employee: leaveRequest.employee 
+      });
+      
+      if (leaveBalance) {
+        // Calculate days to restore
+        const start = new Date(leaveRequest.startDate);
+        const end = new Date(leaveRequest.endDate);
+        const days = Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1;
+        
+        // Restore based on leave type
+        switch(leaveRequest.leaveType) {
+          case 'sickLeave':
+            leaveBalance.sickLeave.current += days;
+            break;
+          case 'privilegeLeave':
+            leaveBalance.privilegeLeave.current += days;
+            break;
+          case 'maternityLeave':
+            leaveBalance.maternityLeave.current += days;
+            break;
+          case 'halfPayWithPL':
+            leaveBalance.halfPayWithPL.current += days;
+            break;
+          // leaveWithoutPay and halfLWP don't have balances to restore
+        }
+        
+        await leaveBalance.save();
+        console.log(`✅ Restored ${days} days of ${leaveRequest.leaveType} for rejection`);
+      }
     }
 
     leaveRequest.status = 'rejected';
@@ -334,49 +458,79 @@ export const getAllLeaveBalances = async (req, res) => {
 
 // Get employee's own leave balance
 export const getEmployeeLeaveBalance = async (req, res) => {
-  try {
-    console.log(`👤 Getting leave balance for user: ${req.user.id}`);
+    try {
+        console.log(`👤 Getting leave balance for user: ${req.user.id}`);
+        
+        const leaveBalance = await LeaveBalance.findOne({ 
+            employee: req.user.id 
+        }).populate('employee', 'firstName lastName employeeId department status');
+        
+        // In getEmployeeLeaveBalance function, when creating new balance:
+if (!leaveBalance) {
+    console.log(`📝 Leave balance not found, creating new one for user: ${req.user.id}`);
     
-    const leaveBalance = await LeaveBalance.findOne({ 
-      employee: req.user.id 
-    }).populate('employee', 'firstName lastName employeeId department status');
-    
-    if (!leaveBalance) {
-      console.log(`📝 Leave balance not found, creating new one for user: ${req.user.id}`);
-      
-      // Create if doesn't exist
-      const user = await User.findById(req.user.id);
-      if (!user) {
+    // Create if doesn't exist
+    const user = await User.findById(req.user.id);
+    if (!user) {
         console.log(`❌ User not found: ${req.user.id}`);
         return res.status(404).json({ message: 'User not found' });
-      }
-      
-      console.log(`Creating leave balance for: ${user.employeeId} - ${user.firstName} ${user.lastName}`);
-      
-      const newBalance = new LeaveBalance({
+    }
+    
+    console.log(`Creating leave balance for: ${user.employeeId} - ${user.firstName} ${user.lastName}`);
+    
+    // ✅ FIX: Calculate initial PL based on join date
+    let initialPL = 0;
+    if (user.joinDate) {
+        const joinDate = new Date(user.joinDate);
+        const today = new Date();
+        const monthsWorked = (today.getFullYear() - joinDate.getFullYear()) * 12 + 
+                            (today.getMonth() - joinDate.getMonth());
+        
+        // If not in probation and worked at least 1 month, give accrued PL
+        if (user.status !== 'probation' && monthsWorked > 0) {
+            initialPL = Math.floor(monthsWorked * 1.5); // 1.5 days per month
+        }
+    }
+    
+    // Create a new balance with calculated PL
+    const newBalance = new LeaveBalance({
         employee: user._id,
         employeeId: user.employeeId,
         firstName: user.firstName,
         lastName: user.lastName,
-        department: user.department,
-        designation: user.designation,
-        joinDate: user.joinDate,
-        status: user.status || 'probation'
-      });
-      
-      await newBalance.save();
-      console.log(`✅ Created new leave balance: ${newBalance._id}`);
-      return res.json({ leaveBalance: newBalance });
+        department: user.department || 'Not Specified',
+        designation: user.designation || 'Employee',
+        joinDate: user.joinDate || new Date(),
+        status: user.status || 'active',
+        
+        // ✅ FIX: Set initial PL based on calculation
+        privilegeLeave: {
+            current: initialPL,
+            total: initialPL,
+            accrualRate: 1.5,
+            probationMonths: user.status === 'probation' ? 3 : 0
+        }
+    });
+    
+    await newBalance.save();
+    console.log(`✅ Created new leave balance: ${newBalance._id}`);
+    console.log(`   Initial PL set to: ${initialPL} days`);
+    return res.json({ leaveBalance: newBalance });
+}
+        
+        console.log(`✅ Found existing leave balance: ${leaveBalance._id}`);
+        console.log(`Balance - SL: ${leaveBalance.sickLeave?.current}, PL: ${leaveBalance.privilegeLeave?.current}`);
+        
+        res.json({ leaveBalance });
+    } catch (error) {
+        console.error('❌ Get leave balance error:', error);
+        console.error('Full error details:', error);
+        res.status(500).json({ 
+            message: 'Server error',
+            error: error.message,
+            stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+        });
     }
-    
-    console.log(`✅ Found existing leave balance: ${leaveBalance._id}`);
-    console.log(`Balance - SL: ${leaveBalance.sickLeave?.current}, PL: ${leaveBalance.privilegeLeave?.current}`);
-    
-    res.json({ leaveBalance });
-  } catch (error) {
-    console.error('❌ Get leave balance error:', error);
-    res.status(500).json({ message: 'Server error' });
-  }
 };
 
 // Update leave balance (Admin)
@@ -560,6 +714,64 @@ export const runMonthlyAccrual = async (req, res) => {
     });
   } catch (error) {
     console.error('❌ Monthly accrual error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+// Check if employee has approved leave for specific date
+export const checkLeaveForDate = async (req, res) => {
+  try {
+    const { date } = req.params;
+    const employeeId = req.user.id;
+    
+    const approvedLeave = await LeaveRequest.findOne({
+      employee: employeeId,
+      status: 'approved',
+      startDate: { $lte: new Date(date) },
+      endDate: { $gte: new Date(date) }
+    });
+    
+    return res.json({ 
+      hasLeave: !!approvedLeave,
+      leaveType: approvedLeave?.leaveType,
+      reason: approvedLeave?.reason 
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// Get all approved leave dates for a week
+export const getApprovedLeavesForWeek = async (req, res) => {
+  try {
+    const { weekStartDate } = req.params;
+    const employeeId = req.user.id;
+    
+    const weekStart = new Date(weekStartDate);
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 6);
+    
+    const approvedLeaves = await LeaveRequest.find({
+      employee: employeeId,
+      status: 'approved',
+      startDate: { $lte: weekEnd },
+      endDate: { $gte: weekStart }
+    });
+    
+    const leaveDates = [];
+    approvedLeaves.forEach(leave => {
+      let current = new Date(leave.startDate);
+      const end = new Date(leave.endDate);
+      
+      while (current <= end && current <= weekEnd && current >= weekStart) {
+        if (current.getDay() !== 0 && current.getDay() !== 6) { // Skip weekends
+          leaveDates.push(current.toISOString().split('T')[0]);
+        }
+        current.setDate(current.getDate() + 1);
+      }
+    });
+    
+    return res.json({ leaveDates });
+  } catch (error) {
     res.status(500).json({ message: 'Server error' });
   }
 };

@@ -4,6 +4,10 @@
 // ==================== UTILITY FUNCTIONS ====================
 
 // Sanitize HTML to prevent XSS attacks
+// ==================== API CLIENT ====================
+
+// Get the API client - use the existing one or create fallback
+
 function sanitizeHTML(str) {
     if (!str) return '';
     
@@ -126,13 +130,22 @@ function getUserData() {
 
 // Check if user has admin/manager role
 function hasAdminAccess(userData) {
-    return userData && (userData.role === 'admin' || userData.role === 'project_manager' || userData.role === 'manager');
+    return userData && userData.role === 'admin';  // ONLY admin
+}
+function hasProjectsAccess(userData) {
+    const allowedRoles = ['admin', 'manager', 'project_manager'];
+    return userData && allowedRoles.includes(userData.role);
 }
 
 // Show notification
 function showNotification(message, type = 'info', duration = 5000) {
     try {
-        if (typeof window.showNotification === 'function') {
+        // Check if we're already in a notification to avoid recursion
+        if (window.showingNotification) return;
+        window.showingNotification = true;
+        
+        if (typeof window.showNotification === 'function' && window.showNotification !== showNotification) {
+            // Call global notification function if it exists
             window.showNotification(message, type, duration);
         } else {
             console.log(`📢 ${type.toUpperCase()}: ${message}`);
@@ -168,11 +181,13 @@ function showNotification(message, type = 'info', duration = 5000) {
                 if (notification.parentNode) {
                     notification.parentNode.removeChild(notification);
                 }
+                window.showingNotification = false;
             }, duration);
         }
     } catch (error) {
         console.error('Error showing notification:', error);
         console.log(`📢 ${type.toUpperCase()}: ${message}`);
+        window.showingNotification = false;
     }
 }
 
@@ -1098,24 +1113,15 @@ function showSection(sectionName) {
 
 // ✅ ENHANCED: Dashboard data loading with 15-day editing window info & Monthly Reset
 async function loadDashboardData() {
-    if (isLoading) return;
+      if (isLoading) return;
     
     setLoadingState(true);
     try {
         console.log('🔍 [DEBUG] Starting dashboard data load with monthly reset...');
         
-        // Show loading state in tables
-        const tbody = document.getElementById('recentTimesheetsBody');
-        if (tbody) {
-            tbody.innerHTML = `
-                <tr>
-                    <td colspan="6" style="text-align: center; padding: 20px;">
-                        <div class="loading-spinner">
-                            <i class="fas fa-spinner fa-spin"></i> Loading dashboard data...
-                        </div>
-                    </td>
-                </tr>
-            `;
+        // Make sure apiClient exists
+        if (!apiClient) {
+            apiClient = getApiClient();
         }
         
         console.log('🔍 [DEBUG] Calling apiClient.getUsers()...');
@@ -1172,7 +1178,7 @@ async function loadDashboardData() {
         console.log('✅ [DEBUG] Dashboard data loaded successfully with monthly reset');
         
     } catch (error) {
-        console.error('❌ [DEBUG] Error loading dashboard data:', error);
+       console.error('❌ [DEBUG] Error loading dashboard data:', error);
         showNotification('Failed to load dashboard data: ' + error.message, 'error');
         
         // Show error state
@@ -2129,7 +2135,27 @@ function redirectToLogin() {
 function closeTimesheetDetailsModal() {
     document.getElementById('timesheetDetailsModal').style.display = 'none';
 }
+// ==================== EXTENDED ACCESS MODAL FUNCTIONS ====================
 
+
+
+// ==================== ADD EVENT LISTENERS ====================
+
+// Add this to your initializeEventListeners function or at the end of admin.js
+document.addEventListener('DOMContentLoaded', function() {
+    // ... existing code ...
+    
+    // Setup extended access listeners after page loads
+    setTimeout(() => {
+        setupExtendedAccessListeners();
+    }, 1000);
+});
+
+// ==================== EXPORT FUNCTIONS FOR GLOBAL ACCESS ====================
+
+
+
+console.log('✅ [DEBUG] Extended access functions loaded');
 // ==================== EXPORT FUNCTIONS FOR GLOBAL ACCESS ====================
 
 window.openMiscellaneousHoursModal = openMiscellaneousHoursModal;

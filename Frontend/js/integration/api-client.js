@@ -668,20 +668,20 @@ class ApiClient {
             '/late-submissions/mark-used/:id': { success: true, message: 'Permission marked as used' },
             
             // Leave management endpoints
-            '/leaves/balance/my': this.getMockLeaveBalance(),
-            '/leaves/balance/all': [this.getMockLeaveBalance().leaveBalance],
-            '/leaves/balance/:id': { success: true, message: 'Balance updated' },
-            '/leaves/balance/:id/status': { success: true, message: 'Status updated' },
-            '/leaves/balance/monthly-accrual': { updatedCount: 45, date: new Date().toISOString() },
-            '/leaves/my-requests': [{ id: 'mock-leave-1', type: 'privilegeLeave', status: 'pending', days: 2 }],
-            '/leaves/submit': { id: 'mock-leave-2', type: 'sickLeave', status: 'pending', days: 1 },
-            '/leaves/:id/cancel': { success: true, message: 'Leave cancelled' },
-            '/api/leaves': [{ id: 'mock-leave-1', type: 'privilegeLeave', status: 'pending' }],
-            '/leaves/:id/approve': { success: true, message: 'Leave approved' },
-            '/leaves/:id/reject': { success: true, message: 'Leave rejected' },
-            '/leaves/:id': { id: 'mock-leave-1', type: 'privilegeLeave', status: 'pending' },
-            '/leaves/calendar': [{ id: 'mock-calendar-1', title: 'Leave', start: '2024-01-15', end: '2024-01-16' }],
-            '/leaves/analytics': { totalLeaves: 45, approved: 30, pending: 10, rejected: 5 }
+            '/leave/balance/my': this.getMockLeaveBalance(),
+            '/leave/balance/all': [this.getMockLeaveBalance().leaveBalance],
+            '/leave/balance/:id': { success: true, message: 'Balance updated' },
+            '/leave/balance/:id/status': { success: true, message: 'Status updated' },
+            '/leave/balance/monthly-accrual': { updatedCount: 45, date: new Date().toISOString() },
+            '/leave/my-requests': [{ id: 'mock-leave-1', type: 'privilegeLeave', status: 'pending', days: 2 }],
+            '/leave/submit': { id: 'mock-leave-2', type: 'sickLeave', status: 'pending', days: 1 },
+            '/leave/:id/cancel': { success: true, message: 'Leave cancelled' },
+            '/api/leave': [{ id: 'mock-leave-1', type: 'privilegeLeave', status: 'pending' }],
+            '/leave/:id/approve': { success: true, message: 'Leave approved' },
+            '/leave/:id/reject': { success: true, message: 'Leave rejected' },
+            '/leave/:id': { id: 'mock-leave-1', type: 'privilegeLeave', status: 'pending' },
+            '/leave/calendar': [{ id: 'mock-calendar-1', title: 'Leave', start: '2024-01-15', end: '2024-01-16' }],
+            '/leave/analytics': { totalLeaves: 45, approved: 30, pending: 10, rejected: 5 }
         };
 
         const response = mockResponses[endpoint] || { 
@@ -3099,7 +3099,7 @@ class ApiClient {
         this.logTimesheetOperation('GET_MY_LEAVE_BALANCE', {}, 'info');
         
         try {
-            const response = await this.request('/leaves/balance/my');
+            const response = await this.request('/leave/balance/my');
             
             this.logTimesheetOperation('GET_MY_LEAVE_BALANCE_SUCCESS', {
                 hasBalance: !!response.leaveBalance
@@ -3122,7 +3122,7 @@ class ApiClient {
         
         try {
             const queryParams = new URLSearchParams(params).toString();
-            const endpoint = `/leaves/balance/all${queryParams ? `?${queryParams}` : ''}`;
+            const endpoint = `/leave/balance/all${queryParams ? `?${queryParams}` : ''}`;
             const response = await this.request(endpoint);
             
             this.logTimesheetOperation('GET_ALL_LEAVE_BALANCES_SUCCESS', {
@@ -3150,7 +3150,7 @@ class ApiClient {
         }, 'info');
         
         try {
-            const response = await this.request(`/leaves/balance/${employeeId}`, {
+            const response = await this.request(`/leave/balance/${employeeId}`, {
                 method: 'PUT',
                 body: data
             });
@@ -3186,7 +3186,7 @@ class ApiClient {
         }, 'info');
         
         try {
-            const response = await this.request(`/leaves/balance/${employeeId}/status`, {
+            const response = await this.request(`/leave/balance/${employeeId}/status`, {
                 method: 'PUT',
                 body: data
             });
@@ -3216,7 +3216,7 @@ class ApiClient {
         this.logTimesheetOperation('RUN_MONTHLY_ACCRUAL', {}, 'info');
         
         try {
-            const response = await this.request('/leaves/balance/monthly-accrual', {
+            const response = await this.request('/leave/balance/monthly-accrual', {
                 method: 'POST'
             });
             
@@ -3238,29 +3238,7 @@ class ApiClient {
         }
     }
 
-    async getMyLeaveRequests(filters = {}) {
-        this.logTimesheetOperation('GET_MY_LEAVE_REQUESTS', { filters }, 'info');
-        
-        try {
-            const queryParams = new URLSearchParams(filters).toString();
-            const endpoint = `/leaves/my-requests${queryParams ? `?${queryParams}` : ''}`;
-            const response = await this.request(endpoint);
-            
-            this.logTimesheetOperation('GET_MY_LEAVE_REQUESTS_SUCCESS', {
-                count: response.length || 0,
-                statusBreakdown: this.getLeaveStatusBreakdown(response)
-            }, 'success');
-            
-            return response;
-        } catch (error) {
-            this.logTimesheetOperation('GET_MY_LEAVE_REQUESTS_FAILED', {
-                error: error.message,
-                filters
-            }, 'error');
-            
-            throw error;
-        }
-    }
+    
 
     async submitLeaveRequest(leaveData) {
         this.logTimesheetOperation('SUBMIT_LEAVE_REQUEST', {
@@ -3272,7 +3250,7 @@ class ApiClient {
         }, 'submission');
         
         try {
-            const response = await this.request('/leaves/submit', {
+            const response = await this.request('/leave/submit', {
                 method: 'POST',
                 body: leaveData
             });
@@ -3302,7 +3280,7 @@ class ApiClient {
         this.logTimesheetOperation('CANCEL_LEAVE_REQUEST', { leaveId }, 'info');
         
         try {
-            const response = await this.request(`/leaves/${leaveId}/cancel`, {
+            const response = await this.request(`/leave/${leaveId}/cancel`, {
                 method: 'PATCH'
             });
             
@@ -3324,13 +3302,35 @@ class ApiClient {
             throw error;
         }
     }
-
+    async getMyLeaveRequests(filters = {}) {
+    this.logTimesheetOperation('GET_MY_LEAVE_REQUESTS', { filters }, 'info');
+    
+    try {
+        const queryParams = new URLSearchParams(filters).toString();
+        const endpoint = `/leave/my-requests${queryParams ? `?${queryParams}` : ''}`;
+        const response = await this.request(endpoint);
+        
+        this.logTimesheetOperation('GET_MY_LEAVE_REQUESTS_SUCCESS', {
+            count: response.length || 0,
+            statusBreakdown: this.getLeaveStatusBreakdown(response)
+        }, 'success');
+        
+        return response;
+    } catch (error) {
+        this.logTimesheetOperation('GET_MY_LEAVE_REQUESTS_FAILED', {
+            error: error.message,
+            filters
+        }, 'error');
+        
+        throw error;
+    }
+}
     async getAllLeaveRequests(filters = {}) {
         this.logTimesheetOperation('GET_ALL_LEAVE_REQUESTS', { filters }, 'info');
         
         try {
             const queryParams = new URLSearchParams(filters).toString();
-            const endpoint = `/api/leaves${queryParams ? `?${queryParams}` : ''}`;
+            const endpoint = `/leave${queryParams ? `?${queryParams}` : ''}`;
             const response = await this.request(endpoint);
             
             this.logTimesheetOperation('GET_ALL_LEAVE_REQUESTS_SUCCESS', {
@@ -3353,7 +3353,7 @@ class ApiClient {
         this.logTimesheetOperation('APPROVE_LEAVE_REQUEST', { leaveId }, 'approval');
         
         try {
-            const response = await this.request(`/leaves/${leaveId}/approve`, {
+            const response = await this.request(`/leave/${leaveId}/approve`, {
                 method: 'PATCH'
             });
             
@@ -3385,7 +3385,7 @@ class ApiClient {
         }, 'rejection');
         
         try {
-            const response = await this.request(`/leaves/${leaveId}/reject`, {
+            const response = await this.request(`/leave/${leaveId}/reject`, {
                 method: 'PATCH',
                 body: { remarks }
             });
@@ -3415,7 +3415,7 @@ class ApiClient {
         this.logTimesheetOperation('GET_LEAVE_REQUEST_BY_ID', { leaveId }, 'info');
         
         try {
-            const response = await this.request(`/leaves/${leaveId}`);
+            const response = await this.request(`/leave/${leaveId}`);
             
             this.logTimesheetOperation('GET_LEAVE_REQUEST_BY_ID_SUCCESS', {
                 leaveId,
@@ -3440,7 +3440,7 @@ class ApiClient {
         
         try {
             const queryParams = new URLSearchParams(params).toString();
-            const endpoint = `/leaves/calendar${queryParams ? `?${queryParams}` : ''}`;
+            const endpoint = `/leave/calendar${queryParams ? `?${queryParams}` : ''}`;
             const response = await this.request(endpoint);
             
             this.logTimesheetOperation('GET_LEAVE_CALENDAR_SUCCESS', {
@@ -3463,7 +3463,7 @@ class ApiClient {
         this.logTimesheetOperation('GET_LEAVE_ANALYTICS', {}, 'info');
         
         try {
-            const response = await this.request('/leaves/analytics');
+            const response = await this.request('/leave/analytics');
             
             this.logTimesheetOperation('GET_LEAVE_ANALYTICS_SUCCESS', {
                 hasData: !!response
@@ -3656,6 +3656,50 @@ class ApiClient {
             }
         };
     }
+    async checkLeaveForDate(date) {
+    this.logTimesheetOperation('CHECK_LEAVE_FOR_DATE', { date }, 'info');
+    
+    try {
+        const response = await this.request(`/leave/check-date/${date}`);
+        return response;
+    } catch (error) {
+        this.logTimesheetOperation('CHECK_LEAVE_FOR_DATE_FAILED', {
+            date,
+            error: error.message
+        }, 'error');
+        
+        // Mock response for development
+        return {
+            hasLeave: false,
+            leaveType: null,
+            reason: null,
+            mock: true
+        };
+    }
+}
+
+// ✅ ADDED: Get approved leaves for week
+async getApprovedLeavesForWeek(weekStartDate) {
+    this.logTimesheetOperation('GET_APPROVED_LEAVES_FOR_WEEK', { weekStartDate }, 'info');
+    
+    try {
+        const response = await this.request(`/leave/week/${weekStartDate}`);
+        return response;
+    } catch (error) {
+        this.logTimesheetOperation('GET_APPROVED_LEAVES_FOR_WEEK_FAILED', {
+            weekStartDate,
+            error: error.message
+        }, 'error');
+        
+        // Mock response for development
+        return {
+            leaveDates: [],
+            weekStartDate,
+            mock: true
+        };
+    }
+}
+    
 }
 
 // Create and export global instance

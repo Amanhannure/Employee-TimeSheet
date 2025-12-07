@@ -122,12 +122,13 @@ async function submitLeaveRequest(e) {
             formData.append('document', fileInput.files[0]);
         }
 
-        // Validate dates
+        // ✅ FIXED: Validate dates - allow same day (single day leave)
         const startDate = new Date(formData.get('startDate'));
         const endDate = new Date(formData.get('endDate'));
         
-        if (startDate >= endDate) {
-            showNotification('End date must be after start date', 'error');
+        // ✅ Change from >= to > (allow same day)
+        if (startDate > endDate) {
+            showNotification('End date must be on or after start date', 'error');
             return;
         }
 
@@ -329,9 +330,16 @@ function displayLeaveBalances(balanceData) {
     }
     
     const balance = balanceData.leaveBalance;
-    const status = balance.status || 'probation';
+     console.log('🔍 DEBUG balance object:', balance);
+    console.log('🔍 DEBUG balance.status:', balance.status);
+    console.log('🔍 DEBUG privilegeLeave:', balance.privilegeLeave);
+    console.log('🔍 DEBUG privilegeLeave.current:', balance.privilegeLeave?.current);
     
-    const html = `
+    const status = balance.status || 'probation';
+    console.log('🔍 DEBUG calculated status:', status);
+    
+    
+        const html = `
         <div class="leave-balances-header" style="margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center;">
             <h2 style="margin: 0; color: #333;">
                 <i class="fas fa-chart-pie" style="color: #3498db;"></i> My Leave Balances
@@ -395,50 +403,10 @@ function displayLeaveBalances(balanceData) {
                 </div>
             </div>
             
-            <!-- Maternity Leave Card -->
-            <div class="leave-card maternity-leave" style="background: white; border-radius: 10px; padding: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); border-left: 4px solid #E91E63;">
-                <div class="card-header" style="display: flex; align-items: center; margin-bottom: 15px;">
-                    <i class="fas fa-baby" style="font-size: 24px; margin-right: 10px; color: #E91E63;"></i>
-                    <h3 style="margin: 0; font-size: 18px; color: #333;">Maternity Leave (ML)</h3>
-                </div>
-                <div class="card-body">
-                    <div class="balance-amount" style="font-size: 36px; font-weight: bold; color: #333; text-align: center; margin: 10px 0;">
-                        ${balance.maternityLeave?.current || 0}
-                    </div>
-                    <div class="balance-label" style="text-align: center; color: #666; margin-bottom: 15px; font-size: 14px;">
-                        Days Available
-                    </div>
-                    <div class="balance-details" style="font-size: 13px; color: #666;">
-                        <p style="margin: 5px 0; display: flex; align-items: center;">
-                            <i class="fas fa-info-circle" style="margin-right: 8px; width: 16px;"></i> Total: 182 days (6 months)
-                        </p>
-                    </div>
-                </div>
-            </div>
+            <!-- REMOVED: Maternity Leave Card -->
             
-            <!-- Other Leaves Card -->
-            <div class="leave-card other-leaves" style="background: white; border-radius: 10px; padding: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); border-left: 4px solid #FF9800;">
-                <div class="card-header" style="display: flex; align-items: center; margin-bottom: 15px;">
-                    <i class="fas fa-list-alt" style="font-size: 24px; margin-right: 10px; color: #FF9800;"></i>
-                    <h3 style="margin: 0; font-size: 18px; color: #333;">Other Leaves</h3>
-                </div>
-                <div class="card-body">
-                    <div class="other-leaves-list" style="display: flex; flex-direction: column; gap: 10px;">
-                        <div class="other-leave-item" style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #eee;">
-                            <span class="leave-type" style="color: #666;">Half Pay with PL</span>
-                            <span class="leave-balance" style="font-weight: bold; color: #333;">${balance.halfPayWithPL?.current || 0} days</span>
-                        </div>
-                        <div class="other-leave-item" style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #eee;">
-                            <span class="leave-type" style="color: #666;">Leave Without Pay</span>
-                            <span class="leave-balance" style="font-weight: bold; color: #333;">${balance.leaveWithoutPay?.current || 0} days</span>
-                        </div>
-                        <div class="other-leave-item" style="display: flex; justify-content: space-between; padding: 8px 0;">
-                            <span class="leave-type" style="color: #666;">Half LWP</span>
-                            <span class="leave-balance" style="font-weight: bold; color: #333;">${balance.halfLWP?.current || 0} days</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
+            <!-- REMOVED: Other Leaves Card -->
+            
         </div>
         
         <!-- Quick Stats -->
@@ -520,14 +488,6 @@ function displayMockBalances() {
                         0 days
                     </div>
                     <small style="color: #6c757d;">Accrues 1.5 days per month after probation</small>
-                </div>
-                
-                <div class="mock-card" style="background: white; border-radius: 8px; padding: 15px; text-align: center; border: 1px solid #dee2e6;">
-                    <h4 style="margin: 0 0 10px 0; color: #333;">Maternity Leave (ML)</h4>
-                    <div class="mock-value" style="font-size: 24px; font-weight: bold; color: #28a745; margin: 10px 0;">
-                        182 days
-                    </div>
-                    <small style="color: #6c757d;">6 months total, eligible after 180 days</small>
                 </div>
             </div>
         </div>
