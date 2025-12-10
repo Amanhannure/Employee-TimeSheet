@@ -107,49 +107,46 @@ function handleFileSelect(file) {
 async function submitLeaveRequest(e) {
     e.preventDefault();
     
+    // ✅ ADD THIS CHECK: Ensure apiClient exists
+    if (typeof apiClient === 'undefined') {
+        console.error('❌ API client not initialized');
+        showNotification('System error: API client not available. Please refresh the page.', 'error');
+        return;
+    }
+    
+    // ✅ ADD THIS CHECK: Validate required fields
+    const startDate = document.getElementById('start-date').value;
+    const endDate = document.getElementById('end-date').value;
+    const leaveType = document.getElementById('leave-type').value;
+    const reason = document.getElementById('reason').value;
+    
+    if (!startDate || !endDate || !leaveType || !reason) {
+        showNotification('Please fill in all required fields', 'error');
+        return;
+    }
+    
     try {
-        const formData = new FormData();
-        
-        // Add form data
-        formData.append('startDate', document.getElementById('start-date').value);
-        formData.append('endDate', document.getElementById('end-date').value);
-        formData.append('leaveType', document.getElementById('leave-type').value);
-        formData.append('reason', document.getElementById('reason').value);
-        
-        // Add file if exists
-        const fileInput = document.getElementById('supporting-document');
-        if (fileInput.files.length > 0) {
-            formData.append('document', fileInput.files[0]);
-        }
-
-        // ✅ FIXED: Validate dates - allow same day (single day leave)
-        const startDate = new Date(formData.get('startDate'));
-        const endDate = new Date(formData.get('endDate'));
-        
-        // ✅ Change from >= to > (allow same day)
-        if (startDate > endDate) {
-            showNotification('End date must be on or after start date', 'error');
-            return;
-        }
-
         // Show loading state
         const submitBtn = document.getElementById('submit-leave-btn');
         const originalText = submitBtn.innerHTML;
         submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Submitting...';
         submitBtn.disabled = true;
-
-        // Submit leave request using API client
-        const response = await apiClient.submitLeaveRequest({
-            startDate: formData.get('startDate'),
-            endDate: formData.get('endDate'),
-            leaveType: formData.get('leaveType'),
-            reason: formData.get('reason'),
-            document: fileInput.files[0] || null
+        
+        // ✅ FIXED: Use the correct API endpoint
+        const response = await apiClient.request('/leave', {
+            method: 'POST',
+            body: {
+                startDate,
+                endDate,
+                leaveType,
+                reason
+            }
         });
 
         showNotification('Leave request submitted successfully!', 'success');
         resetForm();
         loadMyLeaveRequests();
+        loadMyLeaveBalances(); // Refresh balances
 
     } catch (error) {
         console.error('❌ Error submitting leave request:', error);
@@ -157,8 +154,10 @@ async function submitLeaveRequest(e) {
     } finally {
         // Reset button state
         const submitBtn = document.getElementById('submit-leave-btn');
-        submitBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Submit Leave Request';
-        submitBtn.disabled = false;
+        if (submitBtn) {
+            submitBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Submit Leave Request';
+            submitBtn.disabled = false;
+        }
     }
 }
 

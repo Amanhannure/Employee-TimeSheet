@@ -1635,3 +1635,78 @@ body.modal-open {
     background: #fff3e0;
     color: #ef6c00;
 }
+/* Add to CSS file */
+.btn-icon {
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 50px;
+    padding: 8px 16px;
+    margin-left: 15px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    color: #495057;
+    transition: all 0.3s ease;
+}
+
+.btn-icon:hover {
+    background: #e9ecef;
+    border-color: #adb5bd;
+    transform: translateY(-2px);
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+}
+
+.btn-icon i {
+    color: #4a6cf7;
+}
+
+.btn-text {
+    font-weight: 500;
+}
+
+/* Security Modal Styles */
+.security-modal .modal-content {
+    max-width: 500px;
+}
+
+.security-info-box {
+    background: #f8f9fa;
+    border-left: 4px solid #4a6cf7;
+    padding: 15px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+}
+
+.security-info-box p {
+    margin: 5px 0;
+    font-size: 14px;
+}
+
+.security-form .form-group {
+    margin-bottom: 20px;
+}
+
+.security-status {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.status-setup {
+    background: #d4edda;
+    color: #155724;
+}
+
+.status-not-setup {
+    background: #fff3cd;
+    color: #856404;
+}
+
+.required-field::after {
+    content: " *";
+    color: #dc3545;
+}

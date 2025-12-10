@@ -438,7 +438,7 @@ function loadEmployeeReportContent() {
     employeeReportTab.innerHTML = `
         <div class="employee-report-container">
             <div class="report-header">
-                <h2><i class="fas fa-user-tie"></i> Employee Performance Report</h2>
+                <h2><i class="fas fa-user-tie"></i> Employee  Report</h2>
                 <p>Comprehensive overview of employee assignments and project progress.</p>
             </div>
 

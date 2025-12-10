@@ -488,7 +488,7 @@ function setupEventListeners() {
     document.getElementById('add-row-btn').addEventListener('click', addTimesheetRow);
     document.getElementById('save-timesheet-btn').addEventListener('click', saveTimesheet);
     document.getElementById('submit-timesheet-btn').addEventListener('click', submitTimesheet);
-    
+     document.getElementById('security-btn').addEventListener('click', showSecurityModal);
     document.getElementById('summary-history-btn').addEventListener('click', showHistoryModal);
     document.getElementById('admin-btn').addEventListener('click', showAccessDenied);
     
@@ -2287,6 +2287,234 @@ async function getLeaveTypeForDate(date) {
     } catch (error) {
         console.warn('Could not get leave type:', error);
         return null;
+    }
+}
+function showSecurityModal() {
+    if (AppState.isLoading) return;
+    
+    // Create or get security modal
+    let securityModal = document.getElementById('security-modal');
+    
+    if (!securityModal) {
+        securityModal = document.createElement('div');
+        securityModal.id = 'security-modal';
+        securityModal.className = 'modal security-modal';
+        securityModal.innerHTML = `
+            <div class="modal-content">
+                <span class="close-modal">&times;</span>
+                <h2><i class="fas fa-shield-alt"></i> Security Question Management</h2>
+                
+                <div id="security-info-container">
+                    <!-- Security info will be loaded here -->
+                </div>
+                
+                <div id="security-form-container" style="display: none;">
+                    <form id="security-form">
+                        <div class="form-group">
+                            <label for="security-question" class="required-field">Security Question</label>
+                            <select id="security-question" required>
+                                <option value="">Select a security question</option>
+                                <option value="What was your first car?">What was your first car?</option>
+                                <option value="What is your mother's maiden name?">What is your mother's maiden name?</option>
+                                <option value="What was the name of your first pet?">What was the name of your first pet?</option>
+                                <option value="What elementary school did you attend?">What elementary school did you attend?</option>
+                                <option value="What city were you born in?">What city were you born in?</option>
+                                <option value="What is your favorite movie?">What is your favorite movie?</option>
+                                <option value="What was your childhood nickname?">What was your childhood nickname?</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="security-answer" class="required-field">Your Answer</label>
+                            <input type="text" id="security-answer" required 
+                                   placeholder="Enter your answer" minlength="2">
+                        </div>
+                        <div class="form-group">
+                            <label for="confirm-security-answer" class="required-field">Confirm Answer</label>
+                            <input type="text" id="confirm-security-answer" required 
+                                   placeholder="Re-enter your answer" minlength="2">
+                        </div>
+                        <div class="form-actions">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save"></i> Save Security Question
+                            </button>
+                            <button type="button" class="btn btn-secondary" id="cancel-security-btn">
+                                Cancel
+                            </button>
+                        </div>
+                    </form>
+                </div>
+                
+                <div class="modal-actions" id="security-actions">
+                    <button class="btn btn-warning" id="change-security-btn">
+                        <i class="fas fa-edit"></i> Change Security Question
+                    </button>
+                    <button class="btn btn-secondary close-modal">Close</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(securityModal);
+        setupSecurityModalHandlers();
+    }
+    
+    loadSecurityInfo();
+    showModal(securityModal);
+}
+
+// Setup security modal handlers
+function setupSecurityModalHandlers() {
+    const modal = document.getElementById('security-modal');
+    if (!modal) return;
+    
+    // Close button
+    modal.querySelector('.close-modal').addEventListener('click', hideAllModals);
+    
+    // Change security button
+    const changeBtn = modal.querySelector('#change-security-btn');
+    if (changeBtn) {
+        changeBtn.addEventListener('click', function() {
+            document.getElementById('security-info-container').style.display = 'none';
+            document.getElementById('security-form-container').style.display = 'block';
+            document.getElementById('security-actions').style.display = 'none';
+        });
+    }
+    
+    // Cancel button
+    const cancelBtn = modal.querySelector('#cancel-security-btn');
+    if (cancelBtn) {
+        cancelBtn.addEventListener('click', function() {
+            document.getElementById('security-form-container').style.display = 'none';
+            document.getElementById('security-info-container').style.display = 'block';
+            document.getElementById('security-actions').style.display = 'flex';
+        });
+    }
+    
+    // Security form submission
+    const securityForm = modal.querySelector('#security-form');
+    if (securityForm) {
+        securityForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            saveSecurityQuestion();
+        });
+    }
+}
+
+// Load security information
+async function loadSecurityInfo() {
+    if (!AppState.userData) return;
+    
+    try {
+        const api = getApiClient();
+        
+        // Check current security setup
+        const response = await api.checkSecuritySetup();
+        
+        const container = document.getElementById('security-info-container');
+        if (!container) return;
+        
+        if (response.needsSecuritySetup || !response.hasSecurityQuestion) {
+            container.innerHTML = `
+                <div class="security-info-box">
+                    <h3><i class="fas fa-exclamation-triangle"></i> Security Not Configured</h3>
+                    <p>You haven't set up a security question yet.</p>
+                    <p class="text-warning">This is required for password recovery.</p>
+                    <p><strong>Email Recovery:</strong> ${response.hasEmail ? 'Available' : 'Not Available'}</p>
+                </div>
+                <div class="setup-prompt">
+                    <p>Please set up your security question to enable password recovery.</p>
+                </div>
+            `;
+            
+            // Auto-show form if not set up
+            document.getElementById('security-info-container').style.display = 'none';
+            document.getElementById('security-form-container').style.display = 'block';
+            document.getElementById('security-actions').style.display = 'none';
+            
+        } else {
+            container.innerHTML = `
+                <div class="security-info-box">
+                    <h3><i class="fas fa-shield-check"></i> Security Status: 
+                        <span class="security-status status-setup">SET UP</span>
+                    </h3>
+                    <p><strong>Your Security Question:</strong></p>
+                    <p class="security-question">"${response.securityQuestion || 'What was your first car?'}"</p>
+                    <p><strong>Email Recovery:</strong> ${response.hasEmail ? 'Available' : 'Not Available'}</p>
+                    <p><strong>Last Updated:</strong> ${new Date().toLocaleDateString()}</p>
+                </div>
+                <div class="security-tips">
+                    <h4><i class="fas fa-lightbulb"></i> Security Tips:</h4>
+                    <ul>
+                        <li>Choose a question only you know the answer to</li>
+                        <li>Make sure your answer is memorable but not easily guessable</li>
+                        <li>Keep your answer private - don't share it with others</li>
+                        <li>Update your question periodically for better security</li>
+                    </ul>
+                </div>
+            `;
+        }
+        
+    } catch (error) {
+        console.error('Error loading security info:', error);
+        const container = document.getElementById('security-info-container');
+        if (container) {
+            container.innerHTML = `
+                <div class="error-message">
+                    <i class="fas fa-exclamation-circle"></i>
+                    <p>Unable to load security information. Please try again later.</p>
+                </div>
+            `;
+        }
+    }
+}
+
+// Save security question
+async function saveSecurityQuestion() {
+    if (AppState.isLoading) return;
+    
+    const question = document.getElementById('security-question').value;
+    const answer = document.getElementById('security-answer').value;
+    const confirmAnswer = document.getElementById('confirm-security-answer').value;
+    
+    // Validation
+    if (!question || !answer || !confirmAnswer) {
+        safeNotification('Please fill all fields', 'error');
+        return;
+    }
+    
+    if (answer !== confirmAnswer) {
+        safeNotification('Answers do not match', 'error');
+        return;
+    }
+    
+    if (answer.length < 2) {
+        safeNotification('Answer must be at least 2 characters', 'error');
+        return;
+    }
+    
+    try {
+        setLoadingState(true);
+        
+        const api = getApiClient();
+        const response = await api.setupSecurityQuestion({
+            securityQuestion: question,
+            securityAnswer: answer
+        });
+        
+        safeNotification('Security question saved successfully!', 'success');
+        
+        // Reset form and show info
+        document.getElementById('security-form').reset();
+        document.getElementById('security-form-container').style.display = 'none';
+        document.getElementById('security-info-container').style.display = 'block';
+        document.getElementById('security-actions').style.display = 'flex';
+        
+        // Reload security info
+        await loadSecurityInfo();
+        
+    } catch (error) {
+        console.error('Error saving security question:', error);
+        safeNotification(error.message || 'Failed to save security question', 'error');
+    } finally {
+        setLoadingState(false);
     }
 }
 
